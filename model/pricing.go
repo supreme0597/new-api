@@ -74,6 +74,56 @@ func GetPricing() []Pricing {
 	return pricingMap
 }
 
+func GetPricingForUser(userId int) []Pricing {
+	if userId <= 0 {
+		return GetPricing()
+	}
+	abilities, err := GetAllEnableAbilityWithChannelsForUser(userId)
+	if err != nil {
+		common.SysLog(fmt.Sprintf("GetAllEnableAbilityWithChannelsForUser error: %v", err))
+		return GetPricing()
+	}
+	publicPricing := GetPricing()
+	publicMap := make(map[string]Pricing, len(publicPricing))
+	for _, item := range publicPricing {
+		publicMap[item.ModelName] = item
+	}
+	userGroupsMap := make(map[string]*types.Set[string])
+	for _, ability := range abilities {
+		groups, ok := userGroupsMap[ability.Model]
+		if !ok {
+			groups = types.NewSet[string]()
+			userGroupsMap[ability.Model] = groups
+		}
+		groups.Add(ability.Group)
+	}
+	pricing := make([]Pricing, 0, len(userGroupsMap))
+	for modelName, groups := range userGroupsMap {
+		if existing, ok := publicMap[modelName]; ok {
+			existing.EnableGroup = groups.Items()
+			pricing = append(pricing, existing)
+			continue
+		}
+		modelPrice, findPrice := ratio_setting.GetModelPrice(modelName, false)
+		item := Pricing{
+			ModelName:              modelName,
+			EnableGroup:            groups.Items(),
+			SupportedEndpointTypes: GetModelSupportEndpointTypes(modelName),
+		}
+		if findPrice {
+			item.ModelPrice = modelPrice
+			item.QuotaType = 1
+		} else {
+			modelRatio, _, _ := ratio_setting.GetModelRatio(modelName)
+			item.ModelRatio = modelRatio
+			item.CompletionRatio = ratio_setting.GetCompletionRatio(modelName)
+			item.QuotaType = 0
+		}
+		pricing = append(pricing, item)
+	}
+	return pricing
+}
+
 // GetVendors 返回当前定价接口使用到的供应商信息
 func GetVendors() []PricingVendor {
 	if time.Since(lastGetPricingTime) > time.Minute*1 || len(pricingMap) == 0 {

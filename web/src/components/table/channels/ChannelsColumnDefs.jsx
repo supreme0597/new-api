@@ -148,6 +148,17 @@ const renderTagType = (t) => {
   );
 };
 
+const renderScope = (record, t) => {
+	if (record.children !== undefined) {
+		return renderTagType(t);
+	}
+	return record.owner_user_id == null ? (
+		<Tag color='blue' shape='circle'>{t('公共')}</Tag>
+	) : (
+		<Tag color='violet' shape='circle'>{t('私有')}</Tag>
+	);
+};
+
 const renderStatus = (status, channelInfo = undefined, t) => {
   if (channelInfo) {
     if (channelInfo.is_multi_key) {
@@ -327,6 +338,7 @@ export const getChannelsColumns = ({
   setCurrentMultiKeyChannel,
   openUpstreamUpdateModal,
   detectChannelUpstreamUpdates,
+  isAdminUser,
 }) => {
   return [
     {
@@ -475,6 +487,12 @@ export const getChannelsColumns = ({
           </Space>
         </div>
       ),
+    },
+    {
+      key: COLUMN_KEYS.SCOPE,
+      title: t('渠道类型'),
+      dataIndex: 'owner_user_id',
+      render: (text, record) => renderScope(record, t),
     },
     {
       key: COLUMN_KEYS.TYPE,
@@ -713,7 +731,10 @@ export const getChannelsColumns = ({
                 });
               },
             },
-            {
+          ];
+
+          if (isAdminUser) {
+            moreMenuItems.push({
               node: 'item',
               name: t('复制'),
               type: 'tertiary',
@@ -724,10 +745,10 @@ export const getChannelsColumns = ({
                   onOk: () => copySelectedChannel(record),
                 });
               },
-            },
-          ];
+            });
+          }
 
-          if (upstreamUpdateMeta.supported) {
+          if (isAdminUser && upstreamUpdateMeta.supported) {
             moreMenuItems.push({
               node: 'item',
               name: t('仅检测上游模型更新'),
@@ -764,7 +785,7 @@ export const getChannelsColumns = ({
             });
           }
 
-          if (record.type === 4) {
+          if (isAdminUser && record.type === 4) {
             moreMenuItems.unshift({
               node: 'item',
               name: t('测活'),
@@ -797,7 +818,7 @@ export const getChannelsColumns = ({
                 />
               </SplitButtonGroup>
 
-              {record.status === 1 ? (
+              {isAdminUser && (record.status === 1 ? (
                 <Button
                   type='danger'
                   size='small'
@@ -812,7 +833,7 @@ export const getChannelsColumns = ({
                 >
                   {t('启用')}
                 </Button>
-              )}
+              ))}
 
               {record.channel_info?.is_multi_key ? (
                 <SplitButtonGroup aria-label={t('多密钥渠道操作项目组')}>
@@ -860,13 +881,15 @@ export const getChannelsColumns = ({
                 </Button>
               )}
 
-              <Dropdown
-                trigger='click'
-                position='bottomRight'
-                menu={moreMenuItems}
-              >
-                <Button icon={<IconMore />} type='tertiary' size='small' />
-              </Dropdown>
+              {moreMenuItems.length > 0 && (
+                <Dropdown
+                  trigger='click'
+                  position='bottomRight'
+                  menu={moreMenuItems}
+                >
+                  <Button icon={<IconMore />} type='tertiary' size='small' />
+                </Dropdown>
+              )}
             </Space>
           );
         } else {

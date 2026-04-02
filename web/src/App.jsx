@@ -134,9 +134,17 @@ function App() {
         <Route
           path='/console/channel'
           element={
-            <AdminRoute>
+            <PrivateRoute>
               <Channel />
-            </AdminRoute>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path='/console/my-channel'
+          element={
+            <PrivateRoute>
+              <Channel />
+            </PrivateRoute>
           }
         />
         <Route

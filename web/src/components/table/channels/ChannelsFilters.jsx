@@ -22,6 +22,7 @@ import { Button, Form } from '@douyinfe/semi-ui';
 import { IconSearch } from '@douyinfe/semi-icons';
 
 const ChannelsFilters = ({
+  isAdminUser,
   setEditingChannel,
   setShowEdit,
   refresh,
@@ -51,7 +52,7 @@ const ChannelsFilters = ({
             setShowEdit(true);
           }}
         >
-          {t('添加渠道')}
+          {isAdminUser ? t('添加渠道') : t('添加我的渠道')}
         </Button>
 
         <Button

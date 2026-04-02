@@ -75,6 +75,14 @@ const ChannelsPage = () => {
       />
 
       {/* Main Content */}
+      {!channelsData.isAdminUser ? (
+        <Banner
+          type='info'
+          closeIcon={null}
+          description={channelsData.t('当前为“我的渠道”视图，仅展示并管理你自己的私有渠道。')}
+          style={{ marginBottom: 12 }}
+        />
+      ) : null}
       {channelsData.globalPassThroughEnabled ? (
         <Banner
           type='warning'

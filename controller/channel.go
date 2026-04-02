@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -19,6 +20,7 @@ import (
 	"github.com/QuantumNous/new-api/service"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 type OpenAIModel struct {
@@ -68,12 +70,55 @@ func clearChannelInfo(channel *model.Channel) {
 	}
 }
 
+func isAdminActor(c *gin.Context) bool {
+	return c.GetInt("role") >= common.RoleAdminUser
+}
+
+func currentActor(c *gin.Context) (int, bool) {
+	return c.GetInt("id"), isAdminActor(c)
+}
+
+func parseScopeFilter(c *gin.Context) string {
+	switch strings.ToLower(strings.TrimSpace(c.Query("scope"))) {
+	case "public":
+		return "public"
+	case "private":
+		return "private"
+	default:
+		return ""
+	}
+}
+
+func getManagedChannel(c *gin.Context, channelId int, selectAll bool) (*model.Channel, error) {
+	userId, isAdmin := currentActor(c)
+	channel, err := model.GetChannelByIdForActor(channelId, selectAll, userId, isAdmin)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, fmt.Errorf("渠道不存在或无权访问")
+		}
+		return nil, err
+	}
+	if !model.CanActorManageChannel(channel, userId, isAdmin) {
+		return nil, fmt.Errorf("无权操作该渠道")
+	}
+	return channel, nil
+}
+
+func sanitizeChannelPayloadForActor(c *gin.Context, channel *model.Channel) {
+	userId, isAdmin := currentActor(c)
+	if !isAdmin {
+		channel.OwnerUserId = common.GetPointer(userId)
+	}
+}
+
 func GetAllChannels(c *gin.Context) {
 	pageInfo := common.GetPageQuery(c)
 	channelData := make([]*model.Channel, 0)
 	idSort, _ := strconv.ParseBool(c.Query("id_sort"))
 	enableTagMode, _ := strconv.ParseBool(c.Query("tag_mode"))
 	statusParam := c.Query("status")
+	scopeFilter := parseScopeFilter(c)
+	userId, isAdmin := currentActor(c)
 	// statusFilter: -1 all, 1 enabled, 0 disabled (include auto & manual)
 	statusFilter := parseStatusFilter(statusParam)
 	// type filter
@@ -104,6 +149,19 @@ func GetAllChannels(c *gin.Context) {
 			}
 			filtered := make([]*model.Channel, 0)
 			for _, ch := range tagChannels {
+				if !model.CanActorViewChannel(ch, userId, isAdmin) {
+					continue
+				}
+				switch scopeFilter {
+				case "public":
+					if !ch.IsPublicChannel() {
+						continue
+					}
+				case "private":
+					if ch.IsPublicChannel() {
+						continue
+					}
+				}
 				if statusFilter == common.ChannelStatusEnabled && ch.Status != common.ChannelStatusEnabled {
 					continue
 				}
@@ -120,6 +178,13 @@ func GetAllChannels(c *gin.Context) {
 		total, _ = model.CountAllTags()
 	} else {
 		baseQuery := model.DB.Model(&model.Channel{})
+		baseQuery = model.ApplyChannelViewScope(baseQuery, userId, isAdmin)
+		switch scopeFilter {
+		case "public":
+			baseQuery = baseQuery.Where("owner_user_id IS NULL")
+		case "private":
+			baseQuery = baseQuery.Where("owner_user_id IS NOT NULL")
+		}
 		if typeFilter >= 0 {
 			baseQuery = baseQuery.Where("type = ?", typeFilter)
 		}
@@ -207,7 +272,7 @@ func FetchUpstreamModels(c *gin.Context) {
 		return
 	}
 
-	channel, err := model.GetChannelById(id, true)
+	channel, err := getManagedChannel(c, id, true)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -251,6 +316,8 @@ func SearchChannels(c *gin.Context) {
 	modelKeyword := c.Query("model")
 	statusParam := c.Query("status")
 	statusFilter := parseStatusFilter(statusParam)
+	scopeFilter := parseScopeFilter(c)
+	userId, isAdmin := currentActor(c)
 	idSort, _ := strconv.ParseBool(c.Query("id_sort"))
 	enableTagMode, _ := strconv.ParseBool(c.Query("tag_mode"))
 	channelData := make([]*model.Channel, 0)
@@ -267,12 +334,27 @@ func SearchChannels(c *gin.Context) {
 			if tag != nil && *tag != "" {
 				tagChannel, err := model.GetChannelsByTag(*tag, idSort, false)
 				if err == nil {
-					channelData = append(channelData, tagChannel...)
+					for _, ch := range tagChannel {
+						if !model.CanActorViewChannel(ch, userId, isAdmin) {
+							continue
+						}
+						switch scopeFilter {
+						case "public":
+							if !ch.IsPublicChannel() {
+								continue
+							}
+						case "private":
+							if ch.IsPublicChannel() {
+								continue
+							}
+						}
+						channelData = append(channelData, ch)
+					}
 				}
 			}
 		}
 	} else {
-		channels, err := model.SearchChannels(keyword, group, modelKeyword, idSort)
+		channels, err := model.SearchChannelsForActor(keyword, group, modelKeyword, idSort, userId, isAdmin, scopeFilter)
 		if err != nil {
 			c.JSON(http.StatusOK, gin.H{
 				"success": false,
@@ -364,7 +446,8 @@ func GetChannel(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	channel, err := model.GetChannelById(id, false)
+	userId, isAdmin := currentActor(c)
+	channel, err := model.GetChannelByIdForActor(id, false, userId, isAdmin)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -580,6 +663,7 @@ func AddChannel(c *gin.Context) {
 		return
 	}
 
+	sanitizeChannelPayloadForActor(c, addChannelRequest.Channel)
 	addChannelRequest.Channel.CreatedTime = common.GetTimestamp()
 	keys := make([]string, 0)
 	switch addChannelRequest.Mode {
@@ -665,8 +749,12 @@ func AddChannel(c *gin.Context) {
 
 func DeleteChannel(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
-	channel := model.Channel{Id: id}
-	err := channel.Delete()
+	channel, err := getManagedChannel(c, id, true)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	err = channel.Delete()
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -856,7 +944,7 @@ func UpdateChannel(c *gin.Context) {
 		return
 	}
 	// Preserve existing ChannelInfo to ensure multi-key channels keep correct state even if the client does not send ChannelInfo in the request.
-	originChannel, err := model.GetChannelById(channel.Id, true)
+	originChannel, err := getManagedChannel(c, channel.Id, true)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -865,6 +953,10 @@ func UpdateChannel(c *gin.Context) {
 		return
 	}
 
+	sanitizeChannelPayloadForActor(c, &channel.Channel)
+	if !isAdminActor(c) {
+		channel.OwnerUserId = originChannel.OwnerUserId
+	}
 	// Always copy the original ChannelInfo so that fields like IsMultiKey and MultiKeySize are retained.
 	channel.ChannelInfo = originChannel.ChannelInfo
 

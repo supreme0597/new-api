@@ -42,6 +42,7 @@ const ChannelsTable = (channelsData) => {
     handlePageSizeChange,
     handleRow,
     t,
+    isAdminUser,
     COLUMN_KEYS,
     // Column functions and data
     updateChannelBalance,
@@ -87,10 +88,11 @@ const ChannelsTable = (channelsData) => {
       channels,
       checkOllamaVersion,
       setShowMultiKeyManageModal,
-      setCurrentMultiKeyChannel,
-      openUpstreamUpdateModal,
-      detectChannelUpstreamUpdates,
-    });
+        setCurrentMultiKeyChannel,
+        openUpstreamUpdateModal,
+        detectChannelUpstreamUpdates,
+        isAdminUser,
+      });
   }, [
     t,
     COLUMN_KEYS,
@@ -114,6 +116,7 @@ const ChannelsTable = (channelsData) => {
     setCurrentMultiKeyChannel,
     openUpstreamUpdateModal,
     detectChannelUpstreamUpdates,
+    isAdminUser,
   ]);
 
   // Filter columns based on visibility settings

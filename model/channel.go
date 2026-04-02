@@ -20,6 +20,7 @@ import (
 
 type Channel struct {
 	Id                 int     `json:"id"`
+	OwnerUserId        *int    `json:"owner_user_id" gorm:"index"`
 	Type               int     `json:"type" gorm:"default:0"`
 	Key                string  `json:"key" gorm:"not null"`
 	OpenAIOrganization *string `json:"openai_organization"`
@@ -55,6 +56,51 @@ type Channel struct {
 
 	// cache info
 	Keys []string `json:"-" gorm:"-"`
+}
+
+func (channel *Channel) IsPublicChannel() bool {
+	return channel == nil || channel.OwnerUserId == nil
+}
+
+func (channel *Channel) IsOwnedBy(userId int) bool {
+	return channel != nil && channel.OwnerUserId != nil && *channel.OwnerUserId == userId
+}
+
+func CanActorViewChannel(channel *Channel, userId int, isAdmin bool) bool {
+	if channel == nil {
+		return false
+	}
+	if isAdmin {
+		return true
+	}
+	if channel.IsPublicChannel() {
+		return true
+	}
+	return channel.IsOwnedBy(userId)
+}
+
+func CanActorManageChannel(channel *Channel, userId int, isAdmin bool) bool {
+	if channel == nil {
+		return false
+	}
+	if isAdmin {
+		return true
+	}
+	return channel.IsOwnedBy(userId)
+}
+
+func ApplyChannelViewScope(query *gorm.DB, userId int, isAdmin bool) *gorm.DB {
+	if isAdmin {
+		return query
+	}
+	return query.Where("owner_user_id IS NULL OR owner_user_id = ?", userId)
+}
+
+func ApplyChannelManageScope(query *gorm.DB, userId int, isAdmin bool) *gorm.DB {
+	if isAdmin {
+		return query
+	}
+	return query.Where("owner_user_id = ?", userId)
 }
 
 type ChannelInfo struct {
@@ -275,6 +321,26 @@ func GetAllChannels(startIdx int, num int, selectAll bool, idSort bool) ([]*Chan
 	return channels, err
 }
 
+func GetAllChannelsForActor(startIdx int, num int, selectAll bool, idSort bool, userId int, isAdmin bool, scope string) ([]*Channel, error) {
+	var channels []*Channel
+	order := "priority desc"
+	if idSort {
+		order = "id desc"
+	}
+	query := ApplyChannelViewScope(DB.Model(&Channel{}), userId, isAdmin)
+	switch scope {
+	case "public":
+		query = query.Where("owner_user_id IS NULL")
+	case "private":
+		query = query.Where("owner_user_id IS NOT NULL")
+	}
+	if !selectAll {
+		query = query.Omit("key").Limit(num).Offset(startIdx)
+	}
+	err := query.Order(order).Find(&channels).Error
+	return channels, err
+	}
+
 func GetChannelsByTag(tag string, idSort bool, selectAll bool) ([]*Channel, error) {
 	var channels []*Channel
 	order := "priority desc"
@@ -338,6 +404,49 @@ func SearchChannels(keyword string, group string, model string, idSort bool) ([]
 	return channels, nil
 }
 
+func SearchChannelsForActor(keyword string, group string, model string, idSort bool, userId int, isAdmin bool, scope string) ([]*Channel, error) {
+	var channels []*Channel
+	modelsCol := "`models`"
+	if common.UsingPostgreSQL {
+		modelsCol = `"models"`
+	}
+	baseURLCol := "`base_url`"
+	if common.UsingPostgreSQL {
+		baseURLCol = `"base_url"`
+	}
+	order := "priority desc"
+	if idSort {
+		order = "id desc"
+	}
+	baseQuery := ApplyChannelViewScope(DB.Model(&Channel{}).Omit("key"), userId, isAdmin)
+	switch scope {
+	case "public":
+		baseQuery = baseQuery.Where("owner_user_id IS NULL")
+	case "private":
+		baseQuery = baseQuery.Where("owner_user_id IS NOT NULL")
+	}
+	var whereClause string
+	var args []interface{}
+	if group != "" && group != "null" {
+		var groupCondition string
+		if common.UsingMySQL {
+			groupCondition = `CONCAT(',', ` + commonGroupCol + `, ',') LIKE ?`
+		} else {
+			groupCondition = `(',' || ` + commonGroupCol + ` || ',') LIKE ?`
+		}
+		whereClause = "(id = ? OR name LIKE ? OR " + commonKeyCol + " = ? OR " + baseURLCol + " LIKE ?) AND " + modelsCol + ` LIKE ? AND ` + groupCondition
+		args = append(args, common.String2Int(keyword), "%"+keyword+"%", keyword, "%"+keyword+"%", "%"+model+"%", "%,"+group+",%")
+	} else {
+		whereClause = "(id = ? OR name LIKE ? OR " + commonKeyCol + " = ? OR " + baseURLCol + " LIKE ?) AND " + modelsCol + " LIKE ?"
+		args = append(args, common.String2Int(keyword), "%"+keyword+"%", keyword, "%"+keyword+"%", "%"+model+"%")
+	}
+	err := baseQuery.Where(whereClause, args...).Order(order).Find(&channels).Error
+	if err != nil {
+		return nil, err
+	}
+	return channels, nil
+}
+
 func GetChannelById(id int, selectAll bool) (*Channel, error) {
 	channel := &Channel{Id: id}
 	var err error = nil
@@ -351,6 +460,19 @@ func GetChannelById(id int, selectAll bool) (*Channel, error) {
 	}
 	if channel == nil {
 		return nil, errors.New("channel not found")
+	}
+	return channel, nil
+}
+
+func GetChannelByIdForActor(id int, selectAll bool, userId int, isAdmin bool) (*Channel, error) {
+	channel := &Channel{Id: id}
+	query := ApplyChannelViewScope(DB, userId, isAdmin)
+	if !selectAll {
+		query = query.Omit("key")
+	}
+	err := query.First(channel, "id = ?", id).Error
+	if err != nil {
+		return nil, err
 	}
 	return channel, nil
 }

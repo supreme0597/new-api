@@ -28,12 +28,29 @@ type AbilityWithChannel struct {
 	ChannelType int `json:"channel_type"`
 }
 
+func applyAbilityChannelOwnerScope(query *gorm.DB, userId int) *gorm.DB {
+	if userId <= 0 {
+		return query.Where("channels.owner_user_id IS NULL")
+	}
+	return query.Where("channels.owner_user_id IS NULL OR channels.owner_user_id = ?", userId)
+}
+
 func GetAllEnableAbilityWithChannels() ([]AbilityWithChannel, error) {
 	var abilities []AbilityWithChannel
 	err := DB.Table("abilities").
 		Select("abilities.*, channels.type as channel_type").
 		Joins("left join channels on abilities.channel_id = channels.id").
 		Where("abilities.enabled = ?", true).
+		Scan(&abilities).Error
+	return abilities, err
+}
+
+func GetAllEnableAbilityWithChannelsForUser(userId int) ([]AbilityWithChannel, error) {
+	var abilities []AbilityWithChannel
+	err := applyAbilityChannelOwnerScope(DB.Table("abilities").
+		Select("abilities.*, channels.type as channel_type").
+		Joins("left join channels on abilities.channel_id = channels.id").
+		Where("abilities.enabled = ?", true), userId).
 		Scan(&abilities).Error
 	return abilities, err
 }
@@ -45,10 +62,28 @@ func GetGroupEnabledModels(group string) []string {
 	return models
 }
 
+func GetGroupEnabledModelsForUser(group string, userId int) []string {
+	var models []string
+	applyAbilityChannelOwnerScope(DB.Table("abilities").
+		Joins("left join channels on abilities.channel_id = channels.id").
+		Where(commonGroupCol+" = ? and abilities.enabled = ?", group, true), userId).
+		Distinct("abilities.model").Pluck("abilities.model", &models)
+	return models
+}
+
 func GetEnabledModels() []string {
 	var models []string
 	// Find distinct models
 	DB.Table("abilities").Where("enabled = ?", true).Distinct("model").Pluck("model", &models)
+	return models
+}
+
+func GetEnabledModelsForUser(userId int) []string {
+	var models []string
+	applyAbilityChannelOwnerScope(DB.Table("abilities").
+		Joins("left join channels on abilities.channel_id = channels.id").
+		Where("abilities.enabled = ?", true), userId).
+		Distinct("abilities.model").Pluck("abilities.model", &models)
 	return models
 }
 
@@ -103,6 +138,39 @@ func getChannelQuery(group string, model string, retry int) (*gorm.DB, error) {
 	return channelQuery, nil
 }
 
+func getChannelQueryForUser(group string, model string, retry int, userId int, publicOnly bool, privateOnly bool) (*gorm.DB, error) {
+	maxPrioritySubQuery := DB.Table("abilities").
+		Select("MAX(abilities.priority)").
+		Joins("left join channels on abilities.channel_id = channels.id").
+		Where(commonGroupCol+" = ? and abilities.model = ? and abilities.enabled = ?", group, model, true)
+	if publicOnly {
+		maxPrioritySubQuery = maxPrioritySubQuery.Where("channels.owner_user_id IS NULL")
+	} else if privateOnly {
+		maxPrioritySubQuery = maxPrioritySubQuery.Where("channels.owner_user_id = ?", userId)
+	} else {
+		maxPrioritySubQuery = applyAbilityChannelOwnerScope(maxPrioritySubQuery, userId)
+	}
+	channelQuery := DB.Table("abilities").
+		Select("abilities.*").
+		Joins("left join channels on abilities.channel_id = channels.id").
+		Where(commonGroupCol+" = ? and abilities.model = ? and abilities.enabled = ? and abilities.priority = (?)", group, model, true, maxPrioritySubQuery)
+	if publicOnly {
+		channelQuery = channelQuery.Where("channels.owner_user_id IS NULL")
+	} else if privateOnly {
+		channelQuery = channelQuery.Where("channels.owner_user_id = ?", userId)
+	} else {
+		channelQuery = applyAbilityChannelOwnerScope(channelQuery, userId)
+	}
+	if retry != 0 {
+		priority, err := getPriority(group, model, retry)
+		if err != nil {
+			return nil, err
+		}
+		channelQuery = channelQuery.Where("abilities.priority = ?", priority)
+	}
+	return channelQuery, nil
+}
+
 func GetChannel(group string, model string, retry int) (*Channel, error) {
 	var abilities []Ability
 
@@ -141,6 +209,53 @@ func GetChannel(group string, model string, retry int) (*Channel, error) {
 	}
 	err = DB.First(&channel, "id = ?", channel.Id).Error
 	return &channel, err
+}
+
+func getChannelByQuery(channelQuery *gorm.DB) (*Channel, error) {
+	var abilities []Ability
+	err := channelQuery.Order("weight DESC").Find(&abilities).Error
+	if err != nil {
+		return nil, err
+	}
+	channel := Channel{}
+	if len(abilities) == 0 {
+		return nil, nil
+	}
+	weightSum := uint(0)
+	for _, ability_ := range abilities {
+		weightSum += ability_.Weight + 10
+	}
+	weight := common.GetRandomInt(int(weightSum))
+	for _, ability_ := range abilities {
+		weight -= int(ability_.Weight) + 10
+		if weight <= 0 {
+			channel.Id = ability_.ChannelId
+			break
+		}
+	}
+	err = DB.First(&channel, "id = ?", channel.Id).Error
+	return &channel, err
+}
+
+func GetPrivateThenPublicChannel(group string, model string, retry int, userId int) (*Channel, error) {
+	if userId > 0 {
+		privateQuery, err := getChannelQueryForUser(group, model, retry, userId, false, true)
+		if err != nil {
+			return nil, err
+		}
+		privateChannel, err := getChannelByQuery(privateQuery)
+		if err != nil {
+			return nil, err
+		}
+		if privateChannel != nil {
+			return privateChannel, nil
+		}
+	}
+	publicQuery, err := getChannelQueryForUser(group, model, retry, userId, true, false)
+	if err != nil {
+		return nil, err
+	}
+	return getChannelByQuery(publicQuery)
 }
 
 func (channel *Channel) AddAbilities(tx *gorm.DB) error {

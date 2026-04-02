@@ -34,6 +34,7 @@ import (
 	"github.com/tidwall/gjson"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 type testResult struct {
@@ -744,6 +745,12 @@ func TestChannel(c *gin.Context) {
 			common.ApiError(c, err)
 			return
 		}
+	}
+	userId := c.GetInt("id")
+	isAdmin := c.GetInt("role") >= common.RoleAdminUser
+	if !model.CanActorManageChannel(channel, userId, isAdmin) {
+		common.ApiError(c, gorm.ErrRecordNotFound)
+		return
 	}
 	//defer func() {
 	//	if channel.ChannelInfo.IsMultiKey {
