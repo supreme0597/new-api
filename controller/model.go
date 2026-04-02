@@ -170,7 +170,7 @@ func ListModels(c *gin.Context, modelType int) {
 		var models []string
 		if tokenGroup == "auto" {
 			for _, autoGroup := range service.GetUserAutoGroup(userGroup) {
-				groupModels := model.GetGroupEnabledModels(autoGroup)
+				groupModels := model.GetGroupEnabledModelsForUser(autoGroup, userId)
 				for _, g := range groupModels {
 					if !common.StringsContains(models, g) {
 						models = append(models, g)
@@ -178,7 +178,7 @@ func ListModels(c *gin.Context, modelType int) {
 				}
 			}
 		} else {
-			models = model.GetGroupEnabledModels(group)
+			models = model.GetGroupEnabledModelsForUser(group, userId)
 		}
 		for _, modelName := range models {
 			if !acceptUnsetRatioModel {
@@ -255,9 +255,10 @@ func DashboardListModels(c *gin.Context) {
 }
 
 func EnabledListModels(c *gin.Context) {
+	userId := c.GetInt("id")
 	c.JSON(200, gin.H{
 		"success": true,
-		"data":    model.GetEnabledModels(),
+		"data":    model.GetEnabledModelsForUser(userId),
 	})
 }
 

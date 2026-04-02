@@ -148,10 +148,10 @@ const SiderBar = ({ onNavigate = () => {} }) => {
   const adminItems = useMemo(() => {
     const items = [
       {
-        text: t('渠道管理'),
+        text: isAdmin() ? t('渠道管理') : t('我的渠道'),
         itemKey: 'channel',
-        to: '/channel',
-        className: isAdmin() ? '' : 'tableHiddle',
+        to: isAdmin() ? '/channel' : '/my-channel',
+        className: '',
       },
       {
         text: t('订阅管理'),

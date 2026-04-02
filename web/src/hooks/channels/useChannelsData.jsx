@@ -28,6 +28,7 @@ import {
   copy,
   toBoolean,
 } from '../../helpers';
+import { isAdmin } from '../../helpers/utils';
 import {
   CHANNEL_OPTIONS,
   ITEMS_PER_PAGE,
@@ -43,6 +44,7 @@ import { openCodexUsageModal } from '../../components/table/channels/modals/Code
 export const useChannelsData = () => {
   const { t } = useTranslation();
   const isMobile = useIsMobile();
+  const isAdminUser = useMemo(() => isAdmin(), []);
 
   // Basic states
   const [channels, setChannels] = useState([]);
@@ -73,6 +75,9 @@ export const useChannelsData = () => {
   // Status filter
   const [statusFilter, setStatusFilter] = useState(
     localStorage.getItem('channel-status-filter') || 'all',
+  );
+  const [scopeFilter, setScopeFilter] = useState(
+    isAdminUser ? localStorage.getItem('channel-scope-filter') || 'all' : 'private',
   );
 
   // Type tabs states
@@ -134,6 +139,7 @@ export const useChannelsData = () => {
     ID: 'id',
     NAME: 'name',
     GROUP: 'group',
+    SCOPE: 'scope',
     TYPE: 'type',
     STATUS: 'status',
     RESPONSE_TIME: 'response_time',
@@ -173,8 +179,9 @@ export const useChannelsData = () => {
     return {
       [COLUMN_KEYS.ID]: true,
       [COLUMN_KEYS.NAME]: true,
-      [COLUMN_KEYS.GROUP]: true,
-      [COLUMN_KEYS.TYPE]: true,
+        [COLUMN_KEYS.GROUP]: true,
+        [COLUMN_KEYS.SCOPE]: true,
+        [COLUMN_KEYS.TYPE]: true,
       [COLUMN_KEYS.STATUS]: true,
       [COLUMN_KEYS.RESPONSE_TIME]: true,
       [COLUMN_KEYS.BALANCE]: true,
@@ -346,8 +353,9 @@ export const useChannelsData = () => {
     setLoading(true);
     const typeParam = typeKey !== 'all' ? `&type=${typeKey}` : '';
     const statusParam = statusF !== 'all' ? `&status=${statusF}` : '';
+    const scopeParam = scopeFilter !== 'all' ? `&scope=${scopeFilter}` : '';
     const res = await API.get(
-      `/api/channel/?p=${page}&page_size=${pageSize}&id_sort=${idSort}&tag_mode=${enableTagMode}${typeParam}${statusParam}`,
+      `/api/channel/?p=${page}&page_size=${pageSize}&id_sort=${idSort}&tag_mode=${enableTagMode}${typeParam}${statusParam}${scopeParam}`,
     );
 
     if (res === undefined || reqId !== requestCounter.current) {
@@ -398,8 +406,9 @@ export const useChannelsData = () => {
 
       const typeParam = typeKey !== 'all' ? `&type=${typeKey}` : '';
       const statusParam = statusF !== 'all' ? `&status=${statusF}` : '';
+      const scopeParam = scopeFilter !== 'all' ? `&scope=${scopeFilter}` : '';
       const res = await API.get(
-        `/api/channel/search?keyword=${searchKeyword}&group=${searchGroup}&model=${searchModel}&id_sort=${sortFlag}&tag_mode=${enableTagMode}&p=${page}&page_size=${pageSz}${typeParam}${statusParam}`,
+        `/api/channel/search?keyword=${searchKeyword}&group=${searchGroup}&model=${searchModel}&id_sort=${sortFlag}&tag_mode=${enableTagMode}&p=${page}&page_size=${pageSz}${typeParam}${statusParam}${scopeParam}`,
       );
       const { success, message, data } = res.data;
       if (success) {
@@ -1144,8 +1153,10 @@ export const useChannelsData = () => {
     enableTagMode,
     enableBatchDelete,
     statusFilter,
+    scopeFilter,
     compactMode,
     globalPassThroughEnabled,
+    isAdminUser,
 
     // UI states
     showEdit,
@@ -1249,6 +1260,7 @@ export const useChannelsData = () => {
     setEnableTagMode,
     setEnableBatchDelete,
     setStatusFilter,
+    setScopeFilter,
     setCompactMode,
     setActivePage,
   };

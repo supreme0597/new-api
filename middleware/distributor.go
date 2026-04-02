@@ -30,6 +30,7 @@ type ModelRequest struct {
 func Distribute() func(c *gin.Context) {
 	return func(c *gin.Context) {
 		var channel *model.Channel
+		currentUserId := c.GetInt("id")
 		channelId, ok := common.GetContextKey(c, constant.ContextKeyTokenSpecificChannelId)
 		modelRequest, shouldSelectChannel, err := getModelRequest(c)
 		if err != nil {
@@ -49,6 +50,10 @@ func Distribute() func(c *gin.Context) {
 			}
 			if channel.Status != common.ChannelStatusEnabled {
 				abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgDistributorChannelDisabled))
+				return
+			}
+			if !model.CanActorViewChannel(channel, currentUserId, false) {
+				abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgDistributorGroupAccessDenied))
 				return
 			}
 		} else {
@@ -102,7 +107,7 @@ func Distribute() func(c *gin.Context) {
 				if preferredChannelID, found := service.GetPreferredChannelByAffinity(c, modelRequest.Model, usingGroup); found {
 					preferred, err := model.CacheGetChannel(preferredChannelID)
 					if err == nil && preferred != nil {
-						if preferred.Status != common.ChannelStatusEnabled {
+						if preferred.Status != common.ChannelStatusEnabled || !model.CanActorViewChannel(preferred, currentUserId, false) {
 							if service.ShouldSkipRetryAfterChannelAffinityFailure(c) {
 								abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgDistributorChannelDisabled))
 								return
@@ -132,6 +137,7 @@ func Distribute() func(c *gin.Context) {
 						Ctx:        c,
 						ModelName:  modelRequest.Model,
 						TokenGroup: usingGroup,
+						UserId:     currentUserId,
 						Retry:      common.GetPointer(0),
 					})
 					if err != nil {
