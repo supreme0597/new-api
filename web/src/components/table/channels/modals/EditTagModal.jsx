@@ -26,6 +26,7 @@ import {
   showWarning,
   verifyJSON,
   selectFilter,
+  isAdmin,
 } from '../../../../helpers';
 import {
   SideSheet,
@@ -180,16 +181,24 @@ const EditTagModal = (props) => {
 
   const fetchGroups = async () => {
     try {
-      let res = await API.get(`/api/group/`);
-      if (res === undefined) {
-        return;
+      if (isAdmin()) {
+        const res = await API.get('/api/group/');
+        const { success, data } = res?.data || {};
+        if (success && Array.isArray(data)) {
+          setGroupOptions(data.map((group) => ({ label: group, value: group })));
+        }
+      } else {
+        const res = await API.get('/api/user/self/groups');
+        const { success, data } = res?.data || {};
+        if (success && data && typeof data === 'object') {
+          setGroupOptions(
+            Object.entries(data).map(([group, info]) => ({
+              label: info?.desc || group,
+              value: group,
+            })),
+          );
+        }
       }
-      setGroupOptions(
-        res.data.data.map((group) => ({
-          label: group,
-          value: group,
-        })),
-      );
     } catch (error) {
       showError(error.message);
     }

@@ -44,7 +44,6 @@ import { openCodexUsageModal } from '../../components/table/channels/modals/Code
 export const useChannelsData = () => {
   const { t } = useTranslation();
   const isMobile = useIsMobile();
-  const isAdminUser = useMemo(() => isAdmin(), []);
 
   // Basic states
   const [channels, setChannels] = useState([]);
@@ -77,7 +76,7 @@ export const useChannelsData = () => {
     localStorage.getItem('channel-status-filter') || 'all',
   );
   const [scopeFilter, setScopeFilter] = useState(
-    isAdminUser ? localStorage.getItem('channel-scope-filter') || 'all' : 'private',
+    localStorage.getItem('channel-scope-filter') || 'all',
   );
 
   // Type tabs states
@@ -331,16 +330,19 @@ export const useChannelsData = () => {
     enableTagMode,
     typeKey = activeTypeKey,
     statusF,
+    scopeF,
   ) => {
     if (statusF === undefined) statusF = statusFilter;
+    if (scopeF === undefined) scopeF = scopeFilter;
 
-    const { searchKeyword, searchGroup, searchModel } = getFormValues();
-    if (searchKeyword !== '' || searchGroup !== '' || searchModel !== '') {
+    const { searchKeyword, searchGroup, searchModel, searchOwner } = getFormValues();
+    if (searchKeyword !== '' || searchGroup !== '' || searchModel !== '' || searchOwner) {
       setLoading(true);
       await searchChannels(
         enableTagMode,
         typeKey,
         statusF,
+        scopeF,
         page,
         pageSize,
         idSort,
@@ -353,9 +355,10 @@ export const useChannelsData = () => {
     setLoading(true);
     const typeParam = typeKey !== 'all' ? `&type=${typeKey}` : '';
     const statusParam = statusF !== 'all' ? `&status=${statusF}` : '';
-    const scopeParam = scopeFilter !== 'all' ? `&scope=${scopeFilter}` : '';
+    const scopeParam = scopeF !== 'all' ? `&scope=${scopeF}` : '';
+    const ownerParam = searchOwner ? `&owner=${searchOwner}` : '';
     const res = await API.get(
-      `/api/channel/?p=${page}&page_size=${pageSize}&id_sort=${idSort}&tag_mode=${enableTagMode}${typeParam}${statusParam}${scopeParam}`,
+      `/api/channel/?p=${page}&page_size=${pageSize}&id_sort=${idSort}&tag_mode=${enableTagMode}${typeParam}${statusParam}${scopeParam}${ownerParam}`,
     );
 
     if (res === undefined || reqId !== requestCounter.current) {
@@ -385,14 +388,15 @@ export const useChannelsData = () => {
     enableTagMode,
     typeKey = activeTypeKey,
     statusF = statusFilter,
+    scopeF = scopeFilter,
     page = 1,
     pageSz = pageSize,
     sortFlag = idSort,
   ) => {
-    const { searchKeyword, searchGroup, searchModel } = getFormValues();
+    const { searchKeyword, searchGroup, searchModel, searchOwner } = getFormValues();
     setSearching(true);
     try {
-      if (searchKeyword === '' && searchGroup === '' && searchModel === '') {
+      if (searchKeyword === '' && searchGroup === '' && searchModel === '' && !searchOwner) {
         await loadChannels(
           page,
           pageSz,
@@ -400,15 +404,17 @@ export const useChannelsData = () => {
           enableTagMode,
           typeKey,
           statusF,
+          scopeF,
         );
         return;
       }
 
       const typeParam = typeKey !== 'all' ? `&type=${typeKey}` : '';
       const statusParam = statusF !== 'all' ? `&status=${statusF}` : '';
-      const scopeParam = scopeFilter !== 'all' ? `&scope=${scopeFilter}` : '';
+      const scopeParam = scopeF !== 'all' ? `&scope=${scopeF}` : '';
+      const ownerParam = searchOwner ? `&owner=${searchOwner}` : '';
       const res = await API.get(
-        `/api/channel/search?keyword=${searchKeyword}&group=${searchGroup}&model=${searchModel}&id_sort=${sortFlag}&tag_mode=${enableTagMode}&p=${page}&page_size=${pageSz}${typeParam}${statusParam}${scopeParam}`,
+        `/api/channel/search?keyword=${searchKeyword}&group=${searchGroup}&model=${searchModel}&id_sort=${sortFlag}&tag_mode=${enableTagMode}&p=${page}&page_size=${pageSz}${typeParam}${statusParam}${scopeParam}${ownerParam}`,
       );
       const { success, message, data } = res.data;
       if (success) {
@@ -431,14 +437,15 @@ export const useChannelsData = () => {
 
   // Refresh
   const refresh = async (page = activePage) => {
-    const { searchKeyword, searchGroup, searchModel } = getFormValues();
-    if (searchKeyword === '' && searchGroup === '' && searchModel === '') {
+    const { searchKeyword, searchGroup, searchModel, searchOwner } = getFormValues();
+    if (searchKeyword === '' && searchGroup === '' && searchModel === '' && !searchOwner) {
       await loadChannels(page, pageSize, idSort, enableTagMode);
     } else {
       await searchChannels(
         enableTagMode,
         activeTypeKey,
         statusFilter,
+        scopeFilter,
         page,
         pageSize,
         idSort,
@@ -527,15 +534,16 @@ export const useChannelsData = () => {
 
   // Page handlers
   const handlePageChange = (page) => {
-    const { searchKeyword, searchGroup, searchModel } = getFormValues();
+    const { searchKeyword, searchGroup, searchModel, searchOwner } = getFormValues();
     setActivePage(page);
-    if (searchKeyword === '' && searchGroup === '' && searchModel === '') {
+    if (searchKeyword === '' && searchGroup === '' && searchModel === '' && !searchOwner) {
       loadChannels(page, pageSize, idSort, enableTagMode).then(() => {});
     } else {
       searchChannels(
         enableTagMode,
         activeTypeKey,
         statusFilter,
+        scopeFilter,
         page,
         pageSize,
         idSort,
@@ -547,8 +555,8 @@ export const useChannelsData = () => {
     localStorage.setItem('page-size', size + '');
     setPageSize(size);
     setActivePage(1);
-    const { searchKeyword, searchGroup, searchModel } = getFormValues();
-    if (searchKeyword === '' && searchGroup === '' && searchModel === '') {
+    const { searchKeyword, searchGroup, searchModel, searchOwner } = getFormValues();
+    if (searchKeyword === '' && searchGroup === '' && searchModel === '' && !searchOwner) {
       loadChannels(1, size, idSort, enableTagMode)
         .then()
         .catch((reason) => {
@@ -559,6 +567,7 @@ export const useChannelsData = () => {
         enableTagMode,
         activeTypeKey,
         statusFilter,
+        scopeFilter,
         1,
         size,
         idSort,
@@ -569,14 +578,24 @@ export const useChannelsData = () => {
   // Fetch groups
   const fetchGroups = async () => {
     try {
-      let res = await API.get(`/api/group/`);
-      if (res === undefined) return;
-      setGroupOptions(
-        res.data.data.map((group) => ({
-          label: group,
-          value: group,
-        })),
-      );
+      if (isAdmin()) {
+        const res = await API.get('/api/group/');
+        const { success, data } = res?.data || {};
+        if (success && Array.isArray(data)) {
+          setGroupOptions(data.map((group) => ({ label: group, value: group })));
+        }
+      } else {
+        const res = await API.get('/api/user/self/groups');
+        const { success, data } = res?.data || {};
+        if (success && data && typeof data === 'object') {
+          setGroupOptions(
+            Object.entries(data).map(([group, info]) => ({
+              label: info?.desc || group,
+              value: group,
+            })),
+          );
+        }
+      }
     } catch (error) {
       showError(error.message);
     }
@@ -1156,7 +1175,6 @@ export const useChannelsData = () => {
     scopeFilter,
     compactMode,
     globalPassThroughEnabled,
-    isAdminUser,
 
     // UI states
     showEdit,

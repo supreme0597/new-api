@@ -34,7 +34,7 @@ import EditChannelModal from './modals/EditChannelModal';
 import EditTagModal from './modals/EditTagModal';
 import MultiKeyManageModal from './modals/MultiKeyManageModal';
 import ChannelUpstreamUpdateModal from './modals/ChannelUpstreamUpdateModal';
-import { createCardProPagination } from '../../../helpers/utils';
+import { createCardProPagination, isAdmin } from '../../../helpers/utils';
 
 const ChannelsPage = () => {
   const channelsData = useChannelsData();
@@ -75,7 +75,7 @@ const ChannelsPage = () => {
       />
 
       {/* Main Content */}
-      {!channelsData.isAdminUser ? (
+      {!isAdmin() ? (
         <Banner
           type='info'
           closeIcon={null}

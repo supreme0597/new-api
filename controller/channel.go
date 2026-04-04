@@ -74,8 +74,12 @@ func isAdminActor(c *gin.Context) bool {
 	return c.GetInt("role") >= common.RoleAdminUser
 }
 
-func currentActor(c *gin.Context) (int, bool) {
-	return c.GetInt("id"), isAdminActor(c)
+func isRootActor(c *gin.Context) bool {
+	return c.GetInt("role") >= common.RoleRootUser
+}
+
+func currentActor(c *gin.Context) (int, bool, bool) {
+	return c.GetInt("id"), isAdminActor(c), isRootActor(c)
 }
 
 func parseScopeFilter(c *gin.Context) string {
@@ -90,7 +94,7 @@ func parseScopeFilter(c *gin.Context) string {
 }
 
 func getManagedChannel(c *gin.Context, channelId int, selectAll bool) (*model.Channel, error) {
-	userId, isAdmin := currentActor(c)
+	userId, isAdmin, isRoot := currentActor(c)
 	channel, err := model.GetChannelByIdForActor(channelId, selectAll, userId, isAdmin)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -98,15 +102,15 @@ func getManagedChannel(c *gin.Context, channelId int, selectAll bool) (*model.Ch
 		}
 		return nil, err
 	}
-	if !model.CanActorManageChannel(channel, userId, isAdmin) {
+	if !model.CanActorManageChannel(channel, userId, isAdmin, isRoot) {
 		return nil, fmt.Errorf("无权操作该渠道")
 	}
 	return channel, nil
 }
 
 func sanitizeChannelPayloadForActor(c *gin.Context, channel *model.Channel) {
-	userId, isAdmin := currentActor(c)
-	if !isAdmin {
+	userId, _, isRoot := currentActor(c)
+	if !isRoot {
 		channel.OwnerUserId = common.GetPointer(userId)
 	}
 }
@@ -118,7 +122,7 @@ func GetAllChannels(c *gin.Context) {
 	enableTagMode, _ := strconv.ParseBool(c.Query("tag_mode"))
 	statusParam := c.Query("status")
 	scopeFilter := parseScopeFilter(c)
-	userId, isAdmin := currentActor(c)
+	userId, isAdmin, _ := currentActor(c)
 	// statusFilter: -1 all, 1 enabled, 0 disabled (include auto & manual)
 	statusFilter := parseStatusFilter(statusParam)
 	// type filter
@@ -127,6 +131,14 @@ func GetAllChannels(c *gin.Context) {
 	if typeStr != "" {
 		if t, err := strconv.Atoi(typeStr); err == nil {
 			typeFilter = t
+		}
+	}
+	// owner filter
+	ownerStr := c.Query("owner")
+	ownerFilter := 0
+	if ownerStr != "" {
+		if o, err := strconv.Atoi(ownerStr); err == nil {
+			ownerFilter = o
 		}
 	}
 
@@ -171,6 +183,9 @@ func GetAllChannels(c *gin.Context) {
 				if typeFilter >= 0 && ch.Type != typeFilter {
 					continue
 				}
+				if ownerFilter > 0 && (ch.OwnerUserId == nil || *ch.OwnerUserId != ownerFilter) {
+					continue
+				}
 				filtered = append(filtered, ch)
 			}
 			channelData = append(channelData, filtered...)
@@ -187,6 +202,9 @@ func GetAllChannels(c *gin.Context) {
 		}
 		if typeFilter >= 0 {
 			baseQuery = baseQuery.Where("type = ?", typeFilter)
+		}
+		if ownerFilter > 0 {
+			baseQuery = baseQuery.Where("owner_user_id = ?", ownerFilter)
 		}
 		if statusFilter == common.ChannelStatusEnabled {
 			baseQuery = baseQuery.Where("status = ?", common.ChannelStatusEnabled)
@@ -211,12 +229,23 @@ func GetAllChannels(c *gin.Context) {
 
 	for _, datum := range channelData {
 		clearChannelInfo(datum)
+		if datum.OwnerUserId != nil {
+			datum.OwnerUsername, _ = model.GetUsernameById(*datum.OwnerUserId, false)
+		}
 	}
 
 	countQuery := model.DB.Model(&model.Channel{})
-	if statusFilter == common.ChannelStatusEnabled {
+	countQuery = model.ApplyChannelViewScope(countQuery, userId, isAdmin)
+	switch scopeFilter {
+	case "public":
+		countQuery = countQuery.Where("owner_user_id IS NULL")
+	case "private":
+		countQuery = countQuery.Where("owner_user_id IS NOT NULL")
+	}
+	switch statusFilter {
+	case common.ChannelStatusEnabled:
 		countQuery = countQuery.Where("status = ?", common.ChannelStatusEnabled)
-	} else if statusFilter == 0 {
+	case 0:
 		countQuery = countQuery.Where("status != ?", common.ChannelStatusEnabled)
 	}
 	var results []struct {
@@ -317,7 +346,7 @@ func SearchChannels(c *gin.Context) {
 	statusParam := c.Query("status")
 	statusFilter := parseStatusFilter(statusParam)
 	scopeFilter := parseScopeFilter(c)
-	userId, isAdmin := currentActor(c)
+	userId, isAdmin, _ := currentActor(c)
 	idSort, _ := strconv.ParseBool(c.Query("id_sort"))
 	enableTagMode, _ := strconv.ParseBool(c.Query("tag_mode"))
 	channelData := make([]*model.Channel, 0)
@@ -403,6 +432,23 @@ func SearchChannels(c *gin.Context) {
 		channelData = filtered
 	}
 
+	ownerStr := c.Query("owner")
+	ownerFilter := 0
+	if ownerStr != "" {
+		if o, err := strconv.Atoi(ownerStr); err == nil {
+			ownerFilter = o
+		}
+	}
+	if ownerFilter > 0 {
+		filtered := make([]*model.Channel, 0, len(channelData))
+		for _, ch := range channelData {
+			if ch.OwnerUserId != nil && *ch.OwnerUserId == ownerFilter {
+				filtered = append(filtered, ch)
+			}
+		}
+		channelData = filtered
+	}
+
 	page, _ := strconv.Atoi(c.DefaultQuery("p", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
 	if page < 1 {
@@ -426,6 +472,9 @@ func SearchChannels(c *gin.Context) {
 
 	for _, datum := range pagedData {
 		clearChannelInfo(datum)
+		if datum.OwnerUserId != nil {
+			datum.OwnerUsername, _ = model.GetUsernameById(*datum.OwnerUserId, false)
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -446,7 +495,7 @@ func GetChannel(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	userId, isAdmin := currentActor(c)
+	userId, isAdmin, _ := currentActor(c)
 	channel, err := model.GetChannelByIdForActor(id, false, userId, isAdmin)
 	if err != nil {
 		common.ApiError(c, err)
@@ -459,6 +508,24 @@ func GetChannel(c *gin.Context) {
 		"success": true,
 		"message": "",
 		"data":    channel,
+	})
+	return
+}
+
+func GetChannelOwners(c *gin.Context) {
+	ownerIds := model.GetChannelOwnerUserIds()
+	users := make([]map[string]interface{}, 0, len(ownerIds))
+	for _, id := range ownerIds {
+		username, _ := model.GetUsernameById(id, false)
+		users = append(users, map[string]interface{}{
+			"id":       id,
+			"username": username,
+		})
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+		"data":    users,
 	})
 	return
 }
@@ -1260,20 +1327,27 @@ func CopyChannel(c *gin.Context) {
 		return
 	}
 
+	userId, isAdmin, isRoot := currentActor(c)
+
+	// For private channels, allow admins to copy (key will be cleared)
+	origin, err := model.GetChannelById(id, true)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+
+	// Permission check: public channels can be copied by anyone, private channels need admin or owner
+	if origin.OwnerUserId != nil && !isAdmin && *origin.OwnerUserId != userId {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "无权操作该渠道"})
+		return
+	}
+
 	suffix := c.DefaultQuery("suffix", "_复制")
 	resetBalance := true
 	if rbStr := c.DefaultQuery("reset_balance", "true"); rbStr != "" {
 		if v, err := strconv.ParseBool(rbStr); err == nil {
 			resetBalance = v
 		}
-	}
-
-	// fetch original channel with key
-	origin, err := model.GetChannelById(id, true)
-	if err != nil {
-		common.SysError("failed to get channel by id: " + err.Error())
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "获取渠道信息失败，请稍后重试"})
-		return
 	}
 
 	// clone channel
@@ -1286,6 +1360,22 @@ func CopyChannel(c *gin.Context) {
 	if resetBalance {
 		clone.Balance = 0
 		clone.UsedQuota = 0
+	}
+	// Root copies become public with key preserved
+	// Non-root copies (public or private) become owned by the copier with key cleared
+	if isRoot {
+		clone.OwnerUserId = nil
+	} else {
+		clone.OwnerUserId = &userId
+		clone.Key = ""
+	}
+
+	// Add source info when copying
+	if origin.OwnerUserId == nil {
+		clone.Name = origin.Name + suffix + fmt.Sprintf(" [来源: 公共 #%d]", origin.Id)
+	} else if !isRoot && *origin.OwnerUserId != userId {
+		originUsername, _ := model.GetUsernameById(*origin.OwnerUserId, false)
+		clone.Name = origin.Name + suffix + fmt.Sprintf(" [来源: %d %s #%d]", *origin.OwnerUserId, originUsername, origin.Id)
 	}
 
 	// insert

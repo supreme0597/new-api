@@ -32,6 +32,12 @@ func applyAbilityChannelOwnerScope(query *gorm.DB, userId int) *gorm.DB {
 	if userId <= 0 {
 		return query.Where("channels.owner_user_id IS NULL")
 	}
+	// Root user can see all channels
+	var role int
+	DB.Model(&User{}).Where("id = ?", userId).Select("role").First(&role)
+	if role == common.RoleRootUser {
+		return query
+	}
 	return query.Where("channels.owner_user_id IS NULL OR channels.owner_user_id = ?", userId)
 }
 
@@ -40,7 +46,7 @@ func GetAllEnableAbilityWithChannels() ([]AbilityWithChannel, error) {
 	err := DB.Table("abilities").
 		Select("abilities.*, channels.type as channel_type").
 		Joins("left join channels on abilities.channel_id = channels.id").
-		Where("abilities.enabled = ?", true).
+		Where("abilities.enabled = ? AND (channels.owner_user_id IS NULL)", true).
 		Scan(&abilities).Error
 	return abilities, err
 }

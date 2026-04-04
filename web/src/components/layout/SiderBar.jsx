@@ -1,21 +1,19 @@
 /*
-Copyright (C) 2025 QuantumNous
-
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU Affero General Public License as
-published by the Free Software Foundation, either version 3 of the
-License, or (at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-GNU Affero General Public License for more details.
-
-You should have received a copy of the GNU Affero General Public License
-along with this program. If not, see <https://www.gnu.org/licenses/>.
-
-For commercial licensing, please contact support@quantumnous.com
-*/
+ * Copyright (c) 2026.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ */
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
@@ -28,11 +26,12 @@ import { useMinimumLoadingTime } from '../../hooks/common/useMinimumLoadingTime'
 import { isAdmin, isRoot, showError } from '../../helpers';
 import SkeletonWrapper from './components/SkeletonWrapper';
 
-import { Nav, Divider, Button } from '@douyinfe/semi-ui';
+import { Button, Divider, Nav } from '@douyinfe/semi-ui';
 
 const routerMap = {
   home: '/',
   channel: '/console/channel',
+  myChannel: '/console/my-channel',
   token: '/console/token',
   redemption: '/console/redemption',
   topup: '/console/topup',
@@ -148,10 +147,10 @@ const SiderBar = ({ onNavigate = () => {} }) => {
   const adminItems = useMemo(() => {
     const items = [
       {
-        text: isAdmin() ? t('渠道管理') : t('我的渠道'),
+        text: t('渠道管理'),
         itemKey: 'channel',
-        to: isAdmin() ? '/channel' : '/my-channel',
-        className: '',
+        to: '/channel',
+        className: isAdmin() ? '' : 'tableHiddle',
       },
       {
         text: t('订阅管理'),
@@ -199,6 +198,19 @@ const SiderBar = ({ onNavigate = () => {} }) => {
 
     return filteredItems;
   }, [isAdmin(), isRoot(), t, isModuleVisible]);
+
+  // 普通用户的"我的渠道"菜单项
+  const myChannelMenuItem = useMemo(() => {
+    if (isAdmin()) return null;
+    const isChannelVisible = isModuleVisible('admin', 'channel');
+    if (!isChannelVisible) return null;
+    return {
+      text: t('我的渠道'),
+      itemKey: 'myChannel',
+      to: '/my-channel',
+      className: '',
+    };
+  }, [isAdmin(), t, isModuleVisible]);
 
   const chatMenuItems = useMemo(() => {
     const items = [
@@ -470,6 +482,7 @@ const SiderBar = ({ onNavigate = () => {} }) => {
                 {!collapsed && (
                   <div className='sidebar-group-label'>{t('个人中心')}</div>
                 )}
+                {myChannelMenuItem && renderNavItem(myChannelMenuItem)}
                 {financeItems.map((item) => renderNavItem(item))}
               </div>
             </>
@@ -514,7 +527,7 @@ const SiderBar = ({ onNavigate = () => {} }) => {
               />
             }
             onClick={toggleCollapsed}
-            icononly={collapsed}
+            iconOnly={collapsed}
             style={
               collapsed
                 ? { width: 36, height: 24, padding: 0 }

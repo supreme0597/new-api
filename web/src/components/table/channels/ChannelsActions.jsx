@@ -27,9 +27,9 @@ import {
   Select,
 } from '@douyinfe/semi-ui';
 import CompactModeToggle from '../../common/ui/CompactModeToggle';
+import { isAdmin } from '../../../helpers';
 
 const ChannelsActions = ({
-  isAdminUser,
   enableBatchDelete,
   batchDeleteChannels,
   setShowBatchSetTag,
@@ -67,7 +67,7 @@ const ChannelsActions = ({
       <div className='flex flex-col md:flex-row justify-between gap-2'>
         {/* 左侧：批量操作按钮 */}
         <div className='flex flex-wrap md:flex-nowrap items-center gap-2 w-full md:w-auto order-2 md:order-1'>
-          {isAdminUser && (
+          {isAdmin() && (
             <>
               <Button
                 size='small'
@@ -271,7 +271,7 @@ const ChannelsActions = ({
             />
           </div>
 
-          {isAdminUser && (
+          {isAdmin() && (
             <div className='flex items-center justify-between w-full md:w-auto'>
               <Typography.Text strong className='mr-2'>
                 {t('开启批量操作')}
@@ -287,7 +287,7 @@ const ChannelsActions = ({
             </div>
           )}
 
-          {isAdminUser && (
+          {isAdmin() && (
             <div className='flex items-center justify-between w-full md:w-auto'>
               <Typography.Text strong className='mr-2'>
                 {t('标签聚合模式')}
@@ -305,27 +305,25 @@ const ChannelsActions = ({
             </div>
           )}
 
-          {isAdminUser && (
-            <div className='flex items-center justify-between w-full md:w-auto'>
-              <Typography.Text strong className='mr-2'>
-                {t('渠道类型')}
-              </Typography.Text>
-              <Select
-                size='small'
-                value={scopeFilter}
-                onChange={(v) => {
-                  localStorage.setItem('channel-scope-filter', v);
-                  setScopeFilter(v);
-                  setActivePage(1);
-                  loadChannels(1, pageSize, idSort, enableTagMode, activeTypeKey, statusFilter);
-                }}
-              >
-                <Select.Option value='all'>{t('全部')}</Select.Option>
-                <Select.Option value='public'>{t('公共')}</Select.Option>
-                <Select.Option value='private'>{t('私有')}</Select.Option>
-              </Select>
-            </div>
-          )}
+          <div className='flex items-center justify-between w-full md:w-auto'>
+            <Typography.Text strong className='mr-2'>
+              {t('渠道类型')}
+            </Typography.Text>
+            <Select
+              size='small'
+              value={scopeFilter}
+              onChange={(v) => {
+                localStorage.setItem('channel-scope-filter', v);
+                setScopeFilter(v);
+                setActivePage(1);
+                loadChannels(1, pageSize, idSort, enableTagMode, activeTypeKey, statusFilter, v);
+              }}
+            >
+              <Select.Option value='all'>{t('全部')}</Select.Option>
+              <Select.Option value='public'>{t('公共')}</Select.Option>
+              <Select.Option value='private'>{t('私有')}</Select.Option>
+            </Select>
+          </div>
 
           <div className='flex items-center justify-between w-full md:w-auto'>
             <Typography.Text strong className='mr-2'>

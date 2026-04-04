@@ -33,6 +33,7 @@ const ChannelsTabs = ({
   pageSize,
   idSort,
   setActivePage,
+  scopeFilter,
   t,
 }) => {
   if (enableTagMode) return null;
@@ -40,7 +41,7 @@ const ChannelsTabs = ({
   const handleTabChange = (key) => {
     setActiveTypeKey(key);
     setActivePage(1);
-    loadChannels(1, pageSize, idSort, enableTagMode, key);
+    loadChannels(1, pageSize, idSort, enableTagMode, key, undefined, scopeFilter);
   };
 
   return (

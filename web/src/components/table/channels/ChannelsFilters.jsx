@@ -17,12 +17,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button, Form } from '@douyinfe/semi-ui';
 import { IconSearch } from '@douyinfe/semi-icons';
+import { isAdmin } from '../../../helpers';
+import { API, showError } from '../../../helpers';
 
 const ChannelsFilters = ({
-  isAdminUser,
   setEditingChannel,
   setShowEdit,
   refresh,
@@ -35,8 +36,27 @@ const ChannelsFilters = ({
   groupOptions,
   loading,
   searching,
+  scopeFilter,
   t,
 }) => {
+  const [ownerOptions, setOwnerOptions] = useState([]);
+
+  useEffect(() => {
+    if (isAdmin()) {
+      API.get('/api/channel/owners')
+        .then((res) => {
+          if (res.data.success) {
+            setOwnerOptions(
+              res.data.data.map((u) => ({
+                label: u.username,
+                value: u.id,
+              })),
+            );
+          }
+        })
+        .catch(() => {});
+    }
+  }, []);
   return (
     <div className='flex flex-col md:flex-row justify-between items-center gap-2 w-full'>
       <div className='flex gap-2 w-full md:w-auto order-2 md:order-1'>
@@ -52,7 +72,7 @@ const ChannelsFilters = ({
             setShowEdit(true);
           }}
         >
-          {isAdminUser ? t('添加渠道') : t('添加我的渠道')}
+          {isAdmin() ? t('添加渠道') : t('添加我的渠道')}
         </Button>
 
         <Button
@@ -78,7 +98,7 @@ const ChannelsFilters = ({
         <Form
           initValues={formInitValues}
           getFormApi={(api) => setFormApi(api)}
-          onSubmit={() => searchChannels(enableTagMode)}
+          onSubmit={() => searchChannels(enableTagMode, undefined, undefined, scopeFilter)}
           allowEmpty={true}
           autoComplete='off'
           layout='horizontal'
@@ -121,11 +141,32 @@ const ChannelsFilters = ({
               onChange={() => {
                 // 延迟执行搜索，让表单值先更新
                 setTimeout(() => {
-                  searchChannels(enableTagMode);
+                  searchChannels(enableTagMode, undefined, undefined, scopeFilter);
                 }, 0);
               }}
             />
           </div>
+          {isAdmin() && ownerOptions.length > 0 && (
+            <div className='w-full md:w-32'>
+              <Form.Select
+                size='small'
+                field='searchOwner'
+                placeholder={t('归属人')}
+                optionList={[
+                  { label: t('归属人'), value: null },
+                  ...ownerOptions,
+                ]}
+                className='w-full'
+                showClear
+                pure
+                onChange={() => {
+                  setTimeout(() => {
+                    searchChannels(enableTagMode, undefined, undefined, scopeFilter);
+                  }, 0);
+                }}
+              />
+            </div>
+          )}
           <Button
             size='small'
             type='tertiary'

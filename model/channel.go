@@ -55,7 +55,8 @@ type Channel struct {
 	OtherSettings string `json:"settings" gorm:"column:settings"` // 其他设置，存储azure版本等不需要检索的信息，详见dto.ChannelOtherSettings
 
 	// cache info
-	Keys []string `json:"-" gorm:"-"`
+	Keys          []string `json:"-" gorm:"-"`
+	OwnerUsername string   `json:"owner_username" gorm:"-"`
 }
 
 func (channel *Channel) IsPublicChannel() bool {
@@ -79,14 +80,19 @@ func CanActorViewChannel(channel *Channel, userId int, isAdmin bool) bool {
 	return channel.IsOwnedBy(userId)
 }
 
-func CanActorManageChannel(channel *Channel, userId int, isAdmin bool) bool {
+func CanActorManageChannel(channel *Channel, userId int, isAdmin bool, isRoot bool) bool {
 	if channel == nil {
 		return false
 	}
-	if isAdmin {
+	if channel.IsOwnedBy(userId) {
 		return true
 	}
-	return channel.IsOwnedBy(userId)
+	// Public channel: any admin can manage
+	if channel.IsPublicChannel() {
+		return isAdmin
+	}
+	// Private channel: root can manage all, others only their own
+	return isRoot
 }
 
 func ApplyChannelViewScope(query *gorm.DB, userId int, isAdmin bool) *gorm.DB {
@@ -94,6 +100,12 @@ func ApplyChannelViewScope(query *gorm.DB, userId int, isAdmin bool) *gorm.DB {
 		return query
 	}
 	return query.Where("owner_user_id IS NULL OR owner_user_id = ?", userId)
+}
+
+func GetChannelOwnerUserIds() []int {
+	var owners []int
+	DB.Model(&Channel{}).Where("owner_user_id IS NOT NULL").Distinct("owner_user_id").Pluck("owner_user_id", &owners)
+	return owners
 }
 
 func ApplyChannelManageScope(query *gorm.DB, userId int, isAdmin bool) *gorm.DB {
@@ -339,7 +351,7 @@ func GetAllChannelsForActor(startIdx int, num int, selectAll bool, idSort bool, 
 	}
 	err := query.Order(order).Find(&channels).Error
 	return channels, err
-	}
+}
 
 func GetChannelsByTag(tag string, idSort bool, selectAll bool) ([]*Channel, error) {
 	var channels []*Channel

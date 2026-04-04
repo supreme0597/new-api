@@ -38,6 +38,7 @@ import {
   showSuccess,
   showError,
   showInfo,
+  isAdmin,
 } from '../../../helpers';
 import {
   CHANNEL_OPTIONS,
@@ -155,7 +156,14 @@ const renderScope = (record, t) => {
 	return record.owner_user_id == null ? (
 		<Tag color='blue' shape='circle'>{t('公共')}</Tag>
 	) : (
-		<Tag color='violet' shape='circle'>{t('私有')}</Tag>
+		<Tag color='violet' shape='circle'>
+			{t('私有')}
+			{record.owner_username && (
+				<span style={{ marginLeft: 4, opacity: 0.8 }}>
+					({record.owner_username})
+				</span>
+			)}
+		</Tag>
 	);
 };
 
@@ -338,7 +346,6 @@ export const getChannelsColumns = ({
   setCurrentMultiKeyChannel,
   openUpstreamUpdateModal,
   detectChannelUpstreamUpdates,
-  isAdminUser,
 }) => {
   return [
     {
@@ -733,7 +740,6 @@ export const getChannelsColumns = ({
             },
           ];
 
-          if (isAdminUser) {
             moreMenuItems.push({
               node: 'item',
               name: t('复制'),
@@ -746,9 +752,8 @@ export const getChannelsColumns = ({
                 });
               },
             });
-          }
 
-          if (isAdminUser && upstreamUpdateMeta.supported) {
+          if (isAdmin() && upstreamUpdateMeta.supported) {
             moreMenuItems.push({
               node: 'item',
               name: t('仅检测上游模型更新'),
@@ -785,7 +790,7 @@ export const getChannelsColumns = ({
             });
           }
 
-          if (isAdminUser && record.type === 4) {
+          if (isAdmin() && record.type === 4) {
             moreMenuItems.unshift({
               node: 'item',
               name: t('测活'),
@@ -818,7 +823,7 @@ export const getChannelsColumns = ({
                 />
               </SplitButtonGroup>
 
-              {isAdminUser && (record.status === 1 ? (
+              {record.status === 1 ? (
                 <Button
                   type='danger'
                   size='small'
@@ -833,7 +838,7 @@ export const getChannelsColumns = ({
                 >
                   {t('启用')}
                 </Button>
-              ))}
+              )}
 
               {record.channel_info?.is_multi_key ? (
                 <SplitButtonGroup aria-label={t('多密钥渠道操作项目组')}>
