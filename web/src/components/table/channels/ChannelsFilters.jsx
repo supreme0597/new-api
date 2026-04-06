@@ -159,10 +159,10 @@ const ChannelsFilters = ({
                 className='w-full'
                 showClear
                 pure
-                onChange={() => {
+                onChange={(value) => {
                   setTimeout(() => {
-                    searchChannels(enableTagMode, undefined, undefined, scopeFilter);
-                  }, 0);
+                    searchChannels(enableTagMode, undefined, undefined, scopeFilter, undefined, undefined, undefined, value);
+                  }, 100);
                 }}
               />
             </div>

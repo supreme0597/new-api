@@ -106,8 +106,7 @@ const ColumnSelectorModal = ({
           // Skip admin-only columns for non-admin users
           if (
             !isAdminUser &&
-            (column.key === COLUMN_KEYS.CHANNEL ||
-              column.key === COLUMN_KEYS.USERNAME ||
+            (column.key === COLUMN_KEYS.USERNAME ||
               column.key === COLUMN_KEYS.RETRY)
           ) {
             return null;

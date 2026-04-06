@@ -131,6 +131,7 @@ export const useChannelsData = () => {
     searchKeyword: '',
     searchGroup: '',
     searchModel: '',
+    searchOwner: '',
   };
 
   // Column keys
@@ -331,12 +332,14 @@ export const useChannelsData = () => {
     typeKey = activeTypeKey,
     statusF,
     scopeF,
+    ownerF,
   ) => {
     if (statusF === undefined) statusF = statusFilter;
     if (scopeF === undefined) scopeF = scopeFilter;
 
     const { searchKeyword, searchGroup, searchModel, searchOwner } = getFormValues();
-    if (searchKeyword !== '' || searchGroup !== '' || searchModel !== '' || searchOwner) {
+    const effectiveOwner = ownerF !== undefined ? ownerF : searchOwner;
+    if (searchKeyword !== '' || searchGroup !== '' || searchModel !== '' || effectiveOwner) {
       setLoading(true);
       await searchChannels(
         enableTagMode,
@@ -346,6 +349,7 @@ export const useChannelsData = () => {
         page,
         pageSize,
         idSort,
+        ownerF,
       );
       setLoading(false);
       return;
@@ -356,7 +360,7 @@ export const useChannelsData = () => {
     const typeParam = typeKey !== 'all' ? `&type=${typeKey}` : '';
     const statusParam = statusF !== 'all' ? `&status=${statusF}` : '';
     const scopeParam = scopeF !== 'all' ? `&scope=${scopeF}` : '';
-    const ownerParam = searchOwner ? `&owner=${searchOwner}` : '';
+    const ownerParam = effectiveOwner ? `&owner=${effectiveOwner}` : '';
     const res = await API.get(
       `/api/channel/?p=${page}&page_size=${pageSize}&id_sort=${idSort}&tag_mode=${enableTagMode}${typeParam}${statusParam}${scopeParam}${ownerParam}`,
     );
@@ -392,11 +396,14 @@ export const useChannelsData = () => {
     page = 1,
     pageSz = pageSize,
     sortFlag = idSort,
+    ownerF,
   ) => {
     const { searchKeyword, searchGroup, searchModel, searchOwner } = getFormValues();
+    // Use explicit ownerF if provided, otherwise fall back to form value
+    const effectiveOwner = ownerF !== undefined ? ownerF : searchOwner;
     setSearching(true);
     try {
-      if (searchKeyword === '' && searchGroup === '' && searchModel === '' && !searchOwner) {
+      if (searchKeyword === '' && searchGroup === '' && searchModel === '' && !effectiveOwner) {
         await loadChannels(
           page,
           pageSz,
@@ -412,7 +419,7 @@ export const useChannelsData = () => {
       const typeParam = typeKey !== 'all' ? `&type=${typeKey}` : '';
       const statusParam = statusF !== 'all' ? `&status=${statusF}` : '';
       const scopeParam = scopeF !== 'all' ? `&scope=${scopeF}` : '';
-      const ownerParam = searchOwner ? `&owner=${searchOwner}` : '';
+      const ownerParam = effectiveOwner ? `&owner=${effectiveOwner}` : '';
       const res = await API.get(
         `/api/channel/search?keyword=${searchKeyword}&group=${searchGroup}&model=${searchModel}&id_sort=${sortFlag}&tag_mode=${enableTagMode}&p=${page}&page_size=${pageSz}${typeParam}${statusParam}${scopeParam}${ownerParam}`,
       );

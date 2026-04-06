@@ -46,7 +46,7 @@ func GetAllEnableAbilityWithChannels() ([]AbilityWithChannel, error) {
 	err := DB.Table("abilities").
 		Select("abilities.*, channels.type as channel_type").
 		Joins("left join channels on abilities.channel_id = channels.id").
-		Where("abilities.enabled = ? AND (channels.owner_user_id IS NULL)", true).
+		Where("abilities.enabled = ?", true).
 		Scan(&abilities).Error
 	return abilities, err
 }
@@ -148,7 +148,7 @@ func getChannelQueryForUser(group string, model string, retry int, userId int, p
 	maxPrioritySubQuery := DB.Table("abilities").
 		Select("MAX(abilities.priority)").
 		Joins("left join channels on abilities.channel_id = channels.id").
-		Where(commonGroupCol+" = ? and abilities.model = ? and abilities.enabled = ?", group, model, true)
+		Where("abilities."+commonGroupCol+" = ? and abilities.model = ? and abilities.enabled = ?", group, model, true)
 	if publicOnly {
 		maxPrioritySubQuery = maxPrioritySubQuery.Where("channels.owner_user_id IS NULL")
 	} else if privateOnly {
@@ -159,7 +159,7 @@ func getChannelQueryForUser(group string, model string, retry int, userId int, p
 	channelQuery := DB.Table("abilities").
 		Select("abilities.*").
 		Joins("left join channels on abilities.channel_id = channels.id").
-		Where(commonGroupCol+" = ? and abilities.model = ? and abilities.enabled = ? and abilities.priority = (?)", group, model, true, maxPrioritySubQuery)
+		Where("abilities."+commonGroupCol+" = ? and abilities.model = ? and abilities.enabled = ? and abilities.priority = (?)", group, model, true, maxPrioritySubQuery)
 	if publicOnly {
 		channelQuery = channelQuery.Where("channels.owner_user_id IS NULL")
 	} else if privateOnly {

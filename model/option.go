@@ -1,6 +1,7 @@
 package model
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -532,12 +533,23 @@ func handleConfigUpdate(key, value string) bool {
 	configMap := map[string]string{
 		configKey: value,
 	}
-	config.UpdateConfigFromMap(cfg, configMap)
+	err := config.UpdateConfigFromMap(cfg, configMap)
+	if err != nil {
+		common.SysError(fmt.Sprintf("failed to update config %s: %v", key, err))
+	}
 
 	// 特定配置的后处理
 	if configName == "performance_setting" {
 		// 同步磁盘缓存配置到 common 包
 		performance_setting.UpdateAndSync()
+	}
+
+	// 调试日志：输出 channel_affinity_setting 的规则数量
+	if configName == "channel_affinity_setting" {
+		if caCfg, ok := cfg.(*operation_setting.ChannelAffinitySetting); ok {
+			common.SysLog(fmt.Sprintf("[DEBUG] channel_affinity_setting loaded: enabled=%v, rules_count=%d",
+				caCfg.Enabled, len(caCfg.Rules)))
+		}
 	}
 
 	return true // 已处理

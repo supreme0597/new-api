@@ -818,3 +818,143 @@ affinity 命中某个 channelId 后也必须重校验 owner：
 #### 第五批：测试收尾
 20. 后端权限与选路测试
 21. 前端角色显示与主流程回归
+
+---
+
+## 附录 B：本次会话实际变更清单（增量记录）
+
+> 以下为 2026-04-05 会话中实际落地的变更，与原始计划的差异点。
+
+### 一、后端变更
+
+#### 1. `controller/channel.go`
+- `currentActor(c)` 改为返回 3 值：`(userId, isAdmin, isRoot)`
+- `isRootActor(c)` 新增，判断 `role >= RoleRootUser`
+- `sanitizeChannelPayloadForActor`：只有超管创建公共渠道，普通管理员也变私有
+- `GetAllChannels` / `SearchChannels`：
+  - 新增 `owner` 查询参数（按归属人筛选）
+  - 返回数据填充 `owner_username`
+- `GetChannelOwners` 新增接口：返回所有渠道归属人列表
+- `CopyChannel` 权限与行为大改：
+  - 路由从 `AdminAuth` 降为 `UserAuth`
+  - 公共渠道任何人都能复制
+  - 超管复制 → 公共，保留密钥
+  - 管理员/普通用户复制 → 私有，清空密钥
+  - 复制名称加来源标记：公共 `[来源: 公共 #ID]`，私有 `[来源: UID 用户名 #ID]`
+- `POST /api/channel/fetch_models` 从 `RootAuth` 降为 `UserAuth`
+- 启用/禁用渠道前端按钮开放（后端 `PUT /api/channel/` 本就是 `UserAuth`）
+
+#### 2. `controller/channel-test.go`
+- `testChannel` 函数签名增加 `userId int` 参数
+- `TestChannel` 改用 `CanActorViewChannel`（管理员可测试所有渠道排查问题）
+- `RecordConsumeLog` 的 userId 不再硬编码 1，使用实际调用者 ID
+- `GetUserCache` 不再硬编码 1，使用实际调用者 userId
+- `AutomaticallyTestChannels` 传 userId=1 保持原行为
+
+#### 3. `model/channel.go`
+- `Channel` 结构体新增 `OwnerUsername string` 字段（`json:"owner_username" gorm:"-"`）
+- `CanActorManageChannel` 增加 `isRoot bool` 参数：
+  - 超管可管理所有渠道
+  - 普通管理员只能管理公共渠道 + 自己的私有渠道
+  - 不能管理别人的私有渠道
+- `GetChannelOwnerUserIds()` 新增：返回所有渠道归属人 ID 列表
+
+#### 4. `model/ability.go`
+- `GetAllEnableAbilityWithChannels`：恢复查询所有启用渠道（包含私有），relay 缓存需要全量
+- `applyAbilityChannelOwnerScope`：超管跳过 owner 过滤，能看到所有渠道的模型
+- `getChannelQueryForUser`：`commonGroupCol` 加 `abilities.` 前缀，修复 PostgreSQL `column reference "group" is ambiguous`
+
+#### 5. `model/log.go`
+- `GetUserLogs` 新增 `channel int` 参数，支持按渠道 ID 筛选
+- `GetUserLogs` 填充 `ChannelName`（原来被 `formatUserLogs` 清空了）
+
+#### 6. `router/api-router.go`
+- `POST /api/channel/fetch_models` → `UserAuth()`
+- `POST /api/channel/copy/:id` → `UserAuth()`
+- `GET /api/channel/owners` → `UserAuth()` 新增
+
+### 二、前端变更
+
+#### 7. `web/src/hooks/channels/useChannelsData.jsx`
+- 删除 `isAdminUser` 变量，统一直接调用 `isAdmin()`
+- `fetchGroups` 角色分流：管理员走 `/api/group/`，普通用户走 `/api/user/self/groups`
+- `scopeFilter` 默认值从 `'private'` 改为 `'all'`
+- `loadChannels` / `searchChannels` 新增 `ownerF` 参数（第 8 个）
+- `formInitValues` 新增 `searchOwner: ''`
+
+#### 8. `web/src/hooks/users/useUsersData.jsx`
+- `fetchGroups` 简化：只调 `/api/group/` + success 防御（管理员页面）
+
+#### 9. `web/src/components/table/channels/ChannelsActions.jsx`
+- 删除 `isAdminUser` prop，"渠道类型"筛选对所有人开放
+
+#### 10. `web/src/components/table/channels/ChannelsTabs.jsx`
+- 新增 `scopeFilter` prop，`handleTabChange` 传入 `scopeFilter`
+
+#### 11. `web/src/components/table/channels/ChannelsFilters.jsx`
+- 新增归属人筛选下拉（管理员可见）
+- `searchChannels` 调用传 `scopeFilter` 和 `owner` 参数
+
+#### 12. `web/src/components/table/channels/ChannelsColumnDefs.jsx`
+- 删除 `isAdminUser` 引用，统一 `isAdmin()`
+- 私有渠道标签显示归属人：`私有 (username)`
+- 启用/禁用按钮去掉 `isAdmin()` 限制
+- 复制按钮去掉 `isAdmin()` 限制
+
+#### 13. `web/src/components/table/channels/ChannelsTable.jsx`
+- 删除 `isAdminUser` 解构和传参
+
+#### 14. `web/src/components/layout/SiderBar.jsx`
+- `icononly` → `iconOnly`（修复 React 警告）
+
+#### 15. `web/src/components/table/channels/modals/EditChannelModal.jsx`
+- `fetchGroups` 角色分流
+
+#### 16. `web/src/components/table/channels/modals/EditTagModal.jsx`
+- `fetchGroups` 角色分流
+
+#### 17. `web/src/hooks/usage-logs/useUsageLogsData.jsx`
+- 渠道列默认对所有用户可见
+- 非管理员不再强制隐藏渠道列
+- `loadLogs` URL 新增 `channel` 参数
+- `getLogSelfStat` URL 新增 `channel` 参数
+
+#### 18. `web/src/components/table/usage-logs/UsageLogsColumnDefs.jsx`
+- 渠道列 render 条件从 `isAdminUser &&` 改为 `(isAdminUser || record.type === 2) ?`
+
+#### 19. `web/src/components/table/usage-logs/UsageLogsFilters.jsx`
+- 渠道 ID 筛选对所有用户开放
+
+#### 20. `web/src/components/table/usage-logs/modals/ColumnSelectorModal.jsx`
+- 渠道列不再对非管理员隐藏
+
+### 三、渠道复制最终矩阵
+
+| 复制者 | 原渠道 | 归属 | 密钥 | 来源标记 |
+|--------|--------|------|------|---------|
+| 超管 | 任意 | 公共 | ✅ 保留 | 无 |
+| 管理员 | 公共 | 私有 | ❌ 清空 | `[来源: 公共 #ID]` |
+| 管理员 | 自己的私有 | 私有 | ✅ 保留 | 无 |
+| 管理员 | 别人的私有 | 私有 | ❌ 清空 | `[来源: UID 用户名 #ID]` |
+| 普通用户 | 公共 | 私有 | ❌ 清空 | `[来源: 公共 #ID]` |
+| 普通用户 | 自己的私有 | 私有 | ✅ 保留 | 无 |
+
+### 四、渠道管理权限矩阵
+
+| 操作 | 超管 | 普通管理员 | 普通用户 |
+|------|------|-----------|---------|
+| 查看公共渠道 | ✅ | ✅ | ✅ |
+| 查看别人的私有渠道 | ✅ | ✅ | ❌ |
+| 管理公共渠道 | ✅ | ✅ | ❌ |
+| 管理自己的私有渠道 | ✅ | ✅ | ✅ |
+| 管理别人的私有渠道 | ✅ | ❌ | ❌ |
+| 测试渠道 | ✅ 任意 | ✅ 任意 | ✅ 自己的 |
+| 复制公共渠道 | ✅ | ✅ | ✅ |
+| 复制别人的私有渠道 | ✅ | ✅ | ❌ |
+
+### 五、模型广场
+
+- 未登录：仅公共渠道衍生模型
+- 已登录：公共 + 自己私有
+- `GetAllEnableAbilityWithChannels` 包含所有启用渠道（relay 缓存需要）
+- `applyAbilityChannelOwnerScope` 控制用户可见范围
