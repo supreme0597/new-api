@@ -13,20 +13,24 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/i18n"
+	"github.com/QuantumNous/new-api/ldap"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting"
+	"github.com/QuantumNous/new-api/setting/system_setting"
 
 	"github.com/QuantumNous/new-api/constant"
 
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 type LoginRequest struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
+	Username  string `json:"username"`
+	Password  string `json:"password"`
+	LdapLogin bool   `json:"ldap_login"`
 }
 
 func Login(c *gin.Context) {
@@ -46,6 +50,87 @@ func Login(c *gin.Context) {
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
 		return
 	}
+
+	// 如果用户选择 LDAP 登录，则使用 LDAP 认证
+	if loginRequest.LdapLogin {
+		ldapSettings := system_setting.GetLDAPSettings()
+		if !ldapSettings.Enabled {
+			c.JSON(http.StatusOK, gin.H{
+				"message": "LDAP 认证未启用",
+				"success": false,
+			})
+			return
+		}
+		// LDAP 认证：username 作为工号，password 作为 LDAP 密码
+		valid, employeeInfo, ldapErr := ldap.Authenticate(username, password)
+		if ldapErr != nil || !valid {
+			c.JSON(http.StatusOK, gin.H{
+				"message": "LDAP 认证失败：" + ldapErr.Error(),
+				"success": false,
+			})
+			return
+		}
+		// LDAP 认证成功，查找或创建用户
+		var user model.User
+		err := model.DB.Where("username = ?", username).First(&user).Error
+		if err == gorm.ErrRecordNotFound {
+			// 用户不存在，创建新用户
+			newUser := &model.User{
+				Username:    username,
+				DisplayName: employeeInfo.Name,
+				Email:       employeeInfo.Email,
+				Role:        common.RoleCommonUser,
+				Status:      1,
+				Group:       "default",
+			}
+			randomPassword := common.GetRandomString(32)
+			newUser.Password, _ = common.Password2Hash(randomPassword)
+			createErr := model.DB.Create(newUser).Error
+			if createErr != nil {
+				common.ApiErrorI18n(c, i18n.MsgCreateFailed)
+				return
+			}
+			user = *newUser
+		} else if err != nil {
+			common.ApiErrorI18n(c, i18n.MsgDatabaseError)
+			return
+		}
+
+		// 检查用户状态
+		if user.Status != common.UserStatusEnabled {
+			c.JSON(http.StatusOK, gin.H{
+				"message": "用户已被封禁",
+				"success": false,
+			})
+			return
+		}
+
+		// 检查是否启用 2FA
+		if model.IsTwoFAEnabled(user.Id) {
+			session := sessions.Default(c)
+			session.Set("pending_username", user.Username)
+			session.Set("pending_user_id", user.Id)
+			err := session.Save()
+			if err != nil {
+				common.ApiErrorI18n(c, i18n.MsgUserSessionSaveFailed)
+				return
+			}
+
+			c.JSON(http.StatusOK, gin.H{
+				"message": i18n.T(c, i18n.MsgUserRequire2FA),
+				"success": true,
+				"data": map[string]interface{}{
+					"require_2fa": true,
+				},
+			})
+			return
+		}
+
+		setupLogin(&user, c)
+		return
+	}
+
+	// 使用本地密码认证
 	user := model.User{
 		Username: username,
 		Password: password,

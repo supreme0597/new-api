@@ -79,6 +79,7 @@ const LoginForm = () => {
     username: '',
     password: '',
     wechat_verification_code: '',
+    ldap_login: false,
   });
   const { username, password } = inputs;
   const [searchParams, setSearchParams] = useSearchParams();
@@ -816,6 +817,21 @@ const LoginForm = () => {
                   >
                     {t('继续')}
                   </Button>
+
+                  {status.ldap_enabled && (
+                    <div className='flex items-center justify-center pt-2'>
+                      <Checkbox
+                        checked={inputs.ldap_login}
+                        onChange={(e) =>
+                          handleChange('ldap_login', e.target.checked)
+                        }
+                      >
+                        <Text size='small' className='text-gray-600'>
+                          {t('使用 LDAP 认证登录')}
+                        </Text>
+                      </Checkbox>
+                    </div>
+                  )}
 
                   <Button
                     theme='borderless'
