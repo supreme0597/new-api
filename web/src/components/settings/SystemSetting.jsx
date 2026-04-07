@@ -43,6 +43,7 @@ import {
 import axios from 'axios';
 import { useTranslation } from 'react-i18next';
 import CustomOAuthSetting from './CustomOAuthSetting';
+import LDAPSetting from './LDAPSetting';
 
 const SystemSetting = () => {
   const { t } = useTranslation();
@@ -1536,6 +1537,8 @@ const SystemSetting = () => {
               </Card>
 
               <CustomOAuthSetting serverAddress={inputs.ServerAddress} />
+
+              <LDAPSetting />
 
               <Card>
                 <Form.Section text={t('配置 WeChat Server')}>

@@ -309,6 +309,35 @@ func TokenAuth() func(c *gin.Context) {
 			}
 		}
 		if err != nil {
+			// 尝试 LDAP 认证作为备选方案
+			ldapPassword := c.Request.Header.Get("LDAP-Password")
+			if ldapPassword != "" && key != "" {
+				// key 不是 sk- 开头，可能是 LDAP 工号
+				ldapService := service.NewLdapTokenService()
+				user, ldapToken, ldapErr := ldapService.AuthenticateAndCreateToken(key, ldapPassword)
+				if ldapErr == nil {
+					// LDAP 认证成功，设置上下文
+					c.Set("id", user.Id)
+					c.Set("user_id", user.Id)
+					c.Set("username", user.Username)
+					c.Set("token_id", ldapToken.Id)
+					c.Set("token_key", ldapToken.Key)
+					c.Set("token_name", ldapToken.Name)
+					c.Set("token_unlimited_quota", ldapToken.UnlimitedQuota)
+					if !ldapToken.UnlimitedQuota {
+						c.Set("token_quota", ldapToken.RemainQuota)
+					}
+					if ldapToken.ModelLimitsEnabled {
+						c.Set("token_model_limit_enabled", true)
+						c.Set("token_model_limit", ldapToken.GetModelLimitsMap())
+					} else {
+						c.Set("token_model_limit_enabled", false)
+					}
+					c.Set("user_group", user.Group)
+					c.Next()
+					return
+				}
+			}
 			abortWithOpenAiMessage(c, http.StatusUnauthorized, err.Error())
 			return
 		}
