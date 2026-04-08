@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/QuantumNous/new-api/setting/system_setting"
 	"github.com/go-ldap/ldap/v3"
@@ -29,6 +30,7 @@ type EmployeeInfo struct {
 	Name       string
 	Email      string
 	Department string
+	Groups     []string // 用户所属群组列表
 }
 
 // LdapConnect 连接 LDAP 并验证用户
@@ -146,9 +148,175 @@ func TestConnection() (bool, error) {
 	return err == nil, err
 }
 
+// LookupUser 根据工号查询用户信息（仅管理员权限，不需要用户密码）
+// 同时返回用户所属群组
+func LookupUser(employeeID string) (*EmployeeInfo, error) {
+	settings := system_setting.GetLDAPSettings()
+	if !settings.Enabled {
+		return nil, fmt.Errorf("LDAP 未启用")
+	}
+
+	al := &ALdap{
+		LDAPSettings: *settings,
+	}
+
+	var ld *ldap.Conn
+	var err error
+
+	// 建立 LDAP 连接
+	if al.Ldaps {
+		ld, err = ldap.DialTLS("tcp", al.Url, &tls.Config{InsecureSkipVerify: al.SkipTLS})
+	} else {
+		ld, err = ldap.Dial("tcp", al.Url)
+		if err == nil && !al.SkipTLS {
+			err = ld.StartTLS(&tls.Config{InsecureSkipVerify: al.SkipTLS})
+		}
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("连接 LDAP 失败：%w", err)
+	}
+	defer ld.Close()
+
+	// 使用管理员账号绑定
+	if err := ld.Bind(al.User, al.Password); err != nil {
+		return nil, fmt.Errorf("LDAP 绑定失败：%w", err)
+	}
+
+	// 搜索用户
+	searchRequest := ldap.NewSearchRequest(
+		al.Sc,
+		ldap.ScopeWholeSubtree,
+		ldap.NeverDerefAliases,
+		0,
+		0,
+		false,
+		fmt.Sprintf(al.Type, ldap.EscapeFilter(employeeID)),
+		getSearchAttributes(),
+		nil,
+	)
+
+	sr, err := ld.Search(searchRequest)
+	if err != nil {
+		return nil, fmt.Errorf("LDAP 搜索失败：%w", err)
+	}
+
+	if len(sr.Entries) != 1 {
+		return nil, fmt.Errorf("用户不存在或返回多条记录")
+	}
+
+	entry := sr.Entries[0]
+
+	// 解析属性映射
+	var info ldapInfo
+	var attrMap *system_setting.LDAPAttributeMap
+	attrMap, err = al.GetAttributeMap()
+	if err != nil {
+		info = parseDefaultAttributes(entry)
+	} else {
+		info.RealName = entry.GetAttributeValue(attrMap.RealName)
+		info.Email = entry.GetAttributeValue(attrMap.Email)
+		info.Department = entry.GetAttributeValue(attrMap.Department)
+	}
+
+	// 解析用户群组
+	groups := parseGroupAttribute(entry, settings.GroupAttribute)
+
+	employeeInfo := &EmployeeInfo{
+		EmployeeID: employeeID,
+		Name:       info.RealName,
+		Email:      info.Email,
+		Department: info.Department,
+		Groups:     groups,
+	}
+
+	return employeeInfo, nil
+}
+
+// parseGroupAttribute 解析群组属性
+func parseGroupAttribute(entry *ldap.Entry, groupAttr string) []string {
+	var groups []string
+
+	// 如果没有指定群组属性，返回空
+	if groupAttr == "" {
+		return groups
+	}
+
+	// 获取群组属性值
+	groupValues := entry.GetAttributeValues(groupAttr)
+	if len(groupValues) == 0 {
+		return groups
+	}
+
+	// 解析群组 DN，提取群组名称
+	// 例如: CN=AI-Users,OU=Groups,DC=example,DC=com -> AI-Users
+	for _, groupDN := range groupValues {
+		groupName := extractGroupName(groupDN)
+		if groupName != "" {
+			groups = append(groups, groupName)
+		}
+	}
+
+	return groups
+}
+
+// extractGroupName 从 DN 中提取群组名称
+func extractGroupName(dn string) string {
+	// DN 格式: CN=GroupName,OU=Groups,DC=example,DC=com
+	// 或者: CN=GroupName,CN=Users,DC=example,DC=com
+
+	parts := splitDN(dn)
+	if len(parts) == 0 {
+		return ""
+	}
+
+	// 第一个部分是 CN=GroupName
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if strings.HasPrefix(strings.ToUpper(part), "CN=") {
+			return strings.TrimPrefix(part, "cn=")
+		}
+	}
+
+	return ""
+}
+
+// splitDN 分割 DN 字符串
+func splitDN(dn string) []string {
+	var parts []string
+	var current string
+	var inQuote bool
+
+	for _, ch := range dn {
+		switch ch {
+		case '"':
+			inQuote = !inQuote
+		case ',':
+			if !inQuote {
+				parts = append(parts, current)
+				current = ""
+				continue
+			}
+		case '\\':
+			// 处理转义字符
+			if len(dn) > 0 {
+				current += string(ch)
+			}
+			continue
+		}
+		current += string(ch)
+	}
+
+	if current != "" {
+		parts = append(parts, current)
+	}
+
+	return parts
+}
+
 // GetSearchAttributes 获取搜索属性列表
 func getSearchAttributes() []string {
-	return []string{"dn", "cn", "mail", "department", "displayName", "givenName", "sn"}
+	return []string{"dn", "cn", "mail", "department", "displayName", "givenName", "sn", "memberOf"}
 }
 
 // parseDefaultAttributes 使用默认属性映射解析

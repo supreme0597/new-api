@@ -426,7 +426,7 @@ func checkAndSendQuotaNotify(relayInfo *relaycommon.RelayInfo, quota int, preCon
 		}
 		if quotaTooLow {
 			prompt := "您的额度即将用尽"
-			topUpLink := fmt.Sprintf("%s/console/topup", system_setting.ServerAddress)
+			topUpLink := system_setting.ServerURL("/console/topup")
 
 			// 根据通知方式生成不同的内容格式
 			var content string
@@ -480,7 +480,7 @@ func checkAndSendSubscriptionQuotaNotify(relayInfo *relaycommon.RelayInfo) {
 		}
 
 		prompt := "您的订阅额度即将用尽"
-		topUpLink := fmt.Sprintf("%s/console/topup", system_setting.ServerAddress)
+		topUpLink := system_setting.ServerURL("/console/topup")
 
 		var content string
 		var values []interface{}

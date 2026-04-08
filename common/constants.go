@@ -116,6 +116,8 @@ var RetryTimes = 0
 
 var IsMasterNode bool
 
+var ContextPath = "" // URL prefix for all routes, e.g. "/newapi". Set via CONTEXT_PATH env var.
+
 var requestInterval int
 var RequestInterval time.Duration
 

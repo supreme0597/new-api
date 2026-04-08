@@ -11,7 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func SetApiRouter(router *gin.Engine) {
+func SetApiRouter(router gin.IRouter) {
 	apiRouter := router.Group("/api")
 	apiRouter.Use(middleware.RouteTag("api"))
 	apiRouter.Use(gzip.Gzip(gzip.DefaultCompression))
@@ -174,6 +174,14 @@ func SetApiRouter(router *gin.Engine) {
 			optionRoute.DELETE("/channel_affinity_cache", controller.ClearChannelAffinityCache)
 			optionRoute.POST("/rest_model_ratio", controller.ResetModelRatio)
 			optionRoute.POST("/migrate_console_setting", controller.MigrateConsoleSetting) // 用于迁移检测的旧键，下个版本会删除
+		}
+
+		// LDAP 管理 (root only)
+		ldapRoute := apiRouter.Group("/ldap")
+		ldapRoute.Use(middleware.RootAuth())
+		{
+			ldapRoute.POST("/test", controller.TestLDAPConnection)
+			ldapRoute.GET("/lookup/:employee_id", controller.LookupLDAPUser)
 		}
 
 		// Custom OAuth provider management (root only)

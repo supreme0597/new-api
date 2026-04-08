@@ -206,7 +206,7 @@ func RequestWaffoPay(c *gin.Context) {
 	if setting.WaffoNotifyUrl != "" {
 		notifyUrl = setting.WaffoNotifyUrl
 	}
-	returnUrl := system_setting.ServerAddress + "/console/topup?show_history=true"
+	returnUrl := system_setting.ServerURL("/console/topup?show_history=true")
 	if setting.WaffoReturnUrl != "" {
 		returnUrl = setting.WaffoReturnUrl
 	}

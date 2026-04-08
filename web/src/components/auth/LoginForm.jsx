@@ -234,6 +234,7 @@ const LoginForm = () => {
           {
             username,
             password,
+            ldap_login: inputs.ldap_login,
           },
         );
         const { success, message, data } = res.data;

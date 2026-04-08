@@ -277,10 +277,10 @@ func genStripeLink(referenceId string, customerId string, email string, amount i
 
 	// Use custom URLs if provided, otherwise use defaults
 	if successURL == "" {
-		successURL = system_setting.ServerAddress + "/console/log"
+		successURL = system_setting.ServerURL("/console/log")
 	}
 	if cancelURL == "" {
-		cancelURL = system_setting.ServerAddress + "/console/topup"
+		cancelURL = system_setting.ServerURL("/console/topup")
 	}
 
 	params := &stripe.CheckoutSessionParams{

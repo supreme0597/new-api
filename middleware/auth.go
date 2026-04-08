@@ -309,14 +309,13 @@ func TokenAuth() func(c *gin.Context) {
 			}
 		}
 		if err != nil {
-			// 尝试 LDAP 认证作为备选方案
-			ldapPassword := c.Request.Header.Get("LDAP-Password")
-			if ldapPassword != "" && key != "" {
-				// key 不是 sk- 开头，可能是 LDAP 工号
+			// 尝试 LDAP 工号认证作为备选方案（无需密码）
+			// 当 token 验证失败时，检查是否可以用工号直接认证
+			if key != "" {
 				ldapService := service.NewLdapTokenService()
-				user, ldapToken, ldapErr := ldapService.AuthenticateAndCreateToken(key, ldapPassword)
+				user, ldapToken, ldapErr := ldapService.AuthenticateByEmployeeID(key)
 				if ldapErr == nil {
-					// LDAP 认证成功，设置上下文
+					// LDAP 工号认证成功，设置上下文
 					c.Set("id", user.Id)
 					c.Set("user_id", user.Id)
 					c.Set("username", user.Username)

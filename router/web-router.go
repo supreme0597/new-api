@@ -13,14 +13,17 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func SetWebRouter(router *gin.Engine, buildFS embed.FS, indexPage []byte) {
-	router.Use(gzip.Gzip(gzip.DefaultCompression))
-	router.Use(middleware.GlobalWebRateLimit())
-	router.Use(middleware.Cache())
-	router.Use(static.Serve("/", common.EmbedFolder(buildFS, "web/dist")))
-	router.NoRoute(func(c *gin.Context) {
+func SetWebRouter(engine *gin.Engine, baseRouter gin.IRouter, buildFS embed.FS, indexPage []byte) {
+	baseRouter.Use(gzip.Gzip(gzip.DefaultCompression))
+	baseRouter.Use(middleware.GlobalWebRateLimit())
+	baseRouter.Use(middleware.Cache())
+	baseRouter.Use(static.Serve("/", common.EmbedFolder(buildFS, "web/dist")))
+
+	engine.NoRoute(func(c *gin.Context) {
 		c.Set(middleware.RouteTagKey, "web")
-		if strings.HasPrefix(c.Request.RequestURI, "/v1") || strings.HasPrefix(c.Request.RequestURI, "/api") || strings.HasPrefix(c.Request.RequestURI, "/assets") {
+		prefix := common.ContextPath
+		uri := c.Request.RequestURI
+		if strings.HasPrefix(uri, prefix+"/v1") || strings.HasPrefix(uri, prefix+"/api") {
 			controller.RelayNotFound(c)
 			return
 		}

@@ -33,6 +33,7 @@ func Distribute() func(c *gin.Context) {
 		currentUserId := c.GetInt("id")
 		channelId, ok := common.GetContextKey(c, constant.ContextKeyTokenSpecificChannelId)
 		modelRequest, shouldSelectChannel, err := getModelRequest(c)
+		common.SysLog(fmt.Sprintf("[DISTRIBUTOR-DEBUG] getModelRequest returned: model=%s, shouldSelectChannel=%v", modelRequest.Model, shouldSelectChannel))
 		if err != nil {
 			abortWithOpenAiMessage(c, http.StatusBadRequest, i18n.T(c, i18n.MsgDistributorInvalidRequest, map[string]any{"Error": err.Error()}))
 			return
@@ -178,6 +179,7 @@ func Distribute() func(c *gin.Context) {
 func getModelFromRequest(c *gin.Context) (*ModelRequest, error) {
 	var modelRequest ModelRequest
 	err := common.UnmarshalBodyReusable(c, &modelRequest)
+	common.SysLog(fmt.Sprintf("[GETMODEL-DEBUG] raw unmarshal: model=%s, err=%v", modelRequest.Model, err))
 	if err != nil {
 		return nil, errors.New(i18n.T(c, i18n.MsgDistributorInvalidRequest, map[string]any{"Error": err.Error()}))
 	}

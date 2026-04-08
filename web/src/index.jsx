@@ -60,6 +60,7 @@ root.render(
     <StatusProvider>
       <UserProvider>
         <BrowserRouter
+          basename={window.__CONTEXT_PATH__ || ''}
           future={{
             v7_startTransition: true,
             v7_relativeSplatPath: true,

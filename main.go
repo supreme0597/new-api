@@ -171,7 +171,7 @@ func main() {
 	// Initialize session store
 	store := cookie.NewStore([]byte(common.SessionSecret))
 	store.Options(sessions.Options{
-		Path:     "/",
+		Path:     common.ContextPath + "/",
 		MaxAge:   2592000, // 30 days
 		HttpOnly: true,
 		Secure:   false,
@@ -179,6 +179,7 @@ func main() {
 	})
 	server.Use(sessions.Sessions("session", store))
 
+	InjectContextPath()
 	InjectUmamiAnalytics()
 	InjectGoogleAnalytics()
 
@@ -237,6 +238,18 @@ func InjectGoogleAnalytics() {
 	analyticsInjectBuilder.WriteString("<!--Google Analytics QuantumNous-->\n")
 	analyticsInject := analyticsInjectBuilder.String()
 	indexPage = bytes.ReplaceAll(indexPage, []byte("<!--Google Analytics-->\n"), []byte(analyticsInject))
+}
+
+func InjectContextPath() {
+	if common.ContextPath != "" {
+		script := fmt.Sprintf(`<script>window.__CONTEXT_PATH__="%s";</script>`, common.ContextPath)
+		indexPage = bytes.ReplaceAll(indexPage, []byte("<head>"), []byte("<head>"+script))
+		// Rewrite absolute paths in HTML to include context path prefix
+		// e.g. "/assets/xxx" -> "/newapi/assets/xxx", "/logo.png" -> "/newapi/logo.png"
+		indexPage = bytes.ReplaceAll(indexPage, []byte(`="/assets/`), []byte(`="`+common.ContextPath+`/assets/`))
+		indexPage = bytes.ReplaceAll(indexPage, []byte(`='/assets/`), []byte(`='`+common.ContextPath+`/assets/`))
+		indexPage = bytes.ReplaceAll(indexPage, []byte(`="/logo.png"`), []byte(`="`+common.ContextPath+`/logo.png"`))
+	}
 }
 
 func InitResources() error {

@@ -90,6 +90,8 @@ export default defineConfig({
   server: {
     host: '0.0.0.0',
     proxy: {
+      // When CONTEXT_PATH is set (e.g. /newapi), add proxy entries like:
+      // '/newapi/api': { target: 'http://localhost:3000', rewrite: path => path.replace('/newapi', ''), changeOrigin: true },
       '/api': {
         target: 'http://localhost:3000',
         changeOrigin: true,

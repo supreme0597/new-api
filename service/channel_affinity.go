@@ -545,6 +545,7 @@ func ApplyChannelAffinityOverrideTemplate(c *gin.Context, paramOverride map[stri
 func GetPreferredChannelByAffinity(c *gin.Context, modelName string, usingGroup string) (int, bool) {
 	setting := operation_setting.GetChannelAffinitySetting()
 	if setting == nil || !setting.Enabled {
+		common.SysLog(fmt.Sprintf("[AFFINITY-DEBUG] setting nil or disabled: nil=%v, enabled=%v", setting == nil, setting != nil && setting.Enabled))
 		return 0, false
 	}
 	path := ""
@@ -556,11 +557,16 @@ func GetPreferredChannelByAffinity(c *gin.Context, modelName string, usingGroup 
 		userAgent = c.Request.UserAgent()
 	}
 
+	common.SysLog(fmt.Sprintf("[AFFINITY-DEBUG] model=%s, path=%s, rules_count=%d, usingGroup=%s", modelName, path, len(setting.Rules), usingGroup))
+
 	for _, rule := range setting.Rules {
-		if !matchAnyRegexCached(rule.ModelRegex, modelName) {
+		modelMatch := matchAnyRegexCached(rule.ModelRegex, modelName)
+		pathMatch := len(rule.PathRegex) == 0 || matchAnyRegexCached(rule.PathRegex, path)
+		common.SysLog(fmt.Sprintf("[AFFINITY-DEBUG] rule=%s, modelMatch=%v(modelRegex=%v), pathMatch=%v(pathRegex=%v)", rule.Name, modelMatch, rule.ModelRegex, pathMatch, rule.PathRegex))
+		if !modelMatch {
 			continue
 		}
-		if len(rule.PathRegex) > 0 && !matchAnyRegexCached(rule.PathRegex, path) {
+		if !pathMatch {
 			continue
 		}
 		if len(rule.UserAgentInclude) > 0 && !matchAnyIncludeFold(rule.UserAgentInclude, userAgent) {
