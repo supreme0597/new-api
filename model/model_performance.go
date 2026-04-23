@@ -2,6 +2,8 @@ package model
 
 import (
 	"fmt"
+	"strconv"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 )
@@ -124,16 +126,26 @@ type ModelPerformanceItem struct {
 	ChannelName string  `json:"channel_name"`
 }
 
-// 评分基准常量
-const (
-	TpsBenchmark  = 100.0  // TPS 基准: 100 tokens/s
-	TtftBenchmark = 1000.0 // TTFT 基准: 1000ms
-)
+// getBenchmarkValue 从 OptionMap 读取基准值，解析失败时返回默认值
+func getBenchmarkValue(key string, defaultVal float64) float64 {
+	common.OptionMapRWMutex.RLock()
+	valStr, ok := common.OptionMap[key]
+	common.OptionMapRWMutex.RUnlock()
+	if !ok || valStr == "" {
+		return defaultVal
+	}
+	val, err := strconv.ParseFloat(valStr, 64)
+	if err != nil || val <= 0 {
+		return defaultVal
+	}
+	return val
+}
 
 // calcTpsScore 计算 TPS 分（满分100）
 // TPS分 = min(TPS / 基准TPS, 1) × 100
 func calcTpsScore(tps float64) float64 {
-	ratio := tps / TpsBenchmark
+	benchmark := getBenchmarkValue("TpsBenchmark", 100.0)
+	ratio := tps / benchmark
 	if ratio > 1.0 {
 		ratio = 1.0
 	}
@@ -143,11 +155,17 @@ func calcTpsScore(tps float64) float64 {
 // calcTtftScore 计算 TTFT 分（满分100）
 // TTFT分 = max(0, (1 - TTFT / 基准TTFT)) × 100
 func calcTtftScore(ttft int) float64 {
-	ratio := 1.0 - float64(ttft)/TtftBenchmark
+	benchmark := getBenchmarkValue("TtftBenchmark", 1000.0)
+	ratio := 1.0 - float64(ttft)/benchmark
 	if ratio < 0 {
 		ratio = 0
 	}
 	return ratio * 100
+}
+
+// GetBenchmarkSettings 获取当前的 TPS/TTFT 基准配置
+func GetBenchmarkSettings() (tpsBenchmark, ttftBenchmark float64) {
+	return getBenchmarkValue("TpsBenchmark", 100.0), getBenchmarkValue("TtftBenchmark", 1000.0)
 }
 
 // UpsertModelPerformance 插入或更新性能数据（使用最新值策略）
@@ -194,14 +212,14 @@ func CleanOldModelPerformance() error {
 	return nil
 }
 
-// GetLastSamplingTime 获取最后一次采样时间
-func GetLastSamplingTime() int64 {
+// GetLastSamplingTime 获取最后一次采样时间（返回格式化字符串）
+func GetLastSamplingTime() string {
 	var mp ModelPerformance
 	err := DB.Order("updated_at DESC").First(&mp).Error
 	if err != nil {
-		return 0
+		return ""
 	}
-	return mp.UpdatedAt
+	return time.Unix(mp.UpdatedAt, 0).Format("2006-01-02 15:04:05")
 }
 
 // isRecordNotFoundError 判断是否为记录不存在错误

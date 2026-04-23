@@ -179,6 +179,15 @@ func InitOptionMap() {
 	common.OptionMap["AutomaticRetryStatusCodes"] = operation_setting.AutomaticRetryStatusCodesToString()
 	common.OptionMap["ExposeRatioEnabled"] = strconv.FormatBool(ratio_setting.IsExposeRatioEnabled())
 
+	// 模型性能采样相关配置
+	common.OptionMap["SamplingPrompt"] = "请详细介绍人工智能的发展历程，从早期的专家系统到现代的深度学习和大语言模型，包括关键的技术突破和代表性模型。"
+	common.OptionMap["SamplingMaxTokens"] = "2048"
+	common.OptionMap["TpsBenchmark"] = "100"
+	common.OptionMap["TtftBenchmark"] = "1000"
+	common.OptionMap["SamplingIntervalMinutes"] = "30"
+	common.OptionMap["SamplingStartTime"] = "00:00"
+	common.OptionMap["SamplingEndTime"] = "23:59"
+
 	// 自动添加所有注册的模型配置
 	modelConfigs := config.GlobalConfig.ExportAllConfigs()
 	for k, v := range modelConfigs {
