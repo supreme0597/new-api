@@ -54,6 +54,11 @@ type Channel struct {
 
 	OtherSettings string `json:"settings" gorm:"column:settings"` // 其他设置，存储azure版本等不需要检索的信息，详见dto.ChannelOtherSettings
 
+	// 模型性能排行榜相关
+	IsTestChannel           *int    `json:"is_test_channel" gorm:"default:0"`
+	Source                  *string `json:"source" gorm:"type:varchar(64);default:''"`
+	SamplingIntervalSeconds *int    `json:"sampling_interval_seconds" gorm:"default:null"`
+
 	// cache info
 	Keys          []string `json:"-" gorm:"-"`
 	OwnerUsername string   `json:"owner_username" gorm:"-"`
@@ -113,6 +118,16 @@ func ApplyChannelManageScope(query *gorm.DB, userId int, isAdmin bool) *gorm.DB 
 		return query
 	}
 	return query.Where("owner_user_id = ?", userId)
+}
+
+// ApplyTestChannelScope hides test channels from non-admin users
+// Admins can see all channels including test channels
+func ApplyTestChannelScope(query *gorm.DB, isAdmin bool) *gorm.DB {
+	if isAdmin {
+		return query
+	}
+	// Non-admin users cannot see test channels
+	return query.Where("(is_test_channel IS NULL OR is_test_channel = 0)")
 }
 
 type ChannelInfo struct {
@@ -340,6 +355,7 @@ func GetAllChannelsForActor(startIdx int, num int, selectAll bool, idSort bool, 
 		order = "id desc"
 	}
 	query := ApplyChannelViewScope(DB.Model(&Channel{}), userId, isAdmin)
+	query = ApplyTestChannelScope(query, isAdmin)
 	switch scope {
 	case "public":
 		query = query.Where("owner_user_id IS NULL")
@@ -431,6 +447,7 @@ func SearchChannelsForActor(keyword string, group string, model string, idSort b
 		order = "id desc"
 	}
 	baseQuery := ApplyChannelViewScope(DB.Model(&Channel{}).Omit("key"), userId, isAdmin)
+	baseQuery = ApplyTestChannelScope(baseQuery, isAdmin)
 	switch scope {
 	case "public":
 		baseQuery = baseQuery.Where("owner_user_id IS NULL")
@@ -479,6 +496,7 @@ func GetChannelById(id int, selectAll bool) (*Channel, error) {
 func GetChannelByIdForActor(id int, selectAll bool, userId int, isAdmin bool) (*Channel, error) {
 	channel := &Channel{Id: id}
 	query := ApplyChannelViewScope(DB, userId, isAdmin)
+	query = ApplyTestChannelScope(query, isAdmin)
 	if !selectAll {
 		query = query.Omit("key")
 	}

@@ -316,7 +316,15 @@ const ChannelsActions = ({
                 localStorage.setItem('channel-scope-filter', v);
                 setScopeFilter(v);
                 setActivePage(1);
-                loadChannels(1, pageSize, idSort, enableTagMode, activeTypeKey, statusFilter, v);
+                loadChannels(
+                  1,
+                  pageSize,
+                  idSort,
+                  enableTagMode,
+                  activeTypeKey,
+                  statusFilter,
+                  v,
+                );
               }}
             >
               <Select.Option value='all'>{t('全部')}</Select.Option>

@@ -150,21 +150,23 @@ const renderTagType = (t) => {
 };
 
 const renderScope = (record, t) => {
-	if (record.children !== undefined) {
-		return renderTagType(t);
-	}
-	return record.owner_user_id == null ? (
-		<Tag color='blue' shape='circle'>{t('公共')}</Tag>
-	) : (
-		<Tag color='violet' shape='circle'>
-			{t('私有')}
-			{record.owner_username && (
-				<span style={{ marginLeft: 4, opacity: 0.8 }}>
-					({record.owner_username})
-				</span>
-			)}
-		</Tag>
-	);
+  if (record.children !== undefined) {
+    return renderTagType(t);
+  }
+  return record.owner_user_id == null ? (
+    <Tag color='blue' shape='circle'>
+      {t('公共')}
+    </Tag>
+  ) : (
+    <Tag color='violet' shape='circle'>
+      {t('私有')}
+      {record.owner_username && (
+        <span style={{ marginLeft: 4, opacity: 0.8 }}>
+          ({record.owner_username})
+        </span>
+      )}
+    </Tag>
+  );
 };
 
 const renderStatus = (status, channelInfo = undefined, t) => {
@@ -740,18 +742,18 @@ export const getChannelsColumns = ({
             },
           ];
 
-            moreMenuItems.push({
-              node: 'item',
-              name: t('复制'),
-              type: 'tertiary',
-              onClick: () => {
-                Modal.confirm({
-                  title: t('确定是否要复制此渠道？'),
-                  content: t('复制渠道的所有信息'),
-                  onOk: () => copySelectedChannel(record),
-                });
-              },
-            });
+          moreMenuItems.push({
+            node: 'item',
+            name: t('复制'),
+            type: 'tertiary',
+            onClick: () => {
+              Modal.confirm({
+                title: t('确定是否要复制此渠道？'),
+                content: t('复制渠道的所有信息'),
+                onOk: () => copySelectedChannel(record),
+              });
+            },
+          });
 
           if (isAdmin() && upstreamUpdateMeta.supported) {
             moreMenuItems.push({

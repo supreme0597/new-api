@@ -185,7 +185,9 @@ const EditTagModal = (props) => {
         const res = await API.get('/api/group/');
         const { success, data } = res?.data || {};
         if (success && Array.isArray(data)) {
-          setGroupOptions(data.map((group) => ({ label: group, value: group })));
+          setGroupOptions(
+            data.map((group) => ({ label: group, value: group })),
+          );
         }
       } else {
         const res = await API.get('/api/user/self/groups');

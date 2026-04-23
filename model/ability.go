@@ -41,12 +41,19 @@ func applyAbilityChannelOwnerScope(query *gorm.DB, userId int) *gorm.DB {
 	return query.Where("channels.owner_user_id IS NULL OR channels.owner_user_id = ?", userId)
 }
 
+// getTestChannelFilter returns the SQL condition to exclude test channels
+// Used for user-facing queries to hide test channels
+func getTestChannelFilter() *gorm.DB {
+	return DB.Where("(channels.is_test_channel IS NULL OR channels.is_test_channel = 0)")
+}
+
 func GetAllEnableAbilityWithChannels() ([]AbilityWithChannel, error) {
 	var abilities []AbilityWithChannel
 	err := DB.Table("abilities").
 		Select("abilities.*, channels.type as channel_type").
 		Joins("left join channels on abilities.channel_id = channels.id").
 		Where("abilities.enabled = ? AND (channels.owner_user_id IS NULL)", true).
+		Where("(channels.is_test_channel IS NULL OR channels.is_test_channel = 0)").
 		Scan(&abilities).Error
 	return abilities, err
 }
@@ -56,15 +63,20 @@ func GetAllEnableAbilityWithChannelsForUser(userId int) ([]AbilityWithChannel, e
 	err := applyAbilityChannelOwnerScope(DB.Table("abilities").
 		Select("abilities.*, channels.type as channel_type").
 		Joins("left join channels on abilities.channel_id = channels.id").
-		Where("abilities.enabled = ?", true), userId).
+		Where("abilities.enabled = ?", true).
+		Where("(channels.is_test_channel IS NULL OR channels.is_test_channel = 0)"), userId).
 		Scan(&abilities).Error
 	return abilities, err
 }
 
 func GetGroupEnabledModels(group string) []string {
 	var models []string
-	// Find distinct models
-	DB.Table("abilities").Where(commonGroupCol+" = ? and enabled = ?", group, true).Distinct("model").Pluck("model", &models)
+	// Find distinct models, exclude test channels
+	DB.Table("abilities").
+		Joins("left join channels on abilities.channel_id = channels.id").
+		Where(commonGroupCol+" = ? and abilities.enabled = ?", group, true).
+		Where("(channels.is_test_channel IS NULL OR channels.is_test_channel = 0)").
+		Distinct("abilities.model").Pluck("abilities.model", &models)
 	return models
 }
 
@@ -72,15 +84,20 @@ func GetGroupEnabledModelsForUser(group string, userId int) []string {
 	var models []string
 	applyAbilityChannelOwnerScope(DB.Table("abilities").
 		Joins("left join channels on abilities.channel_id = channels.id").
-		Where(commonGroupCol+" = ? and abilities.enabled = ?", group, true), userId).
+		Where(commonGroupCol+" = ? and abilities.enabled = ?", group, true).
+		Where("(channels.is_test_channel IS NULL OR channels.is_test_channel = 0)"), userId).
 		Distinct("abilities.model").Pluck("abilities.model", &models)
 	return models
 }
 
 func GetEnabledModels() []string {
 	var models []string
-	// Find distinct models
-	DB.Table("abilities").Where("enabled = ?", true).Distinct("model").Pluck("model", &models)
+	// Find distinct models, exclude test channels
+	DB.Table("abilities").
+		Joins("left join channels on abilities.channel_id = channels.id").
+		Where("abilities.enabled = ?", true).
+		Where("(channels.is_test_channel IS NULL OR channels.is_test_channel = 0)").
+		Distinct("abilities.model").Pluck("abilities.model", &models)
 	return models
 }
 
@@ -88,7 +105,8 @@ func GetEnabledModelsForUser(userId int) []string {
 	var models []string
 	applyAbilityChannelOwnerScope(DB.Table("abilities").
 		Joins("left join channels on abilities.channel_id = channels.id").
-		Where("abilities.enabled = ?", true), userId).
+		Where("abilities.enabled = ?", true).
+		Where("(channels.is_test_channel IS NULL OR channels.is_test_channel = 0)"), userId).
 		Distinct("abilities.model").Pluck("abilities.model", &models)
 	return models
 }
@@ -103,8 +121,10 @@ func getPriority(group string, model string, retry int) (int, error) {
 
 	var priorities []int
 	err := DB.Model(&Ability{}).
-		Select("DISTINCT(priority)").
-		Where(commonGroupCol+" = ? and model = ? and enabled = ?", group, model, true).
+		Select("DISTINCT(abilities.priority)").
+		Joins("left join channels on abilities.channel_id = channels.id").
+		Where(commonGroupCol+" = ? and abilities.model = ? and abilities.enabled = ?", group, model, true).
+		Where("(channels.is_test_channel IS NULL OR channels.is_test_channel = 0)").
 		Order("priority DESC").              // 按优先级降序排序
 		Pluck("priority", &priorities).Error // Pluck用于将查询的结果直接扫描到一个切片中
 
@@ -115,7 +135,7 @@ func getPriority(group string, model string, retry int) (int, error) {
 
 	if len(priorities) == 0 {
 		// 如果没有查询到优先级，则返回错误
-		return 0, errors.New("数据库一致性被破坏")
+		return 0, errors.New("no available channel for this model (all channels may be test channels)")
 	}
 
 	// 确定要使用的优先级
@@ -130,14 +150,24 @@ func getPriority(group string, model string, retry int) (int, error) {
 }
 
 func getChannelQuery(group string, model string, retry int) (*gorm.DB, error) {
-	maxPrioritySubQuery := DB.Model(&Ability{}).Select("MAX(priority)").Where(commonGroupCol+" = ? and model = ? and enabled = ?", group, model, true)
-	channelQuery := DB.Where(commonGroupCol+" = ? and model = ? and enabled = ? and priority = (?)", group, model, true, maxPrioritySubQuery)
+	maxPrioritySubQuery := DB.Model(&Ability{}).
+		Select("MAX(abilities.priority)").
+		Joins("left join channels on abilities.channel_id = channels.id").
+		Where(commonGroupCol+" = ? and abilities.model = ? and abilities.enabled = ?", group, model, true).
+		Where("(channels.is_test_channel IS NULL OR channels.is_test_channel = 0)")
+	channelQuery := DB.Table("abilities").
+		Joins("left join channels on abilities.channel_id = channels.id").
+		Where(commonGroupCol+" = ? and abilities.model = ? and abilities.enabled = ? and abilities.priority = (?)", group, model, true, maxPrioritySubQuery).
+		Where("(channels.is_test_channel IS NULL OR channels.is_test_channel = 0)")
 	if retry != 0 {
 		priority, err := getPriority(group, model, retry)
 		if err != nil {
 			return nil, err
 		} else {
-			channelQuery = DB.Where(commonGroupCol+" = ? and model = ? and enabled = ? and priority = ?", group, model, true, priority)
+			channelQuery = DB.Table("abilities").
+				Joins("left join channels on abilities.channel_id = channels.id").
+				Where(commonGroupCol+" = ? and abilities.model = ? and abilities.enabled = ? and abilities.priority = ?", group, model, true, priority).
+				Where("(channels.is_test_channel IS NULL OR channels.is_test_channel = 0)")
 		}
 	}
 
@@ -145,10 +175,14 @@ func getChannelQuery(group string, model string, retry int) (*gorm.DB, error) {
 }
 
 func getChannelQueryForUser(group string, model string, retry int, userId int, publicOnly bool, privateOnly bool) (*gorm.DB, error) {
+	// test channel filter
+	testChannelFilter := "(channels.is_test_channel IS NULL OR channels.is_test_channel = 0)"
+
 	maxPrioritySubQuery := DB.Table("abilities").
 		Select("MAX(abilities.priority)").
 		Joins("left join channels on abilities.channel_id = channels.id").
-		Where("abilities."+commonGroupCol+" = ? and abilities.model = ? and abilities.enabled = ?", group, model, true)
+		Where("abilities."+commonGroupCol+" = ? and abilities.model = ? and abilities.enabled = ?", group, model, true).
+		Where(testChannelFilter)
 	if publicOnly {
 		maxPrioritySubQuery = maxPrioritySubQuery.Where("channels.owner_user_id IS NULL")
 	} else if privateOnly {
@@ -159,7 +193,8 @@ func getChannelQueryForUser(group string, model string, retry int, userId int, p
 	channelQuery := DB.Table("abilities").
 		Select("abilities.*").
 		Joins("left join channels on abilities.channel_id = channels.id").
-		Where("abilities."+commonGroupCol+" = ? and abilities.model = ? and abilities.enabled = ? and abilities.priority = (?)", group, model, true, maxPrioritySubQuery)
+		Where("abilities."+commonGroupCol+" = ? and abilities.model = ? and abilities.enabled = ? and abilities.priority = (?)", group, model, true, maxPrioritySubQuery).
+		Where(testChannelFilter)
 	if publicOnly {
 		channelQuery = channelQuery.Where("channels.owner_user_id IS NULL")
 	} else if privateOnly {

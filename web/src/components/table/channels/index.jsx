@@ -79,7 +79,9 @@ const ChannelsPage = () => {
         <Banner
           type='info'
           closeIcon={null}
-          description={channelsData.t('当前为“我的渠道”视图，仅展示并管理你自己的私有渠道。')}
+          description={channelsData.t(
+            '当前为“我的渠道”视图，仅展示并管理你自己的私有渠道。',
+          )}
           style={{ marginBottom: 12 }}
         />
       ) : null}

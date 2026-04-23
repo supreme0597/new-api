@@ -258,6 +258,36 @@ func SetApiRouter(router gin.IRouter) {
 			channelRoute.POST("/upstream_updates/detect", middleware.AdminAuth(), controller.DetectChannelUpstreamModelUpdates)
 			channelRoute.POST("/upstream_updates/detect_all", middleware.AdminAuth(), controller.DetectAllChannelUpstreamModelUpdates)
 		}
+
+		// 模型性能排行榜
+		modelPerformanceRoute := apiRouter.Group("/model-performance")
+		modelPerformanceRoute.Use(middleware.AdminAuth())
+		{
+			modelPerformanceRoute.GET("/list", controller.GetModelPerformanceList)
+			modelPerformanceRoute.GET("/sources", controller.GetModelPerformanceSources)
+			modelPerformanceRoute.POST("/refresh", controller.RefreshModelPerformance)
+		}
+
+		// 渠道来源映射管理（仅超级管理员）
+		channelSourceMappingRoute := apiRouter.Group("/channel-source-mapping")
+		channelSourceMappingRoute.Use(middleware.RootAuth())
+		{
+			channelSourceMappingRoute.GET("/", controller.GetChannelSourceMappings)
+			channelSourceMappingRoute.POST("/", controller.AddChannelSourceMapping)
+			channelSourceMappingRoute.PUT("/:id", controller.UpdateChannelSourceMapping)
+			channelSourceMappingRoute.DELETE("/:id", controller.DeleteChannelSourceMapping)
+		}
+
+		// 采样配置管理（仅超级管理员）
+		samplingConfigRoute := apiRouter.Group("/sampling-config")
+		samplingConfigRoute.Use(middleware.RootAuth())
+		{
+			samplingConfigRoute.GET("/", controller.GetSamplingConfigs)
+			samplingConfigRoute.POST("/", controller.AddSamplingConfig)
+			samplingConfigRoute.PUT("/:id", controller.UpdateSamplingConfig)
+			samplingConfigRoute.DELETE("/:id", controller.DeleteSamplingConfig)
+			samplingConfigRoute.POST("/:id/toggle", controller.ToggleSamplingConfig)
+		}
 		tokenRoute := apiRouter.Group("/token")
 		tokenRoute.Use(middleware.UserAuth())
 		{

@@ -179,9 +179,9 @@ export const useChannelsData = () => {
     return {
       [COLUMN_KEYS.ID]: true,
       [COLUMN_KEYS.NAME]: true,
-        [COLUMN_KEYS.GROUP]: true,
-        [COLUMN_KEYS.SCOPE]: true,
-        [COLUMN_KEYS.TYPE]: true,
+      [COLUMN_KEYS.GROUP]: true,
+      [COLUMN_KEYS.SCOPE]: true,
+      [COLUMN_KEYS.TYPE]: true,
       [COLUMN_KEYS.STATUS]: true,
       [COLUMN_KEYS.RESPONSE_TIME]: true,
       [COLUMN_KEYS.BALANCE]: true,
@@ -337,9 +337,15 @@ export const useChannelsData = () => {
     if (statusF === undefined) statusF = statusFilter;
     if (scopeF === undefined) scopeF = scopeFilter;
 
-    const { searchKeyword, searchGroup, searchModel, searchOwner } = getFormValues();
+    const { searchKeyword, searchGroup, searchModel, searchOwner } =
+      getFormValues();
     const effectiveOwner = ownerF !== undefined ? ownerF : searchOwner;
-    if (searchKeyword !== '' || searchGroup !== '' || searchModel !== '' || effectiveOwner) {
+    if (
+      searchKeyword !== '' ||
+      searchGroup !== '' ||
+      searchModel !== '' ||
+      effectiveOwner
+    ) {
       setLoading(true);
       await searchChannels(
         enableTagMode,
@@ -398,12 +404,18 @@ export const useChannelsData = () => {
     sortFlag = idSort,
     ownerF,
   ) => {
-    const { searchKeyword, searchGroup, searchModel, searchOwner } = getFormValues();
+    const { searchKeyword, searchGroup, searchModel, searchOwner } =
+      getFormValues();
     // Use explicit ownerF if provided, otherwise fall back to form value
     const effectiveOwner = ownerF !== undefined ? ownerF : searchOwner;
     setSearching(true);
     try {
-      if (searchKeyword === '' && searchGroup === '' && searchModel === '' && !effectiveOwner) {
+      if (
+        searchKeyword === '' &&
+        searchGroup === '' &&
+        searchModel === '' &&
+        !effectiveOwner
+      ) {
         await loadChannels(
           page,
           pageSz,
@@ -444,8 +456,14 @@ export const useChannelsData = () => {
 
   // Refresh
   const refresh = async (page = activePage) => {
-    const { searchKeyword, searchGroup, searchModel, searchOwner } = getFormValues();
-    if (searchKeyword === '' && searchGroup === '' && searchModel === '' && !searchOwner) {
+    const { searchKeyword, searchGroup, searchModel, searchOwner } =
+      getFormValues();
+    if (
+      searchKeyword === '' &&
+      searchGroup === '' &&
+      searchModel === '' &&
+      !searchOwner
+    ) {
       await loadChannels(page, pageSize, idSort, enableTagMode);
     } else {
       await searchChannels(
@@ -541,9 +559,15 @@ export const useChannelsData = () => {
 
   // Page handlers
   const handlePageChange = (page) => {
-    const { searchKeyword, searchGroup, searchModel, searchOwner } = getFormValues();
+    const { searchKeyword, searchGroup, searchModel, searchOwner } =
+      getFormValues();
     setActivePage(page);
-    if (searchKeyword === '' && searchGroup === '' && searchModel === '' && !searchOwner) {
+    if (
+      searchKeyword === '' &&
+      searchGroup === '' &&
+      searchModel === '' &&
+      !searchOwner
+    ) {
       loadChannels(page, pageSize, idSort, enableTagMode).then(() => {});
     } else {
       searchChannels(
@@ -562,8 +586,14 @@ export const useChannelsData = () => {
     localStorage.setItem('page-size', size + '');
     setPageSize(size);
     setActivePage(1);
-    const { searchKeyword, searchGroup, searchModel, searchOwner } = getFormValues();
-    if (searchKeyword === '' && searchGroup === '' && searchModel === '' && !searchOwner) {
+    const { searchKeyword, searchGroup, searchModel, searchOwner } =
+      getFormValues();
+    if (
+      searchKeyword === '' &&
+      searchGroup === '' &&
+      searchModel === '' &&
+      !searchOwner
+    ) {
       loadChannels(1, size, idSort, enableTagMode)
         .then()
         .catch((reason) => {
@@ -589,7 +619,9 @@ export const useChannelsData = () => {
         const res = await API.get('/api/group/');
         const { success, data } = res?.data || {};
         if (success && Array.isArray(data)) {
-          setGroupOptions(data.map((group) => ({ label: group, value: group })));
+          setGroupOptions(
+            data.map((group) => ({ label: group, value: group })),
+          );
         }
       } else {
         const res = await API.get('/api/user/self/groups');

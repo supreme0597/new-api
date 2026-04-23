@@ -45,6 +45,7 @@ const routerMap = {
   pricing: '/pricing',
   task: '/console/task',
   models: '/console/models',
+  modelPerformance: '/console/model-performance',
   deployment: '/console/deployment',
   playground: '/console/playground',
   personal: '/console/personal',
@@ -162,6 +163,12 @@ const SiderBar = ({ onNavigate = () => {} }) => {
         text: t('模型管理'),
         itemKey: 'models',
         to: '/console/models',
+        className: isAdmin() ? '' : 'tableHiddle',
+      },
+      {
+        text: t('模型排行'),
+        itemKey: 'modelPerformance',
+        to: '/model-performance',
         className: isAdmin() ? '' : 'tableHiddle',
       },
       {

@@ -98,7 +98,9 @@ const ChannelsFilters = ({
         <Form
           initValues={formInitValues}
           getFormApi={(api) => setFormApi(api)}
-          onSubmit={() => searchChannels(enableTagMode, undefined, undefined, scopeFilter)}
+          onSubmit={() =>
+            searchChannels(enableTagMode, undefined, undefined, scopeFilter)
+          }
           allowEmpty={true}
           autoComplete='off'
           layout='horizontal'
@@ -141,7 +143,12 @@ const ChannelsFilters = ({
               onChange={() => {
                 // 延迟执行搜索，让表单值先更新
                 setTimeout(() => {
-                  searchChannels(enableTagMode, undefined, undefined, scopeFilter);
+                  searchChannels(
+                    enableTagMode,
+                    undefined,
+                    undefined,
+                    scopeFilter,
+                  );
                 }, 0);
               }}
             />
@@ -161,7 +168,16 @@ const ChannelsFilters = ({
                 pure
                 onChange={(value) => {
                   setTimeout(() => {
-                    searchChannels(enableTagMode, undefined, undefined, scopeFilter, undefined, undefined, undefined, value);
+                    searchChannels(
+                      enableTagMode,
+                      undefined,
+                      undefined,
+                      scopeFilter,
+                      undefined,
+                      undefined,
+                      undefined,
+                      value,
+                    );
                   }, 100);
                 }}
               />

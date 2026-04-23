@@ -46,7 +46,11 @@ const LDAPSetting = () => {
         const ldapInputs = {};
         data.forEach((item) => {
           if (item.key.startsWith('ldap.')) {
-            if (item.key === 'ldap.enabled' || item.key === 'ldap.ldaps' || item.key === 'ldap.skip_tls') {
+            if (
+              item.key === 'ldap.enabled' ||
+              item.key === 'ldap.ldaps' ||
+              item.key === 'ldap.skip_tls'
+            ) {
               ldapInputs[item.key] = toBoolean(item.value);
             } else {
               ldapInputs[item.key] = item.value || '';
@@ -196,7 +200,9 @@ const LDAPSetting = () => {
                 field="['ldap.type']"
                 label={t('搜索过滤器')}
                 placeholder='(employeeID=%s)'
-                extraText={t('用户搜索过滤器，%s 会被替换为工号。AD 使用 (sAMAccountName=%s)')}
+                extraText={t(
+                  '用户搜索过滤器，%s 会被替换为工号。AD 使用 (sAMAccountName=%s)',
+                )}
               />
             </Col>
             <Col xs={24} sm={12} md={12} lg={12} xl={12}>
@@ -211,10 +217,7 @@ const LDAPSetting = () => {
 
           <Row gutter={{ xs: 8, sm: 16, md: 24, lg: 24, xl: 24, xxl: 24 }}>
             <Col xs={24} sm={12} md={12} lg={12} xl={12}>
-              <Form.Switch
-                field="['ldap.ldaps']"
-                label={t('启用 LDAPS')}
-              />
+              <Form.Switch field="['ldap.ldaps']" label={t('启用 LDAPS')} />
             </Col>
             <Col xs={24} sm={12} md={12} lg={12} xl={12}>
               <Form.Switch
@@ -246,10 +249,18 @@ const LDAPSetting = () => {
 
           <Row style={{ marginTop: '15px' }}>
             <Col xs={24} sm={24} md={24} lg={24} xl={24}>
-              <Button onClick={saveLDAPConfig} loading={loading} style={{ marginRight: '10px' }}>
+              <Button
+                onClick={saveLDAPConfig}
+                loading={loading}
+                style={{ marginRight: '10px' }}
+              >
                 {t('保存 LDAP 配置')}
               </Button>
-              <Button onClick={testLDAPConnection} loading={loading} theme='light'>
+              <Button
+                onClick={testLDAPConnection}
+                loading={loading}
+                theme='light'
+              >
                 {t('测试连接')}
               </Button>
             </Col>

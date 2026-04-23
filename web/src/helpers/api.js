@@ -39,7 +39,6 @@ export let API = axios.create({
   },
 });
 
-
 function redirectToOAuthUrl(url, options = {}) {
   const { openInNewTab = false } = options;
   const targetUrl = typeof url === 'string' ? url : url.toString();
@@ -51,7 +50,6 @@ function redirectToOAuthUrl(url, options = {}) {
 
   window.location.assign(targetUrl);
 }
-
 
 function patchAPIInstance(instance) {
   const originalGet = instance.get.bind(instance);
@@ -292,7 +290,10 @@ export async function onOIDCClicked(
   if (!state) return;
   const url = new URL(auth_url);
   url.searchParams.set('client_id', client_id);
-  url.searchParams.set('redirect_uri', `${window.location.origin}${contextPath}/oauth/oidc`);
+  url.searchParams.set(
+    'redirect_uri',
+    `${window.location.origin}${contextPath}/oauth/oidc`,
+  );
   url.searchParams.set('response_type', 'code');
   url.searchParams.set('scope', 'openid profile email');
   url.searchParams.set('state', state);

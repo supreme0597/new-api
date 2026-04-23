@@ -1,0 +1,181 @@
+package model
+
+import (
+	"fmt"
+
+	"github.com/QuantumNous/new-api/common"
+)
+
+// ModelPerformance 记录模型响应性能数据
+type ModelPerformance struct {
+	Id         int     `json:"id"`
+	ChannelId  int     `json:"channel_id" gorm:"index"`
+	Model      string  `json:"model" gorm:"type:varchar(128);index"`
+	Tps        float64 `json:"tps"`         // 每秒输出 Token 数
+	Ttft       int     `json:"ttft"`        // 首次响应时间（毫秒）
+	SampleSize int     `json:"sample_size"` // 累计采样次数
+	UpdatedAt  int64   `json:"updated_at" gorm:"bigint"`
+}
+
+func (ModelPerformance) TableName() string {
+	return "model_performances"
+}
+
+// GetModelPerformanceList 获取排行榜数据
+func GetModelPerformanceList(source string, page int, pageSize int) ([]*ModelPerformanceItem, int64, error) {
+	var total int64
+
+	// 基础查询：只查测试渠道的性能数据
+	query := DB.Model(&ModelPerformance{}).
+		Joins("JOIN channels ON channels.id = model_performances.channel_id").
+		Where("channels.is_test_channel = ?", 1)
+
+	// 按渠道来源筛选
+	if source != "" {
+		query = query.Where("channels.source = ?", source)
+	}
+
+	// 先统计总数
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	// 查询数据
+	var results []struct {
+		ModelPerformance
+		ChannelName string `gorm:"column:name"`
+		Source      string `gorm:"column:source"`
+	}
+
+	offset := (page - 1) * pageSize
+	err := query.
+		Select("model_performances.*, channels.name, channels.source").
+		Order("model_performances.tps DESC, model_performances.ttft ASC").
+		Offset(offset).
+		Limit(pageSize).
+		Find(&results).Error
+
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// 计算评分并组装结果
+	items := make([]*ModelPerformanceItem, 0, len(results))
+	for i, r := range results {
+		tpsScore := calcTpsScore(r.Tps)
+		ttftScore := calcTtftScore(r.Ttft)
+		score := tpsScore*0.6 + ttftScore*0.4
+
+		items = append(items, &ModelPerformanceItem{
+			Rank:        offset + i + 1,
+			Model:       r.Model,
+			Source:      r.Source,
+			Tps:         r.Tps,
+			Ttft:        r.Ttft,
+			Score:       score,
+			UpdatedAt:   r.UpdatedAt,
+			ChannelId:   r.ChannelId,
+			ChannelName: r.ChannelName,
+		})
+	}
+
+	return items, total, nil
+}
+
+// ModelPerformanceItem 排行榜条目（含计算评分）
+type ModelPerformanceItem struct {
+	Rank        int     `json:"rank"`
+	Model       string  `json:"model"`
+	Source      string  `json:"source"`
+	Tps         float64 `json:"tps"`
+	Ttft        int     `json:"ttft"`
+	Score       float64 `json:"score"`
+	UpdatedAt   int64   `json:"updated_at"`
+	ChannelId   int     `json:"channel_id"`
+	ChannelName string  `json:"channel_name"`
+}
+
+// 评分基准常量
+const (
+	TpsBenchmark  = 100.0  // TPS 基准: 100 tokens/s
+	TtftBenchmark = 1000.0 // TTFT 基准: 1000ms
+)
+
+// calcTpsScore 计算 TPS 分（满分100）
+// TPS分 = min(TPS / 基准TPS, 1) × 100
+func calcTpsScore(tps float64) float64 {
+	ratio := tps / TpsBenchmark
+	if ratio > 1.0 {
+		ratio = 1.0
+	}
+	return ratio * 100
+}
+
+// calcTtftScore 计算 TTFT 分（满分100）
+// TTFT分 = max(0, (1 - TTFT / 基准TTFT)) × 100
+func calcTtftScore(ttft int) float64 {
+	ratio := 1.0 - float64(ttft)/TtftBenchmark
+	if ratio < 0 {
+		ratio = 0
+	}
+	return ratio * 100
+}
+
+// UpsertModelPerformance 插入或更新性能数据（使用最新值策略）
+func UpsertModelPerformance(channelId int, model string, tps float64, ttft int) error {
+	var existing ModelPerformance
+	err := DB.Where("channel_id = ? AND model = ?", channelId, model).First(&existing).Error
+
+	if err != nil && !isRecordNotFoundError(err) {
+		return err
+	}
+
+	if existing.Id > 0 {
+		// 更新：使用最新值
+		return DB.Model(&existing).Updates(map[string]interface{}{
+			"tps":         tps,
+			"ttft":        ttft,
+			"sample_size": existing.SampleSize + 1,
+			"updated_at":  common.GetTimestamp(),
+		}).Error
+	}
+
+	// 新增
+	performance := ModelPerformance{
+		ChannelId:  channelId,
+		Model:      model,
+		Tps:        tps,
+		Ttft:       ttft,
+		SampleSize: 1,
+		UpdatedAt:  common.GetTimestamp(),
+	}
+	return DB.Create(&performance).Error
+}
+
+// CleanOldModelPerformance 清理超过7天的性能数据
+func CleanOldModelPerformance() error {
+	sevenDaysAgo := common.GetTimestamp() - 7*24*3600
+	result := DB.Where("updated_at < ?", sevenDaysAgo).Delete(&ModelPerformance{})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected > 0 {
+		common.SysLog(fmt.Sprintf("cleaned %d old model performance records", result.RowsAffected))
+	}
+	return nil
+}
+
+// GetLastSamplingTime 获取最后一次采样时间
+func GetLastSamplingTime() int64 {
+	var mp ModelPerformance
+	err := DB.Order("updated_at DESC").First(&mp).Error
+	if err != nil {
+		return 0
+	}
+	return mp.UpdatedAt
+}
+
+// isRecordNotFoundError 判断是否为记录不存在错误
+func isRecordNotFoundError(err error) bool {
+	return err != nil && err.Error() == "record not found"
+}
