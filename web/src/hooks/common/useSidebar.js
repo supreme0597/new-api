@@ -38,6 +38,7 @@ export const DEFAULT_ADMIN_CONFIG = {
     log: true,
     midjourney: true,
     task: true,
+    modelPerformance: true,
   },
   personal: {
     enabled: true,
@@ -48,8 +49,6 @@ export const DEFAULT_ADMIN_CONFIG = {
     enabled: true,
     channel: true,
     models: true,
-    modelPerformance: true,
-    samplingConfig: true,
     deployment: true,
     redemption: true,
     user: true,

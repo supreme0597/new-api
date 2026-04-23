@@ -279,16 +279,6 @@ func SetApiRouter(router gin.IRouter) {
 			channelSourceMappingRoute.DELETE("/:id", controller.DeleteChannelSourceMapping)
 		}
 
-		// 采样配置管理（仅超级管理员）
-		samplingConfigRoute := apiRouter.Group("/sampling-config")
-		samplingConfigRoute.Use(middleware.RootAuth())
-		{
-			samplingConfigRoute.GET("/", controller.GetSamplingConfigs)
-			samplingConfigRoute.POST("/", controller.AddSamplingConfig)
-			samplingConfigRoute.PUT("/:id", controller.UpdateSamplingConfig)
-			samplingConfigRoute.DELETE("/:id", controller.DeleteSamplingConfig)
-			samplingConfigRoute.POST("/:id/toggle", controller.ToggleSamplingConfig)
-		}
 		tokenRoute := apiRouter.Group("/token")
 		tokenRoute.Use(middleware.UserAuth())
 		{

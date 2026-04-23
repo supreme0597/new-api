@@ -1,20 +1,19 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { API } from '../../helpers/api';
-import { showError, showSuccess } from '../../helpers/utils';
+import { showError } from '../../helpers/utils';
 import {
   Card,
   Tag,
   Select,
-  Button,
   Spin,
   Empty,
   Tooltip,
   Typography,
   Space,
-  Progress,
+  Button,
 } from '@douyinfe/semi-ui';
-import { IconRefresh, IconInfoCircle, IconArrowUp } from '@douyinfe/semi-icons';
+import { IconInfoCircle, IconArrowUp } from '@douyinfe/semi-icons';
 import { renderModelTag } from '../../helpers/render';
 
 const { Text } = Typography;
@@ -26,6 +25,24 @@ function getScoreColor(score) {
   if (score >= 40) return '#ff8a00';
   if (score >= 20) return '#ff4d4f';
   return '#c9c9c9';
+}
+
+// 根据基准值计算 TPS 颜色
+function getTpsColor(tps, tpsBenchmark) {
+  const excellent = tpsBenchmark * 0.8;
+  const good = tpsBenchmark * 0.4;
+  if (tps >= excellent) return '#28a745';
+  if (tps >= good) return '#1664ff';
+  return '#ff8a00';
+}
+
+// 根据基准值计算 TTFT 颜色
+function getTtftColor(ttft, ttftBenchmark) {
+  const excellent = ttftBenchmark * 0.3;
+  const good = ttftBenchmark * 0.8;
+  if (ttft <= excellent) return '#28a745';
+  if (ttft <= good) return '#1664ff';
+  return '#ff4d4f';
 }
 
 // 排名徽章
@@ -161,7 +178,6 @@ const ModelPerformance = () => {
   const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
   const [list, setList] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -169,11 +185,10 @@ const ModelPerformance = () => {
   const [sources, setSources] = useState([]);
   const [selectedSource, setSelectedSource] = useState('');
   const [lastSamplingTime, setLastSamplingTime] = useState('');
+  const [benchmarks, setBenchmarks] = useState({ tps: 100, ttft: 1000 });
   const [showBackToTop, setShowBackToTop] = useState(false);
-  const [samplingStatus, setSamplingStatus] = useState(null);
   const pageSize = 20;
   const sentinelRef = useRef(null);
-  const pollingRef = useRef(null);
 
   const fetchSources = useCallback(async () => {
     try {
@@ -216,6 +231,12 @@ const ModelPerformance = () => {
           if (data?.lastSamplingTime) {
             setLastSamplingTime(data.lastSamplingTime);
           }
+          if (data?.tpsBenchmark && data?.ttftBenchmark) {
+            setBenchmarks({
+              tps: data.tpsBenchmark,
+              ttft: data.ttftBenchmark,
+            });
+          }
         }
       } catch (e) {
         showError(e);
@@ -226,21 +247,6 @@ const ModelPerformance = () => {
     },
     [pageSize, selectedSource],
   );
-
-  // 查询采样任务状态
-  const fetchSamplingStatus = useCallback(async () => {
-    try {
-      const res = await API.get('/api/model-performance/sampling-status');
-      const { success, data } = res.data;
-      if (success) {
-        setSamplingStatus(data);
-        return data;
-      }
-    } catch (e) {
-      // ignore
-    }
-    return null;
-  }, []);
 
   // 初始加载
   useEffect(() => {
@@ -274,49 +280,6 @@ const ModelPerformance = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, [handleScroll]);
 
-  // 轮询采样状态
-  useEffect(() => {
-    if (samplingStatus?.is_running) {
-      pollingRef.current = setInterval(() => {
-        fetchSamplingStatus().then((status) => {
-          if (!status?.is_running) {
-            clearInterval(pollingRef.current);
-            pollingRef.current = null;
-            // 采样完成后刷新数据
-            fetchData(1, selectedSource, false);
-            fetchSources();
-          }
-        });
-      }, 2000);
-    }
-    return () => {
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current);
-        pollingRef.current = null;
-      }
-    };
-  }, [samplingStatus?.is_running, fetchSamplingStatus, fetchData, fetchSources, selectedSource]);
-
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    try {
-      const res = await API.post('/api/model-performance/refresh');
-      const { success, message } = res.data;
-      if (success) {
-        showSuccess(t(message || '采样任务已触发'));
-        // 立即查询一次状态，启动轮询
-        const status = await fetchSamplingStatus();
-        if (status?.is_running) {
-          setSamplingStatus(status);
-        }
-      }
-    } catch (e) {
-      showError(e);
-    } finally {
-      setRefreshing(false);
-    }
-  };
-
   const handleSourceChange = (value) => {
     setSelectedSource(value);
     setList([]);
@@ -338,7 +301,7 @@ const ModelPerformance = () => {
 
   return (
     <div style={{ padding: '20px 16px', maxWidth: 900, margin: '0 auto' }}>
-      {/* 页面头部 - 固定在顶部，不参与滚动 */}
+      {/* 页面头部 */}
       <div
         style={{
           display: 'flex',
@@ -359,73 +322,21 @@ const ModelPerformance = () => {
             </Text>
           )}
         </div>
-        <Space>
-          <Select
-            placeholder={t('全部来源')}
-            value={selectedSource || undefined}
-            onChange={handleSourceChange}
-            style={{ width: 150 }}
-            showClear
-            filter
-            optionList={[
-              { value: '', label: t('全部来源') },
-              ...sources.map((s) => ({ value: s, label: s })),
-            ]}
-          />
-          <Button
-            icon={<IconRefresh />}
-            theme='solid'
-            loading={refreshing}
-            onClick={handleRefresh}
-          >
-            {t('刷新采样')}
-          </Button>
-        </Space>
+        <Select
+          placeholder={t('全部来源')}
+          value={selectedSource || undefined}
+          onChange={handleSourceChange}
+          style={{ width: 150 }}
+          showClear
+          filter
+          optionList={[
+            { value: '', label: t('全部来源') },
+            ...sources.map((s) => ({ value: s, label: s })),
+          ]}
+        />
       </div>
 
-      {/* 采样进度卡片 */}
-      {samplingStatus?.is_running && (
-        <Card
-          style={{
-            marginBottom: 16,
-            background: 'var(--semi-color-warning-light-default)',
-            border: '1px solid var(--semi-color-warning-light-hover)',
-          }}
-          bodyStyle={{ padding: '12px 16px' }}
-        >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Spin size='small' />
-              <Text strong size='small'>
-                {t('正在采样')}… {samplingStatus.done_tasks || 0} / {samplingStatus.total_tasks || 0}
-              </Text>
-              <Text type='tertiary' size='small'>
-                ({t('成功')} {samplingStatus.success_tasks || 0} / {t('失败')} {samplingStatus.failed_tasks || 0})
-              </Text>
-            </div>
-            {samplingStatus.total_tasks > 0 && (
-              <Progress
-                percent={Math.round(((samplingStatus.done_tasks || 0) / samplingStatus.total_tasks) * 100)}
-                showInfo
-                size='small'
-                stroke='var(--semi-color-warning)'
-              />
-            )}
-            {samplingStatus.message && (
-              <Text type='tertiary' size='small'>
-                {samplingStatus.message}
-              </Text>
-            )}
-            {samplingStatus.current_channel && samplingStatus.current_model && (
-              <Text type='tertiary' size='small'>
-                {t('当前')}：{samplingStatus.current_channel} / {samplingStatus.current_model}
-              </Text>
-            )}
-          </div>
-        </Card>
-      )}
-
-      {/* 评分标准说明 */}
+      {/* 评分标准与颜色说明 */}
       <Card
         style={{
           marginBottom: 16,
@@ -434,30 +345,70 @@ const ModelPerformance = () => {
         }}
         bodyStyle={{ padding: '12px 16px' }}
       >
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            flexWrap: 'wrap',
-          }}
-        >
-          <IconInfoCircle
-            size='small'
-            style={{ color: 'var(--semi-color-primary)' }}
-          />
-          <Text type='secondary' size='small'>
-            {t('评分标准')}：
-          </Text>
-          <Text type='secondary' size='small'>
-            {t('综合评分 = TPS评分 × 60% + TTFT评分 × 40%')}
-          </Text>
-          <Tag size='small' color='blue'>
-            {t('TPS基准: 100 tokens/s')}
-          </Tag>
-          <Tag size='small' color='blue'>
-            {t('TTFT基准: 1000ms')}
-          </Tag>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {/* 评分公式 */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              flexWrap: 'wrap',
+            }}
+          >
+            <IconInfoCircle
+              size='small'
+              style={{ color: 'var(--semi-color-primary)' }}
+            />
+            <Text type='secondary' size='small'>
+              {t('评分标准')}：
+            </Text>
+            <Text type='secondary' size='small'>
+              {t('综合评分 = TPS评分 × 60% + TTFT评分 × 40%')}
+            </Text>
+          </div>
+
+          {/* 评分颜色图例 */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <Text type='secondary' size='small'>
+              {t('评分颜色')}：
+            </Text>
+            <Tag size='small' color='green'>{t('优秀')} ≥80</Tag>
+            <Tag size='small' color='blue'>{t('良好')} ≥60</Tag>
+            <Tag size='small' color='orange'>{t('一般')} ≥40</Tag>
+            <Tag size='small' color='red'>{t('较差')} ≥20</Tag>
+            <Tag size='small' color='grey'>{t('很差')} &lt;20</Tag>
+          </div>
+
+          {/* TPS 颜色图例 */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <Text type='secondary' size='small'>
+              {t('TPS 颜色')}：
+            </Text>
+            <Tag size='small' color='green'>{t('优秀')} ≥{(benchmarks.tps * 0.8).toFixed(0)} t/s</Tag>
+            <Tag size='small' color='blue'>{t('良好')} ≥{(benchmarks.tps * 0.4).toFixed(0)} t/s</Tag>
+            <Tag size='small' color='orange'>{t('一般')} &lt;{(benchmarks.tps * 0.4).toFixed(0)} t/s</Tag>
+          </div>
+
+          {/* TTFT 颜色图例 */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <Text type='secondary' size='small'>
+              {t('TTFT 颜色')}：
+            </Text>
+            <Tag size='small' color='green'>{t('优秀')} ≤{(benchmarks.ttft * 0.3).toFixed(0)} ms</Tag>
+            <Tag size='small' color='blue'>{t('良好')} ≤{(benchmarks.ttft * 0.8).toFixed(0)} ms</Tag>
+            <Tag size='small' color='red'>{t('较差')} &gt;{(benchmarks.ttft * 0.8).toFixed(0)} ms</Tag>
+          </div>
+
+          {/* 排名徽章说明 */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <Text type='secondary' size='small'>
+              {t('排名徽章')}：
+            </Text>
+            <RankBadge rank={1} />
+            <RankBadge rank={2} />
+            <RankBadge rank={3} />
+            <RankBadge rank={4} />
+          </div>
         </div>
       </Card>
 
@@ -465,7 +416,7 @@ const ModelPerformance = () => {
       <Spin spinning={loading && list.length === 0}>
         {list.length === 0 && !loading ? (
           <Empty
-            description={t('暂无性能数据，请先配置测试渠道并刷新采样')}
+            description={t('暂无性能数据，请前往系统设置配置测试渠道')}
             style={{ marginTop: 60 }}
           />
         ) : (
@@ -574,13 +525,7 @@ const ModelPerformance = () => {
                           label='TPS'
                           value={item.tps?.toFixed(1) || '0'}
                           unit='t/s'
-                          color={
-                            item.tps >= 80
-                              ? '#28a745'
-                              : item.tps >= 40
-                                ? '#1664ff'
-                                : '#ff8a00'
-                          }
+                          color={getTpsColor(item.tps, benchmarks.tps)}
                         />
                       </div>
                     </Tooltip>
@@ -592,13 +537,7 @@ const ModelPerformance = () => {
                           label='TTFT'
                           value={item.ttft || 0}
                           unit='ms'
-                          color={
-                            item.ttft <= 300
-                              ? '#28a745'
-                              : item.ttft <= 800
-                                ? '#1664ff'
-                                : '#ff4d4f'
-                          }
+                          color={getTtftColor(item.ttft, benchmarks.ttft)}
                         />
                       </div>
                     </Tooltip>

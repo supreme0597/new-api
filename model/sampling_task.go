@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -107,24 +108,19 @@ func RunSamplingTask() error {
 
 	common.SysLog(fmt.Sprintf("[Sampling] 找到 %d 个测试渠道", len(channels)))
 
-	// 获取启用的采样配置
-	configs, err := GetActiveSamplingConfigs()
-	if err != nil {
-		common.SysError(fmt.Sprintf("[Sampling] 获取采样配置失败: %v", err))
-		return fmt.Errorf("failed to get sampling configs: %w", err)
-	}
-
-	if len(configs) == 0 {
-		common.SysLog("[Sampling] 没有启用的采样配置，任务结束")
+	// 从 OptionMap 读取采样配置
+	prompt, maxTokens := getSamplingConfigFromOptions()
+	if prompt == "" {
+		common.SysLog("[Sampling] 采样 Prompt 为空，任务结束")
 		setSamplingTaskStatus(SamplingTaskStatus{
 			IsRunning: false,
-			Message:   "没有启用的采样配置",
+			Message:   "采样 Prompt 未配置",
 			UpdatedAt: common.GetTimestamp(),
 		})
 		return nil
 	}
 
-	common.SysLog(fmt.Sprintf("[Sampling] 使用采样配置: %s", configs[0].Name))
+	common.SysLog(fmt.Sprintf("[Sampling] 使用采样 Prompt (长度=%d), MaxTokens=%d", len(prompt), maxTokens))
 
 	// 计算总任务数
 	totalTasks := 0
@@ -142,10 +138,15 @@ func RunSamplingTask() error {
 
 	common.SysLog(fmt.Sprintf("[Sampling] 总计需要采样 %d 个模型", totalTasks))
 
-	// 遍历每个渠道的每个模型，使用第一个启用的采样配置进行测试
+	// 遍历每个渠道的每个模型进行测试
 	doneTasks := 0
 	successTasks := 0
 	failedTasks := 0
+
+	config := &SamplingConfig{
+		Prompt:    prompt,
+		MaxTokens: maxTokens,
+	}
 
 	for _, channel := range channels {
 		models := channel.GetModels()
@@ -173,8 +174,6 @@ func RunSamplingTask() error {
 				time.Sleep(time.Duration(interval) * time.Second)
 			}
 
-			// 使用第一个启用的采样配置
-			config := configs[0]
 			tps, ttft, err := sampleModelPerformance(channel, modelName, config)
 			if err != nil {
 				failedTasks++
@@ -335,4 +334,121 @@ func countTokensInChunk(chunk string) int {
 		}
 	}
 	return count
+}
+
+// getSamplingConfigFromOptions 从 OptionMap 读取采样配置
+func getSamplingConfigFromOptions() (prompt string, maxTokens int) {
+	common.OptionMapRWMutex.RLock()
+	prompt = common.OptionMap["SamplingPrompt"]
+	maxTokensStr := common.OptionMap["SamplingMaxTokens"]
+	common.OptionMapRWMutex.RUnlock()
+
+	maxTokens = 2048
+	if maxTokensStr != "" {
+		if v, err := strconv.Atoi(maxTokensStr); err == nil && v > 0 {
+			maxTokens = v
+		}
+	}
+	return prompt, maxTokens
+}
+
+// getSamplingIntervalMinutes 从 OptionMap 读取采样间隔（分钟）
+func getSamplingIntervalMinutes() int {
+	common.OptionMapRWMutex.RLock()
+	intervalStr := common.OptionMap["SamplingIntervalMinutes"]
+	common.OptionMapRWMutex.RUnlock()
+
+	interval := 30
+	if intervalStr != "" {
+		if v, err := strconv.Atoi(intervalStr); err == nil && v >= 0 {
+			interval = v
+		}
+	}
+	return interval
+}
+
+// getSamplingTimeRange 从 OptionMap 读取采样时间段
+// 返回起始时间和结束时间的分钟数（如 00:00 -> 0, 23:59 -> 1439）
+func getSamplingTimeRange() (startMin, endMin int) {
+	common.OptionMapRWMutex.RLock()
+	startStr := common.OptionMap["SamplingStartTime"]
+	endStr := common.OptionMap["SamplingEndTime"]
+	common.OptionMapRWMutex.RUnlock()
+
+	startMin = parseTimeToMinutes(startStr, 0)
+	endMin = parseTimeToMinutes(endStr, 1439)
+	return
+}
+
+// parseTimeToMinutes 将 HH:mm 格式转换为当天分钟数
+func parseTimeToMinutes(timeStr string, defaultVal int) int {
+	if timeStr == "" {
+		return defaultVal
+	}
+	parts := strings.Split(timeStr, ":")
+	if len(parts) != 2 {
+		return defaultVal
+	}
+	hour, err1 := strconv.Atoi(parts[0])
+	min, err2 := strconv.Atoi(parts[1])
+	if err1 != nil || err2 != nil || hour < 0 || hour > 23 || min < 0 || min > 59 {
+		return defaultVal
+	}
+	return hour*60 + min
+}
+
+// isWithinSamplingWindow 检查当前时间是否在采样时间段内
+func isWithinSamplingWindow() bool {
+	startMin, endMin := getSamplingTimeRange()
+	now := time.Now()
+	currentMin := now.Hour()*60 + now.Minute()
+
+	if startMin <= endMin {
+		// 正常区间，如 09:00 - 18:00
+		return currentMin >= startMin && currentMin <= endMin
+	}
+	// 跨天区间，如 22:00 - 06:00
+	return currentMin >= startMin || currentMin <= endMin
+}
+
+// StartSamplingScheduler 启动定时采样调度器
+func StartSamplingScheduler() {
+	go func() {
+		common.SysLog("[Sampling] 定时采样调度器已启动")
+		for {
+			interval := getSamplingIntervalMinutes()
+			if interval <= 0 {
+				// 定时采样已关闭，等待一段时间后重新检查配置
+				time.Sleep(5 * time.Minute)
+				continue
+			}
+
+			// 等待一个间隔周期
+			time.Sleep(time.Duration(interval) * time.Minute)
+
+			// 检查是否已有采样任务在运行
+			samplingTaskMutex.RLock()
+			isRunning := samplingTaskStatus.IsRunning
+			samplingTaskMutex.RUnlock()
+
+			if isRunning {
+				common.SysLog("[Sampling] 跳过本次定时采样，已有任务正在运行")
+				continue
+			}
+
+			// 检查当前时间是否在采样时间段内
+			if !isWithinSamplingWindow() {
+				startMin, endMin := getSamplingTimeRange()
+				startHour, startMinOnly := startMin/60, startMin%60
+				endHour, endMinOnly := endMin/60, endMin%60
+				common.SysLog(fmt.Sprintf("[Sampling] 当前时间不在采样时间段 %02d:%02d - %02d:%02d 内，跳过", startHour, startMinOnly, endHour, endMinOnly))
+				continue
+			}
+
+			common.SysLog("[Sampling] 定时采样触发")
+			if err := RunSamplingTask(); err != nil {
+				common.SysError(fmt.Sprintf("[Sampling] 定时采样任务执行失败: %v", err))
+			}
+		}
+	}()
 }

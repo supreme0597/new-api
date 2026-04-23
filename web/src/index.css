@@ -458,7 +458,7 @@ html.dark .sbg-variant-green {
 
 .semi-tabs-content .semi-tabs-pane {
   height: 100% !important;
-  overflow: hidden !important;
+  overflow: visible !important;
 }
 
 .semi-tabs-content .semi-tabs-pane > div {

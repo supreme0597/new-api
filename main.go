@@ -286,6 +286,9 @@ func InitResources() error {
 	// Initialize options, should after model.InitDB()
 	model.InitOptionMap()
 
+	// 启动定时采样调度器
+	model.StartSamplingScheduler()
+
 	// 清理旧的磁盘缓存文件
 	common.CleanupOldCacheFiles()
 

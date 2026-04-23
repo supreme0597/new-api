@@ -45,7 +45,7 @@ const routerMap = {
   pricing: '/pricing',
   task: '/console/task',
   models: '/console/models',
-  modelPerformance: '/console/model-performance',
+  modelPerformance: '/model-performance',
   samplingConfig: '/console/sampling-config',
   deployment: '/console/deployment',
   playground: '/console/playground',
@@ -106,6 +106,11 @@ const SiderBar = ({ onNavigate = () => {} }) => {
         className:
           localStorage.getItem('enable_task') === 'true' ? '' : 'tableHiddle',
       },
+      {
+        text: t('模型排行'),
+        itemKey: 'modelPerformance',
+        to: '/model-performance',
+      },
     ];
 
     // 根据配置过滤项目
@@ -165,18 +170,6 @@ const SiderBar = ({ onNavigate = () => {} }) => {
         itemKey: 'models',
         to: '/console/models',
         className: isAdmin() ? '' : 'tableHiddle',
-      },
-      {
-        text: t('模型排行'),
-        itemKey: 'modelPerformance',
-        to: '/console/model-performance',
-        className: isAdmin() ? '' : 'tableHiddle',
-      },
-      {
-        text: t('采样配置'),
-        itemKey: 'samplingConfig',
-        to: '/console/sampling-config',
-        className: isRoot() ? '' : 'tableHiddle',
       },
       {
         text: t('模型部署'),
