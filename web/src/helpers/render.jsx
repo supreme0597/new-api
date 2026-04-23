@@ -76,6 +76,7 @@ import {
   Server,
   CalendarClock,
   Gauge,
+  FlaskConical,
 } from 'lucide-react';
 import {
   SiAtlassian,
@@ -144,6 +145,8 @@ export function getLucideIcon(key, selected = false) {
       return <Package {...commonProps} color={iconColor} />;
     case 'modelPerformance':
       return <Gauge {...commonProps} color={iconColor} />;
+    case 'samplingConfig':
+      return <FlaskConical {...commonProps} color={iconColor} />;
     case 'deployment':
       return <Server {...commonProps} color={iconColor} />;
     case 'subscription':

@@ -46,6 +46,7 @@ const routerMap = {
   task: '/console/task',
   models: '/console/models',
   modelPerformance: '/console/model-performance',
+  samplingConfig: '/console/sampling-config',
   deployment: '/console/deployment',
   playground: '/console/playground',
   personal: '/console/personal',
@@ -168,8 +169,14 @@ const SiderBar = ({ onNavigate = () => {} }) => {
       {
         text: t('模型排行'),
         itemKey: 'modelPerformance',
-        to: '/model-performance',
+        to: '/console/model-performance',
         className: isAdmin() ? '' : 'tableHiddle',
+      },
+      {
+        text: t('采样配置'),
+        itemKey: 'samplingConfig',
+        to: '/console/sampling-config',
+        className: isRoot() ? '' : 'tableHiddle',
       },
       {
         text: t('模型部署'),

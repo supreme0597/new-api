@@ -516,6 +516,26 @@ export const getChannelsColumns = ({
       },
     },
     {
+      key: COLUMN_KEYS.TEST_CHANNEL,
+      title: t('测试渠道'),
+      dataIndex: 'is_test_channel',
+      render: (text, record) => {
+        if (record.children !== undefined) {
+          return null;
+        }
+        const isTest = record.is_test_channel === 1;
+        return (
+          <Tag
+            color={isTest ? 'orange' : 'grey'}
+            shape='circle'
+            type={isTest ? 'solid' : 'light'}
+          >
+            {isTest ? t('是') : t('否')}
+          </Tag>
+        );
+      },
+    },
+    {
       key: COLUMN_KEYS.STATUS,
       title: t('状态'),
       dataIndex: 'status',

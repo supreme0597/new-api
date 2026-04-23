@@ -266,6 +266,7 @@ func SetApiRouter(router gin.IRouter) {
 			modelPerformanceRoute.GET("/list", controller.GetModelPerformanceList)
 			modelPerformanceRoute.GET("/sources", controller.GetModelPerformanceSources)
 			modelPerformanceRoute.POST("/refresh", controller.RefreshModelPerformance)
+			modelPerformanceRoute.GET("/sampling-status", controller.GetSamplingTaskStatus)
 		}
 
 		// 渠道来源映射管理（仅超级管理员）

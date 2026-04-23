@@ -12,6 +12,7 @@ import {
   Tooltip,
   Typography,
   Space,
+  Progress,
 } from '@douyinfe/semi-ui';
 import { IconRefresh, IconInfoCircle, IconArrowUp } from '@douyinfe/semi-icons';
 import { renderModelTag } from '../../helpers/render';
@@ -169,9 +170,10 @@ const ModelPerformance = () => {
   const [selectedSource, setSelectedSource] = useState('');
   const [lastSamplingTime, setLastSamplingTime] = useState('');
   const [showBackToTop, setShowBackToTop] = useState(false);
+  const [samplingStatus, setSamplingStatus] = useState(null);
   const pageSize = 20;
-  const scrollContainerRef = useRef(null);
   const sentinelRef = useRef(null);
+  const pollingRef = useRef(null);
 
   const fetchSources = useCallback(async () => {
     try {
@@ -225,6 +227,21 @@ const ModelPerformance = () => {
     [pageSize, selectedSource],
   );
 
+  // 查询采样任务状态
+  const fetchSamplingStatus = useCallback(async () => {
+    try {
+      const res = await API.get('/api/model-performance/sampling-status');
+      const { success, data } = res.data;
+      if (success) {
+        setSamplingStatus(data);
+        return data;
+      }
+    } catch (e) {
+      // ignore
+    }
+    return null;
+  }, []);
+
   // 初始加载
   useEffect(() => {
     fetchSources();
@@ -247,21 +264,38 @@ const ModelPerformance = () => {
     return () => observer.disconnect();
   }, [hasMore, loading, loadingMore, page, selectedSource, fetchData]);
 
-  // 监听滚动显示回到顶部按钮
+  // 监听窗口滚动显示回到顶部按钮
   const handleScroll = useCallback(() => {
-    const el = scrollContainerRef.current;
-    if (el) {
-      setShowBackToTop(el.scrollTop > 400);
-    }
+    setShowBackToTop(window.scrollY > 400);
   }, []);
 
   useEffect(() => {
-    const el = scrollContainerRef.current;
-    if (el) {
-      el.addEventListener('scroll', handleScroll);
-      return () => el.removeEventListener('scroll', handleScroll);
-    }
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
   }, [handleScroll]);
+
+  // 轮询采样状态
+  useEffect(() => {
+    if (samplingStatus?.is_running) {
+      pollingRef.current = setInterval(() => {
+        fetchSamplingStatus().then((status) => {
+          if (!status?.is_running) {
+            clearInterval(pollingRef.current);
+            pollingRef.current = null;
+            // 采样完成后刷新数据
+            fetchData(1, selectedSource, false);
+            fetchSources();
+          }
+        });
+      }, 2000);
+    }
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+    };
+  }, [samplingStatus?.is_running, fetchSamplingStatus, fetchData, fetchSources, selectedSource]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -270,10 +304,11 @@ const ModelPerformance = () => {
       const { success, message } = res.data;
       if (success) {
         showSuccess(t(message || '采样任务已触发'));
-        setTimeout(() => {
-          fetchData(1, selectedSource, false);
-          fetchSources();
-        }, 5000);
+        // 立即查询一次状态，启动轮询
+        const status = await fetchSamplingStatus();
+        if (status?.is_running) {
+          setSamplingStatus(status);
+        }
       }
     } catch (e) {
       showError(e);
@@ -291,21 +326,19 @@ const ModelPerformance = () => {
   };
 
   const scrollToTop = () => {
-    scrollContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // 格式化时间戳
+  const formatTime = (timestamp) => {
+    if (!timestamp) return '';
+    const date = new Date(timestamp * 1000);
+    return date.toLocaleString();
   };
 
   return (
-    <div
-      ref={scrollContainerRef}
-      style={{
-        padding: '20px 16px',
-        maxWidth: 900,
-        margin: '0 auto',
-        height: 'calc(100vh - 60px)',
-        overflowY: 'auto',
-      }}
-    >
-      {/* 页面头部 */}
+    <div style={{ padding: '20px 16px', maxWidth: 900, margin: '0 auto' }}>
+      {/* 页面头部 - 固定在顶部，不参与滚动 */}
       <div
         style={{
           display: 'flex',
@@ -349,6 +382,48 @@ const ModelPerformance = () => {
           </Button>
         </Space>
       </div>
+
+      {/* 采样进度卡片 */}
+      {samplingStatus?.is_running && (
+        <Card
+          style={{
+            marginBottom: 16,
+            background: 'var(--semi-color-warning-light-default)',
+            border: '1px solid var(--semi-color-warning-light-hover)',
+          }}
+          bodyStyle={{ padding: '12px 16px' }}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Spin size='small' />
+              <Text strong size='small'>
+                {t('正在采样')}… {samplingStatus.done_tasks || 0} / {samplingStatus.total_tasks || 0}
+              </Text>
+              <Text type='tertiary' size='small'>
+                ({t('成功')} {samplingStatus.success_tasks || 0} / {t('失败')} {samplingStatus.failed_tasks || 0})
+              </Text>
+            </div>
+            {samplingStatus.total_tasks > 0 && (
+              <Progress
+                percent={Math.round(((samplingStatus.done_tasks || 0) / samplingStatus.total_tasks) * 100)}
+                showInfo
+                size='small'
+                stroke='var(--semi-color-warning)'
+              />
+            )}
+            {samplingStatus.message && (
+              <Text type='tertiary' size='small'>
+                {samplingStatus.message}
+              </Text>
+            )}
+            {samplingStatus.current_channel && samplingStatus.current_model && (
+              <Text type='tertiary' size='small'>
+                {t('当前')}：{samplingStatus.current_channel} / {samplingStatus.current_model}
+              </Text>
+            )}
+          </div>
+        </Card>
+      )}
 
       {/* 评分标准说明 */}
       <Card

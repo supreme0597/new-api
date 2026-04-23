@@ -46,6 +46,7 @@ import ModelDeploymentPage from './pages/ModelDeployment';
 import Playground from './pages/Playground';
 import Subscription from './pages/Subscription';
 import ModelPerformance from './pages/ModelPerformance';
+import SamplingConfig from './pages/SamplingConfig';
 import OAuth2Callback from './components/auth/OAuth2Callback';
 import PersonalSetting from './components/settings/PersonalSetting';
 import Setup from './pages/Setup';
@@ -137,6 +138,14 @@ function App() {
           element={
             <AdminRoute>
               <ModelPerformance />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path='/console/sampling-config'
+          element={
+            <AdminRoute>
+              <SamplingConfig />
             </AdminRoute>
           }
         />

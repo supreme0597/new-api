@@ -141,6 +141,14 @@ func GetAllChannels(c *gin.Context) {
 			ownerFilter = o
 		}
 	}
+	// test channel filter: -1 all, 1 test channel only, 0 non-test channel only
+	isTestChannelStr := c.Query("is_test_channel")
+	isTestChannelFilter := -1
+	if isTestChannelStr != "" {
+		if v, err := strconv.Atoi(isTestChannelStr); err == nil {
+			isTestChannelFilter = v
+		}
+	}
 
 	var total int64
 
@@ -186,6 +194,15 @@ func GetAllChannels(c *gin.Context) {
 				if ownerFilter > 0 && (ch.OwnerUserId == nil || *ch.OwnerUserId != ownerFilter) {
 					continue
 				}
+				if isTestChannelFilter >= 0 {
+					isTest := ch.IsTestChannel != nil && *ch.IsTestChannel == 1
+					if isTestChannelFilter == 1 && !isTest {
+						continue
+					}
+					if isTestChannelFilter == 0 && isTest {
+						continue
+					}
+				}
 				filtered = append(filtered, ch)
 			}
 			channelData = append(channelData, filtered...)
@@ -210,6 +227,13 @@ func GetAllChannels(c *gin.Context) {
 			baseQuery = baseQuery.Where("status = ?", common.ChannelStatusEnabled)
 		} else if statusFilter == 0 {
 			baseQuery = baseQuery.Where("status != ?", common.ChannelStatusEnabled)
+		}
+		if isTestChannelFilter >= 0 {
+			if isTestChannelFilter == 1 {
+				baseQuery = baseQuery.Where("is_test_channel = 1")
+			} else {
+				baseQuery = baseQuery.Where("is_test_channel IS NULL OR is_test_channel = 0")
+			}
 		}
 
 		baseQuery.Count(&total)
@@ -349,6 +373,14 @@ func SearchChannels(c *gin.Context) {
 	userId, isAdmin, _ := currentActor(c)
 	idSort, _ := strconv.ParseBool(c.Query("id_sort"))
 	enableTagMode, _ := strconv.ParseBool(c.Query("tag_mode"))
+	// test channel filter: -1 all, 1 test channel only, 0 non-test channel only
+	isTestChannelStr := c.Query("is_test_channel")
+	isTestChannelFilter := -1
+	if isTestChannelStr != "" {
+		if v, err := strconv.Atoi(isTestChannelStr); err == nil {
+			isTestChannelFilter = v
+		}
+	}
 	channelData := make([]*model.Channel, 0)
 	if enableTagMode {
 		tags, err := model.SearchTags(keyword, group, modelKeyword, idSort)
@@ -377,6 +409,15 @@ func SearchChannels(c *gin.Context) {
 								continue
 							}
 						}
+						if isTestChannelFilter >= 0 {
+							isTest := ch.IsTestChannel != nil && *ch.IsTestChannel == 1
+							if isTestChannelFilter == 1 && !isTest {
+								continue
+							}
+							if isTestChannelFilter == 0 && isTest {
+								continue
+							}
+						}
 						channelData = append(channelData, ch)
 					}
 				}
@@ -401,6 +442,21 @@ func SearchChannels(c *gin.Context) {
 				continue
 			}
 			if statusFilter == 0 && ch.Status == common.ChannelStatusEnabled {
+				continue
+			}
+			filtered = append(filtered, ch)
+		}
+		channelData = filtered
+	}
+
+	if isTestChannelFilter >= 0 {
+		filtered := make([]*model.Channel, 0, len(channelData))
+		for _, ch := range channelData {
+			isTest := ch.IsTestChannel != nil && *ch.IsTestChannel == 1
+			if isTestChannelFilter == 1 && !isTest {
+				continue
+			}
+			if isTestChannelFilter == 0 && isTest {
 				continue
 			}
 			filtered = append(filtered, ch)

@@ -40,19 +40,15 @@ func GetModelPerformanceList(source string, page int, pageSize int) ([]*ModelPer
 		return nil, 0, err
 	}
 
-	// 查询数据
+	// 查询所有数据（在内存中按综合评分排序后再分页）
 	var results []struct {
 		ModelPerformance
 		ChannelName string `gorm:"column:name"`
 		Source      string `gorm:"column:source"`
 	}
 
-	offset := (page - 1) * pageSize
 	err := query.
 		Select("model_performances.*, channels.name, channels.source").
-		Order("model_performances.tps DESC, model_performances.ttft ASC").
-		Offset(offset).
-		Limit(pageSize).
 		Find(&results).Error
 
 	if err != nil {
@@ -60,23 +56,55 @@ func GetModelPerformanceList(source string, page int, pageSize int) ([]*ModelPer
 	}
 
 	// 计算评分并组装结果
-	items := make([]*ModelPerformanceItem, 0, len(results))
-	for i, r := range results {
+	type scoredItem struct {
+		item  *ModelPerformanceItem
+		score float64
+	}
+	scoredItems := make([]scoredItem, 0, len(results))
+	for _, r := range results {
 		tpsScore := calcTpsScore(r.Tps)
 		ttftScore := calcTtftScore(r.Ttft)
 		score := tpsScore*0.6 + ttftScore*0.4
 
-		items = append(items, &ModelPerformanceItem{
-			Rank:        offset + i + 1,
-			Model:       r.Model,
-			Source:      r.Source,
-			Tps:         r.Tps,
-			Ttft:        r.Ttft,
-			Score:       score,
-			UpdatedAt:   r.UpdatedAt,
-			ChannelId:   r.ChannelId,
-			ChannelName: r.ChannelName,
+		scoredItems = append(scoredItems, scoredItem{
+			item: &ModelPerformanceItem{
+				Model:       r.Model,
+				Source:      r.Source,
+				Tps:         r.Tps,
+				Ttft:        r.Ttft,
+				Score:       score,
+				SampleSize:  r.SampleSize,
+				UpdatedAt:   r.UpdatedAt,
+				ChannelId:   r.ChannelId,
+				ChannelName: r.ChannelName,
+			},
+			score: score,
 		})
+	}
+
+	// 按综合评分降序排序
+	for i := 0; i < len(scoredItems); i++ {
+		for j := i + 1; j < len(scoredItems); j++ {
+			if scoredItems[j].score > scoredItems[i].score {
+				scoredItems[i], scoredItems[j] = scoredItems[j], scoredItems[i]
+			}
+		}
+	}
+
+	// 手动分页
+	offset := (page - 1) * pageSize
+	if offset > len(scoredItems) {
+		offset = len(scoredItems)
+	}
+	endIdx := offset + pageSize
+	if endIdx > len(scoredItems) {
+		endIdx = len(scoredItems)
+	}
+
+	items := make([]*ModelPerformanceItem, 0, endIdx-offset)
+	for i := offset; i < endIdx; i++ {
+		scoredItems[i].item.Rank = i + 1
+		items = append(items, scoredItems[i].item)
 	}
 
 	return items, total, nil
@@ -90,6 +118,7 @@ type ModelPerformanceItem struct {
 	Tps         float64 `json:"tps"`
 	Ttft        int     `json:"ttft"`
 	Score       float64 `json:"score"`
+	SampleSize  int     `json:"sample_size"`
 	UpdatedAt   int64   `json:"updated_at"`
 	ChannelId   int     `json:"channel_id"`
 	ChannelName string  `json:"channel_name"`

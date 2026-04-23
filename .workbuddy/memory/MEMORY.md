@@ -31,3 +31,21 @@
 - 测试渠道的模型不会出现在模型选择列表中
 - 请求不会被路由到测试渠道
 - 只有采样任务和排行榜可以访问测试渠道
+
+### 采样配置管理页面 ✅ 已完成
+
+**新增文件：**
+- `web/src/pages/SamplingConfig/index.jsx` - 采样配置管理页面
+
+**修改的文件：**
+- `web/src/App.jsx` - 添加 `/console/sampling-config` 路由
+- `web/src/components/layout/SiderBar.jsx` - 添加「采样配置」侧边栏入口（仅 root 用户可见）
+- `web/src/helpers/render.jsx` - 添加 `FlaskConical` 图标
+- `web/src/hooks/common/useSidebar.js` - 在 `DEFAULT_ADMIN_CONFIG` 中添加 `samplingConfig`
+- `web/src/i18n/locales/zh-CN.json` / `en.json` - 添加翻译词条
+
+**页面功能：**
+- 表格展示所有采样配置（ID、名称、Prompt、Max Tokens、状态）
+- 支持新增/编辑/删除配置
+- 支持启用/禁用切换（Switch）
+- 仅超级管理员（root）可访问
