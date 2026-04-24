@@ -382,7 +382,7 @@ const ModelPerformance = () => {
           {/* TPS 颜色图例 */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <Text type='secondary' size='small'>
-              {t('TPS 颜色')}：
+              {t('TPS 颜色（每秒生成 Token 数，越高越好）')}：
             </Text>
             <Tag size='small' color='green'>{t('优秀')} ≥{(benchmarks.tps * 0.8).toFixed(0)} t/s</Tag>
             <Tag size='small' color='blue'>{t('良好')} ≥{(benchmarks.tps * 0.4).toFixed(0)} t/s</Tag>
@@ -392,7 +392,7 @@ const ModelPerformance = () => {
           {/* TTFT 颜色图例 */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <Text type='secondary' size='small'>
-              {t('TTFT 颜色')}：
+              {t('TTFT 颜色（首 Token 响应延迟，越低越好）')}：
             </Text>
             <Tag size='small' color='green'>{t('优秀')} ≤{(benchmarks.ttft * 0.3).toFixed(0)} ms</Tag>
             <Tag size='small' color='blue'>{t('良好')} ≤{(benchmarks.ttft * 0.8).toFixed(0)} ms</Tag>

@@ -23,8 +23,10 @@ import {
   Button,
   Card,
   Col,
+  Collapse,
   Form,
   InputNumber,
+  Popconfirm,
   Progress,
   Row,
   Select,
@@ -99,6 +101,23 @@ export default function SettingModelSampling(props) {
     }
   };
 
+  const handleStopSampling = async () => {
+    try {
+      const res = await API.post('/api/model-performance/stop');
+      const { success, message } = res.data;
+      if (success) {
+        showSuccess(t(message || '已发送停止请求'));
+        // 立即刷新状态
+        const status = await fetchSamplingStatus();
+        setSamplingStatus(status);
+      } else {
+        showError(message || t('停止失败'));
+      }
+    } catch (e) {
+      showError(e);
+    }
+  };
+
   useEffect(() => {
     if (samplingStatus?.is_running) {
       pollingRef.current = setInterval(() => {
@@ -125,14 +144,16 @@ export default function SettingModelSampling(props) {
   useEffect(() => {
     const currentInputs = {};
     for (const key of Object.keys(defaultInputs)) {
-      if (props.options[key] !== undefined) {
-        if (typeof defaultInputs[key] === 'number') {
-          currentInputs[key] = parseInt(props.options[key]) || defaultInputs[key];
-        } else {
-          currentInputs[key] = props.options[key];
-        }
+      let value = props.options[key];
+      // 防御性处理：避免 null/undefined 导致 Form 控件渲染出错
+      if (value === null || value === undefined) {
+        value = defaultInputs[key];
+      }
+      if (typeof defaultInputs[key] === 'number') {
+        const parsed = parseInt(value);
+        currentInputs[key] = isNaN(parsed) ? defaultInputs[key] : parsed;
       } else {
-        currentInputs[key] = defaultInputs[key];
+        currentInputs[key] = String(value);
       }
     }
     setInputs(currentInputs);
@@ -342,15 +363,93 @@ export default function SettingModelSampling(props) {
               </Tag>
             )}
           </div>
-          <Row style={{ marginBottom: 12 }}>
+          <Row style={{ marginBottom: 12, display: 'flex', gap: 8 }}>
             <Button
               theme='solid'
               loading={refreshing}
               onClick={handleRefreshSampling}
+              disabled={samplingStatus?.is_running}
             >
               {t('立即执行采样')}
             </Button>
+            {samplingStatus?.is_running && (
+              <Popconfirm
+                title={t('确认停止采样？')}
+                content={t('停止后当前正在采样的模型数据将不会保存')}
+                onConfirm={handleStopSampling}
+              >
+                <Button type='danger' loading={samplingStatus?.stop_requested}>
+                  {t('停止采样')}
+                </Button>
+              </Popconfirm>
+            )}
           </Row>
+
+          {/* 上次采样记录 */}
+          {samplingStatus?.last_result && (
+            <Card
+              style={{ marginBottom: 12 }}
+              bodyStyle={{ padding: '12px 16px' }}
+            >
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <Text strong size='small'>
+                    {t('上次采样记录')}：
+                  </Text>
+                  <Text type='secondary' size='small'>
+                    {samplingStatus.last_result.time}
+                  </Text>
+                  <Tag color='green' size='small'>
+                    {t('成功')} {samplingStatus.last_result.success}
+                  </Tag>
+                  <Tag color='red' size='small'>
+                    {t('失败')} {samplingStatus.last_result.failed}
+                  </Tag>
+                  <Tag size='small'>
+                    {t('总计')} {samplingStatus.last_result.total}
+                  </Tag>
+                </div>
+                <Collapse accordion>
+                  {samplingStatus.last_result.success_list?.length > 0 && (
+                    <Collapse.Panel
+                      header={
+                        <Text size='small' type='success'>
+                          {t('成功列表')} ({samplingStatus.last_result.success_list.length})
+                        </Text>
+                      }
+                      itemKey='success'
+                    >
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 200, overflow: 'auto' }}>
+                        {samplingStatus.last_result.success_list.map((item, idx) => (
+                          <Text key={idx} size='small' type='secondary'>
+                            {item.channel} / {item.model} — {item.message}
+                          </Text>
+                        ))}
+                      </div>
+                    </Collapse.Panel>
+                  )}
+                  {samplingStatus.last_result.failed_list?.length > 0 && (
+                    <Collapse.Panel
+                      header={
+                        <Text size='small' type='danger'>
+                          {t('失败列表')} ({samplingStatus.last_result.failed_list.length})
+                        </Text>
+                      }
+                      itemKey='failed'
+                    >
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 200, overflow: 'auto' }}>
+                        {samplingStatus.last_result.failed_list.map((item, idx) => (
+                          <Text key={idx} size='small' type='secondary'>
+                            {item.channel} / {item.model} — {item.message}
+                          </Text>
+                        ))}
+                      </div>
+                    </Collapse.Panel>
+                  )}
+                </Collapse>
+              </div>
+            </Card>
+          )}
 
           {samplingStatus?.is_running && (
             <Card

@@ -132,14 +132,7 @@ function App() {
             </AdminRoute>
           }
         />
-        <Route
-          path='/model-performance'
-          element={
-            <PrivateRoute>
-              <ModelPerformance />
-            </PrivateRoute>
-          }
-        />
+        <Route path='/model-performance' element={<ModelPerformance />} />
         <Route
           path='/console/channel'
           element={

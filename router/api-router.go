@@ -259,14 +259,19 @@ func SetApiRouter(router gin.IRouter) {
 			channelRoute.POST("/upstream_updates/detect_all", middleware.AdminAuth(), controller.DetectAllChannelUpstreamModelUpdates)
 		}
 
-		// 模型性能排行榜
+		// 模型性能排行榜（公开接口）
 		modelPerformanceRoute := apiRouter.Group("/model-performance")
-		modelPerformanceRoute.Use(middleware.AdminAuth())
 		{
 			modelPerformanceRoute.GET("/list", controller.GetModelPerformanceList)
 			modelPerformanceRoute.GET("/sources", controller.GetModelPerformanceSources)
-			modelPerformanceRoute.POST("/refresh", controller.RefreshModelPerformance)
-			modelPerformanceRoute.GET("/sampling-status", controller.GetSamplingTaskStatus)
+		}
+		// 模型性能采样管理（仅管理员）
+		modelPerformanceAdminRoute := apiRouter.Group("/model-performance")
+		modelPerformanceAdminRoute.Use(middleware.AdminAuth())
+		{
+			modelPerformanceAdminRoute.POST("/refresh", controller.RefreshModelPerformance)
+			modelPerformanceAdminRoute.GET("/sampling-status", controller.GetSamplingTaskStatus)
+			modelPerformanceAdminRoute.POST("/stop", controller.StopSamplingTask)
 		}
 
 		// 渠道来源映射管理（仅超级管理员）

@@ -93,6 +93,21 @@ func GetSamplingTaskStatus(c *gin.Context) {
 	})
 }
 
+// StopSamplingTask 停止正在运行的采样任务
+func StopSamplingTask(c *gin.Context) {
+	if err := model.StopSamplingTask(); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"message": err.Error(),
+		})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "已发送停止请求",
+	})
+}
+
 // GetChannelSourceMappings 获取渠道来源映射列表
 func GetChannelSourceMappings(c *gin.Context) {
 	mappings, err := model.GetChannelSourceMappings()

@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -17,22 +18,43 @@ const DefaultSamplingIntervalSeconds = 10
 
 var ErrSamplingForbidden = errors.New("sampling forbidden or rate limited")
 
+// SamplingRecord 单条采样记录
+type SamplingRecord struct {
+	Channel string `json:"channel"`
+	Model   string `json:"model"`
+	Success bool   `json:"success"`
+	Message string `json:"message"`
+}
+
+// LastSamplingResult 上次采样结果
+type LastSamplingResult struct {
+	Time        string           `json:"time"`
+	Total       int              `json:"total"`
+	Success     int              `json:"success"`
+	Failed      int              `json:"failed"`
+	SuccessList []SamplingRecord `json:"success_list"`
+	FailedList  []SamplingRecord `json:"failed_list"`
+}
+
 // SamplingTaskStatus 采样任务执行状态
 type SamplingTaskStatus struct {
-	IsRunning      bool   `json:"is_running"`
-	TotalTasks     int    `json:"total_tasks"`
-	DoneTasks      int    `json:"done_tasks"`
-	SuccessTasks   int    `json:"success_tasks"`
-	FailedTasks    int    `json:"failed_tasks"`
-	CurrentChannel string `json:"current_channel"`
-	CurrentModel   string `json:"current_model"`
-	Message        string `json:"message"`
-	UpdatedAt      int64  `json:"updated_at"`
+	IsRunning      bool                `json:"is_running"`
+	TotalTasks     int                 `json:"total_tasks"`
+	DoneTasks      int                 `json:"done_tasks"`
+	SuccessTasks   int                 `json:"success_tasks"`
+	FailedTasks    int                 `json:"failed_tasks"`
+	CurrentChannel string              `json:"current_channel"`
+	CurrentModel   string              `json:"current_model"`
+	Message        string              `json:"message"`
+	UpdatedAt      int64               `json:"updated_at"`
+	StopRequested  bool                `json:"stop_requested"`
+	LastResult     *LastSamplingResult `json:"last_result"`
 }
 
 var (
 	samplingTaskStatus SamplingTaskStatus
 	samplingTaskMutex  sync.RWMutex
+	samplingStopFlag   atomic.Bool
 )
 
 // GetSamplingTaskStatus 获取当前采样任务状态
@@ -77,13 +99,32 @@ func RunSamplingTask() error {
 	samplingTaskStatus.CurrentModel = ""
 	samplingTaskStatus.Message = "正在准备采样任务..."
 	samplingTaskStatus.UpdatedAt = common.GetTimestamp()
+	samplingTaskStatus.StopRequested = false
 	samplingTaskMutex.Unlock()
+
+	samplingStopFlag.Store(false)
+
+	// 记录本次采样结果
+	lastResult := &LastSamplingResult{
+		Time:        time.Now().Format("2006-01-02 15:04:05"),
+		SuccessList: make([]SamplingRecord, 0),
+		FailedList:  make([]SamplingRecord, 0),
+	}
 
 	defer func() {
 		samplingTaskMutex.Lock()
 		samplingTaskStatus.IsRunning = false
-		samplingTaskStatus.Message = "采样任务已完成"
+		samplingTaskStatus.StopRequested = false
+		if samplingStopFlag.Load() {
+			samplingTaskStatus.Message = "采样任务已停止"
+		} else {
+			samplingTaskStatus.Message = "采样任务已完成"
+		}
 		samplingTaskStatus.UpdatedAt = common.GetTimestamp()
+		lastResult.Total = samplingTaskStatus.TotalTasks
+		lastResult.Success = samplingTaskStatus.SuccessTasks
+		lastResult.Failed = samplingTaskStatus.FailedTasks
+		samplingTaskStatus.LastResult = lastResult
 		samplingTaskMutex.Unlock()
 	}()
 
@@ -163,6 +204,13 @@ func RunSamplingTask() error {
 				continue
 			}
 
+			// 检查是否请求停止
+			if samplingStopFlag.Load() {
+				common.SysLog("[Sampling] 收到停止请求，中断采样任务")
+				updateSamplingTaskProgress(doneTasks, successTasks, failedTasks, channelName, modelName, "采样任务已停止")
+				return nil
+			}
+
 			doneTasks++
 			updateSamplingTaskProgress(doneTasks, successTasks, failedTasks, channelName, modelName,
 				fmt.Sprintf("正在采样: %s / %s (%d/%d)", channelName, modelName, doneTasks, totalTasks))
@@ -174,9 +222,24 @@ func RunSamplingTask() error {
 				time.Sleep(time.Duration(interval) * time.Second)
 			}
 
+			// 检查是否请求停止
+			if samplingStopFlag.Load() {
+				common.SysLog("[Sampling] 收到停止请求，中断采样任务")
+				updateSamplingTaskProgress(doneTasks, successTasks, failedTasks, channelName, modelName, "采样任务已停止")
+				return nil
+			}
+
 			tps, ttft, err := sampleModelPerformance(channel, modelName, config)
 			if err != nil {
 				failedTasks++
+				record := SamplingRecord{
+					Channel: channelName,
+					Model:   modelName,
+					Success: false,
+					Message: err.Error(),
+				}
+				lastResult.FailedList = append(lastResult.FailedList, record)
+
 				if errors.Is(err, ErrSamplingForbidden) {
 					common.SysLog(fmt.Sprintf("[Sampling] 渠道 %s 被限流/禁止访问，跳过该渠道剩余模型", channelName))
 					updateSamplingTaskProgress(doneTasks, successTasks, failedTasks, channelName, modelName,
@@ -190,6 +253,14 @@ func RunSamplingTask() error {
 			}
 
 			successTasks++
+			record := SamplingRecord{
+				Channel: channelName,
+				Model:   modelName,
+				Success: true,
+				Message: fmt.Sprintf("TPS=%.1f, TTFT=%dms", tps, ttft),
+			}
+			lastResult.SuccessList = append(lastResult.SuccessList, record)
+
 			common.SysLog(fmt.Sprintf("[Sampling] 采样成功: 渠道=%s, 模型=%s, TPS=%.1f, TTFT=%dms", channelName, modelName, tps, ttft))
 
 			if err := UpsertModelPerformance(channel.Id, modelName, tps, ttft); err != nil {
@@ -409,6 +480,26 @@ func isWithinSamplingWindow() bool {
 	}
 	// 跨天区间，如 22:00 - 06:00
 	return currentMin >= startMin || currentMin <= endMin
+}
+
+// StopSamplingTask 请求停止当前正在运行的采样任务
+func StopSamplingTask() error {
+	samplingTaskMutex.RLock()
+	isRunning := samplingTaskStatus.IsRunning
+	samplingTaskMutex.RUnlock()
+
+	if !isRunning {
+		return errors.New("no sampling task is running")
+	}
+
+	samplingStopFlag.Store(true)
+	samplingTaskMutex.Lock()
+	samplingTaskStatus.StopRequested = true
+	samplingTaskStatus.Message = "正在停止采样任务..."
+	samplingTaskMutex.Unlock()
+
+	common.SysLog("[Sampling] 收到停止采样请求")
+	return nil
 }
 
 // StartSamplingScheduler 启动定时采样调度器
