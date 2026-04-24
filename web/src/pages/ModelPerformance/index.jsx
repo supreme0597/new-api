@@ -13,7 +13,7 @@ import {
   Space,
   Button,
 } from '@douyinfe/semi-ui';
-import { IconInfoCircle, IconArrowUp } from '@douyinfe/semi-icons';
+import { IconInfoCircle, IconHelpCircle, IconArrowUp } from '@douyinfe/semi-icons';
 import { renderModelTag } from '../../helpers/render';
 
 const { Text } = Typography;
@@ -156,14 +156,27 @@ function ScoreBar({ score, color }) {
 }
 
 // 指标显示组件
-function MetricItem({ label, value, unit, color }) {
+function MetricItem({ label, value, unit, color, tooltip }) {
   return (
     <div
       style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 80 }}
     >
-      <Text type='tertiary' size='small'>
-        {label}
-      </Text>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        <Text type='tertiary' size='small'>
+          {label}
+        </Text>
+        {tooltip && (
+          <Tooltip content={tooltip}>
+            <IconHelpCircle
+              size='small'
+              style={{
+                color: 'var(--semi-color-text-3)',
+                cursor: 'help',
+              }}
+            />
+          </Tooltip>
+        )}
+      </div>
       <Text strong style={{ color, fontSize: 15 }}>
         {value}
         <Text size='small' type='tertiary' style={{ marginLeft: 2 }}>
@@ -367,33 +380,45 @@ const ModelPerformance = () => {
             </Text>
           </div>
 
-          {/* 评分颜色图例 */}
+          {/* 颜色含义 */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <Text type='secondary' size='small'>
-              {t('评分颜色')}：
+              {t('颜色含义')}：
             </Text>
-            <Tag size='small' color='green'>{t('优秀')} ≥80</Tag>
-            <Tag size='small' color='blue'>{t('良好')} ≥60</Tag>
-            <Tag size='small' color='orange'>{t('一般')} ≥40</Tag>
-            <Tag size='small' color='red'>{t('较差')} ≥20</Tag>
-            <Tag size='small' color='grey'>{t('很差')} &lt;20</Tag>
+            <Tag size='small' color='green'>{t('优秀')}</Tag>
+            <Tag size='small' color='blue'>{t('良好')}</Tag>
+            <Tag size='small' color='orange'>{t('一般')}</Tag>
+            <Tag size='small' color='red'>{t('较差')}</Tag>
+            <Tag size='small' color='grey'>{t('很差')}</Tag>
           </div>
 
-          {/* TPS 颜色图例 */}
+          {/* TPS 阈值 */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <Text type='secondary' size='small'>
-              {t('TPS 颜色（每秒生成 Token 数，越高越好）')}：
-            </Text>
+            <Tooltip content={`${t('输出速度 (Tokens Per Second)')}，${t('越高越好')}`}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'help' }}>
+                <Text type='secondary' size='small'>
+                  TPS
+                </Text>
+                <IconHelpCircle size='small' style={{ color: 'var(--semi-color-text-3)' }} />
+                <Text type='secondary' size='small'>：</Text>
+              </div>
+            </Tooltip>
             <Tag size='small' color='green'>{t('优秀')} ≥{(benchmarks.tps * 0.8).toFixed(0)} t/s</Tag>
             <Tag size='small' color='blue'>{t('良好')} ≥{(benchmarks.tps * 0.4).toFixed(0)} t/s</Tag>
             <Tag size='small' color='orange'>{t('一般')} &lt;{(benchmarks.tps * 0.4).toFixed(0)} t/s</Tag>
           </div>
 
-          {/* TTFT 颜色图例 */}
+          {/* TTFT 阈值 */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <Text type='secondary' size='small'>
-              {t('TTFT 颜色（首 Token 响应延迟，越低越好）')}：
-            </Text>
+            <Tooltip content={`${t('首字延迟 (Time To First Token)')}，${t('越低越好')}`}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'help' }}>
+                <Text type='secondary' size='small'>
+                  TTFT
+                </Text>
+                <IconHelpCircle size='small' style={{ color: 'var(--semi-color-text-3)' }} />
+                <Text type='secondary' size='small'>：</Text>
+              </div>
+            </Tooltip>
             <Tag size='small' color='green'>{t('优秀')} ≤{(benchmarks.ttft * 0.3).toFixed(0)} ms</Tag>
             <Tag size='small' color='blue'>{t('良好')} ≤{(benchmarks.ttft * 0.8).toFixed(0)} ms</Tag>
             <Tag size='small' color='red'>{t('较差')} &gt;{(benchmarks.ttft * 0.8).toFixed(0)} ms</Tag>
@@ -509,28 +534,20 @@ const ModelPerformance = () => {
                     </div>
 
                     {/* TPS */}
-                    <Tooltip content={t('输出速度 (Tokens Per Second)')}>
-                      <div>
-                        <MetricItem
-                          label='TPS'
-                          value={item.tps?.toFixed(1) || '0'}
-                          unit='t/s'
-                          color={getTpsColor(item.tps, benchmarks.tps)}
-                        />
-                      </div>
-                    </Tooltip>
+                    <MetricItem
+                      label='TPS'
+                      value={item.tps?.toFixed(1) || '0'}
+                      unit='t/s'
+                      color={getTpsColor(item.tps, benchmarks.tps)}
+                    />
 
                     {/* TTFT */}
-                    <Tooltip content={t('首字延迟 (Time To First Token)')}>
-                      <div>
-                        <MetricItem
-                          label='TTFT'
-                          value={item.ttft || 0}
-                          unit='ms'
-                          color={getTtftColor(item.ttft, benchmarks.ttft)}
-                        />
-                      </div>
-                    </Tooltip>
+                    <MetricItem
+                      label='TTFT'
+                      value={item.ttft || 0}
+                      unit='ms'
+                      color={getTtftColor(item.ttft, benchmarks.ttft)}
+                    />
                   </div>
                 </Card>
               );
