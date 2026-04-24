@@ -27,14 +27,11 @@ import {
   InputNumber,
   Row,
   Spin,
-  Progress,
   Descriptions,
   Tag,
   Popconfirm,
   RadioGroup,
   Radio,
-  Typography,
-  Select,
 } from '@douyinfe/semi-ui';
 import {
   compareObjects,
@@ -44,8 +41,6 @@ import {
   showWarning,
 } from '../../../helpers';
 import { useTranslation } from 'react-i18next';
-
-const { Text } = Typography;
 
 // 格式化字节大小
 function formatBytes(bytes, decimals = 2) {
@@ -74,13 +69,6 @@ export default function SettingsPerformance(props) {
     'performance_setting.monitor_cpu_threshold': 90,
     'performance_setting.monitor_memory_threshold': 90,
     'performance_setting.monitor_disk_threshold': 95,
-    'TpsBenchmark': 100,
-    'TtftBenchmark': 1000,
-    'SamplingPrompt': '',
-    'SamplingMaxTokens': 2048,
-    'SamplingIntervalMinutes': 30,
-    'SamplingStartTime': '00:00',
-    'SamplingEndTime': '23:59',
   });
   const refForm = useRef();
   const [inputsRow, setInputsRow] = useState(inputs);
@@ -88,71 +76,6 @@ export default function SettingsPerformance(props) {
   const [logCleanupMode, setLogCleanupMode] = useState('by_count');
   const [logCleanupValue, setLogCleanupValue] = useState(10);
   const [logCleanupLoading, setLogCleanupLoading] = useState(false);
-
-  // 采样任务状态
-  const [samplingStatus, setSamplingStatus] = useState(null);
-  const [refreshing, setRefreshing] = useState(false);
-  const pollingRef = useRef(null);
-
-  // 查询采样任务状态
-  const fetchSamplingStatus = async () => {
-    try {
-      const res = await API.get('/api/model-performance/sampling-status');
-      const { success, data } = res.data;
-      if (success) {
-        setSamplingStatus(data);
-        return data;
-      }
-    } catch (e) {
-      // ignore
-    }
-    return null;
-  };
-
-  // 立即执行采样
-  const handleRefreshSampling = async () => {
-    setRefreshing(true);
-    try {
-      const res = await API.post('/api/model-performance/refresh');
-      const { success, message } = res.data;
-      if (success) {
-        showSuccess(t(message || '采样任务已触发'));
-        const status = await fetchSamplingStatus();
-        if (status?.is_running) {
-          setSamplingStatus(status);
-        }
-      }
-    } catch (e) {
-      showError(e);
-    } finally {
-      setRefreshing(false);
-    }
-  };
-
-  // 轮询采样状态
-  useEffect(() => {
-    if (samplingStatus?.is_running) {
-      pollingRef.current = setInterval(() => {
-        fetchSamplingStatus().then((status) => {
-          if (!status?.is_running) {
-            clearInterval(pollingRef.current);
-            pollingRef.current = null;
-          }
-        });
-      }, 2000);
-    }
-    return () => {
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current);
-        pollingRef.current = null;
-      }
-    };
-  }, [samplingStatus?.is_running]);
-
-  // 组件挂载时查询一次采样状态
-  useEffect(() => {
-    fetchSamplingStatus();
-  }, []);
 
   function handleFieldChange(fieldName) {
     return (value) => {
@@ -468,214 +391,6 @@ export default function SettingsPerformance(props) {
                 />
               </Col>
             </Row>
-          </Form.Section>
-
-          <Form.Section text={t('采样基准设置')}>
-            <Banner
-              type='info'
-              description={t(
-                '调整 TPS 和 TTFT 的评分基准值。基准值越高，获得高分的难度越大。修改后立即影响所有历史数据的排名显示。',
-              )}
-              style={{ marginBottom: 16 }}
-            />
-            <Row gutter={16}>
-              <Col xs={24} sm={12} md={6} lg={6} xl={6}>
-                <Form.InputNumber
-                  field={'TpsBenchmark'}
-                  label={t('TPS 基准 (tokens/s)')}
-                  extraText={t('TPS 评分达到满分的标准值')}
-                  min={1}
-                  onChange={handleFieldChange('TpsBenchmark')}
-                />
-              </Col>
-              <Col xs={24} sm={12} md={6} lg={6} xl={6}>
-                <Form.InputNumber
-                  field={'TtftBenchmark'}
-                  label={t('TTFT 基准 (ms)')}
-                  extraText={t('TTFT 评分达到满分的标准值')}
-                  min={1}
-                  onChange={handleFieldChange('TtftBenchmark')}
-                />
-              </Col>
-            </Row>
-          </Form.Section>
-
-          <Form.Section text={t('采样配置')}>
-            <Banner
-              type='info'
-              description={t(
-                '配置模型性能采样时使用的 Prompt 和 Max Tokens。系统将使用此配置对测试渠道下的所有模型执行采样。',
-              )}
-              style={{ marginBottom: 16 }}
-            />
-            <Row gutter={16}>
-              <Col xs={24} sm={24} md={16} lg={16} xl={16}>
-                <Form.TextArea
-                  field={'SamplingPrompt'}
-                  label={t('采样 Prompt')}
-                  extraText={t('用于模型性能采样的 Prompt 内容')}
-                  rows={4}
-                  onChange={handleFieldChange('SamplingPrompt')}
-                />
-              </Col>
-              <Col xs={24} sm={12} md={8} lg={8} xl={8}>
-                <Form.InputNumber
-                  field={'SamplingMaxTokens'}
-                  label={t('Max Tokens')}
-                  extraText={t('采样请求的最大输出 Token 数')}
-                  min={1}
-                  max={8192}
-                  onChange={handleFieldChange('SamplingMaxTokens')}
-                />
-              </Col>
-            </Row>
-          </Form.Section>
-
-          <Form.Section text={t('定时采样')}>
-            <Banner
-              type='info'
-              description={t(
-                '设置定时自动采样的时间段和间隔。间隔设为 0 表示关闭定时采样。管理员也可以点击「立即执行采样」手动触发。',
-              )}
-              style={{ marginBottom: 16 }}
-            />
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                flexWrap: 'wrap',
-                gap: '8px 12px',
-                marginBottom: 16,
-                padding: '12px 16px',
-                background: 'var(--semi-color-fill-0)',
-                borderRadius: 8,
-              }}
-            >
-              <Text>{t('每天')}</Text>
-              <Select
-                value={inputs.SamplingStartTime}
-                onChange={(value) => {
-                  setInputs((prev) => ({
-                    ...prev,
-                    SamplingStartTime: value,
-                  }));
-                }}
-                style={{ width: 90 }}
-                size='small'
-              >
-                {Array.from({ length: 24 }, (_, h) =>
-                  [0, 30].map((m) => {
-                    const time = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-                    return (
-                      <Select.Option key={time} value={time}>
-                        {time}
-                      </Select.Option>
-                    );
-                  }),
-                ).flat()}
-              </Select>
-              <Text>{t('到')}</Text>
-              <Select
-                value={inputs.SamplingEndTime}
-                onChange={(value) => {
-                  setInputs((prev) => ({
-                    ...prev,
-                    SamplingEndTime: value,
-                  }));
-                }}
-                style={{ width: 90 }}
-                size='small'
-              >
-                {Array.from({ length: 24 }, (_, h) =>
-                  [0, 30].map((m) => {
-                    const time = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-                    return (
-                      <Select.Option key={time} value={time}>
-                        {time}
-                      </Select.Option>
-                    );
-                  }),
-                ).flat()}
-              </Select>
-              <Text>{t('，每隔')}</Text>
-              <InputNumber
-                value={inputs.SamplingIntervalMinutes}
-                onChange={(value) => {
-                  setInputs((prev) => ({
-                    ...prev,
-                    SamplingIntervalMinutes: value,
-                  }));
-                }}
-                min={0}
-                max={1440}
-                style={{ width: 80 }}
-                size='small'
-              />
-              <Text>{t('分钟执行一次')}</Text>
-              {inputs.SamplingIntervalMinutes === 0 && (
-                <Tag color='red' size='small'>
-                  {t('已关闭')}
-                </Tag>
-              )}
-              {inputs.SamplingIntervalMinutes > 0 && (
-                <Tag color='green' size='small'>
-                  {inputs.SamplingStartTime} - {inputs.SamplingEndTime} /{' '}
-                  {inputs.SamplingIntervalMinutes}
-                  {t('分钟')}
-                </Tag>
-              )}
-            </div>
-            <Row style={{ marginBottom: 12 }}>
-              <Button
-                theme='solid'
-                loading={refreshing}
-                onClick={handleRefreshSampling}
-              >
-                {t('立即执行采样')}
-              </Button>
-            </Row>
-
-            {/* 采样进度卡片 */}
-            {samplingStatus?.is_running && (
-              <Card
-                style={{
-                  marginTop: 12,
-                  background: 'var(--semi-color-warning-light-default)',
-                  border: '1px solid var(--semi-color-warning-light-hover)',
-                }}
-                bodyStyle={{ padding: '12px 16px' }}
-              >
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <Spin size='small' />
-                    <Text strong size='small'>
-                      {t('正在采样')}… {samplingStatus.done_tasks || 0} / {samplingStatus.total_tasks || 0}
-                    </Text>
-                    <Text type='tertiary' size='small'>
-                      ({t('成功')} {samplingStatus.success_tasks || 0} / {t('失败')} {samplingStatus.failed_tasks || 0})
-                    </Text>
-                  </div>
-                  {samplingStatus.total_tasks > 0 && (
-                    <Progress
-                      percent={Math.round(((samplingStatus.done_tasks || 0) / samplingStatus.total_tasks) * 100)}
-                      showInfo
-                      size='small'
-                      stroke='var(--semi-color-warning)'
-                    />
-                  )}
-                  {samplingStatus.message && (
-                    <Text type='tertiary' size='small'>
-                      {samplingStatus.message}
-                    </Text>
-                  )}
-                  {samplingStatus.current_channel && samplingStatus.current_model && (
-                    <Text type='tertiary' size='small'>
-                      {t('当前')}：{samplingStatus.current_channel} / {samplingStatus.current_model}
-                    </Text>
-                  )}
-                </div>
-              </Card>
-            )}
           </Form.Section>
 
           <Row>

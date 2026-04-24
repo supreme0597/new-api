@@ -26,6 +26,7 @@ import SettingGeminiModel from '../../pages/Setting/Model/SettingGeminiModel';
 import SettingClaudeModel from '../../pages/Setting/Model/SettingClaudeModel';
 import SettingGlobalModel from '../../pages/Setting/Model/SettingGlobalModel';
 import SettingGrokModel from '../../pages/Setting/Model/SettingGrokModel';
+import SettingModelSampling from '../../pages/Setting/Model/SettingModelSampling';
 import SettingsChannelAffinity from '../../pages/Setting/Operation/SettingsChannelAffinity';
 
 const ModelSetting = () => {
@@ -109,6 +110,10 @@ const ModelSetting = () => {
   return (
     <>
       <Spin spinning={loading} size='large'>
+        {/* 模型性能采样 */}
+        <Card style={{ marginTop: '10px' }}>
+          <SettingModelSampling options={inputs} refresh={onRefresh} />
+        </Card>
         {/* OpenAI */}
         <Card style={{ marginTop: '10px' }}>
           <SettingGlobalModel options={inputs} refresh={onRefresh} />

@@ -399,16 +399,6 @@ const ModelPerformance = () => {
             <Tag size='small' color='red'>{t('较差')} &gt;{(benchmarks.ttft * 0.8).toFixed(0)} ms</Tag>
           </div>
 
-          {/* 排名徽章说明 */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <Text type='secondary' size='small'>
-              {t('排名徽章')}：
-            </Text>
-            <RankBadge rank={1} />
-            <RankBadge rank={2} />
-            <RankBadge rank={3} />
-            <RankBadge rank={4} />
-          </div>
         </div>
       </Card>
 
