@@ -380,16 +380,33 @@ const ModelPerformance = () => {
             </Text>
           </div>
 
+          {/* 分项计算公式 */}
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 4,
+              paddingLeft: 24,
+            }}
+          >
+            <Text type='tertiary' size='small'>
+              {t('TPS评分 = min(实际TPS / {tps基准}, 1) × 100，满分100',{ 'tps基准': benchmarks.tps })}
+            </Text>
+            <Text type='tertiary' size='small'>
+              {t('TTFT评分 = max(0, (1 - 实际TTFT / {ttft基准})) × 100，满分100',{ 'ttft基准': benchmarks.ttft })}
+            </Text>
+          </div>
+
           {/* 颜色含义 */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <Text type='secondary' size='small'>
               {t('颜色含义')}：
             </Text>
-            <Tag size='small' color='green'>{t('优秀')}</Tag>
-            <Tag size='small' color='blue'>{t('良好')}</Tag>
-            <Tag size='small' color='orange'>{t('一般')}</Tag>
-            <Tag size='small' color='red'>{t('较差')}</Tag>
-            <Tag size='small' color='grey'>{t('很差')}</Tag>
+            <Tag size='small' color='green'>{t('优秀')} ≥80</Tag>
+            <Tag size='small' color='blue'>{t('良好')} ≥60</Tag>
+            <Tag size='small' color='orange'>{t('一般')} ≥40</Tag>
+            <Tag size='small' color='red'>{t('较差')} ≥20</Tag>
+            <Tag size='small' color='grey'>{t('很差')} &lt;20</Tag>
           </div>
 
           {/* TPS 阈值 */}

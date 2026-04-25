@@ -1,11 +1,14 @@
 package model
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"gorm.io/gorm"
 )
 
 // ModelPerformance 记录模型响应性能数据
@@ -22,6 +25,9 @@ type ModelPerformance struct {
 func (ModelPerformance) TableName() string {
 	return "model_performances"
 }
+
+// modelPerformanceUpsertMutex 防止并发采样时 UpsertModelPerformance 的读-写竞争
+var modelPerformanceUpsertMutex sync.Mutex
 
 // GetModelPerformanceList 获取排行榜数据
 func GetModelPerformanceList(source string, page int, pageSize int) ([]*ModelPerformanceItem, int64, error) {
@@ -45,8 +51,8 @@ func GetModelPerformanceList(source string, page int, pageSize int) ([]*ModelPer
 	// 查询所有数据（在内存中按综合评分排序后再分页）
 	var results []struct {
 		ModelPerformance
-		ChannelName string `gorm:"column:name"`
-		Source      string `gorm:"column:source"`
+		ChannelName *string `gorm:"column:name"`
+		Source      *string `gorm:"column:source"`
 	}
 
 	err := query.
@@ -68,17 +74,26 @@ func GetModelPerformanceList(source string, page int, pageSize int) ([]*ModelPer
 		ttftScore := calcTtftScore(r.Ttft)
 		score := tpsScore*0.6 + ttftScore*0.4
 
+		channelName := ""
+		if r.ChannelName != nil {
+			channelName = *r.ChannelName
+		}
+		source := ""
+		if r.Source != nil {
+			source = *r.Source
+		}
+
 		scoredItems = append(scoredItems, scoredItem{
 			item: &ModelPerformanceItem{
 				Model:       r.Model,
-				Source:      r.Source,
+				Source:      source,
 				Tps:         r.Tps,
 				Ttft:        r.Ttft,
 				Score:       score,
 				SampleSize:  r.SampleSize,
 				UpdatedAt:   r.UpdatedAt,
 				ChannelId:   r.ChannelId,
-				ChannelName: r.ChannelName,
+				ChannelName: channelName,
 			},
 			score: score,
 		})
@@ -170,6 +185,10 @@ func GetBenchmarkSettings() (tpsBenchmark, ttftBenchmark float64) {
 
 // UpsertModelPerformance 插入或更新性能数据（使用最新值策略）
 func UpsertModelPerformance(channelId int, model string, tps float64, ttft int) error {
+	// 串行化 upsert，避免并发采样的读-写竞争导致重复插入
+	modelPerformanceUpsertMutex.Lock()
+	defer modelPerformanceUpsertMutex.Unlock()
+
 	var existing ModelPerformance
 	err := DB.Where("channel_id = ? AND model = ?", channelId, model).First(&existing).Error
 
@@ -224,5 +243,5 @@ func GetLastSamplingTime() string {
 
 // isRecordNotFoundError 判断是否为记录不存在错误
 func isRecordNotFoundError(err error) bool {
-	return err != nil && err.Error() == "record not found"
+	return err != nil && errors.Is(err, gorm.ErrRecordNotFound)
 }

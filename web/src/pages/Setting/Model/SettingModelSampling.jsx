@@ -501,13 +501,9 @@ export default function SettingModelSampling(props) {
                     {samplingStatus.message}
                   </Text>
                 )}
-                {samplingStatus.current_channel &&
-                  samplingStatus.current_model && (
-                    <Text type='tertiary' size='small'>
-                      {t('当前')}：{samplingStatus.current_channel} /{' '}
-                      {samplingStatus.current_model}
-                    </Text>
-                  )}
+                <Text type='tertiary' size='small'>
+                  {t('当前')}：{t('多个渠道并行采样中')}
+                </Text>
               </div>
             </Card>
           )}

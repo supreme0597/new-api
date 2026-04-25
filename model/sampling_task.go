@@ -179,100 +179,127 @@ func RunSamplingTask() error {
 
 	common.SysLog(fmt.Sprintf("[Sampling] 总计需要采样 %d 个模型", totalTasks))
 
-	// 遍历每个渠道的每个模型进行测试
-	doneTasks := 0
-	successTasks := 0
-	failedTasks := 0
-
 	config := &SamplingConfig{
 		Prompt:    prompt,
 		MaxTokens: maxTokens,
 	}
 
+	// 并发控制：渠道维度并行，渠道内串行
+	doneAtomic := atomic.Int32{}
+	successAtomic := atomic.Int32{}
+	failedAtomic := atomic.Int32{}
+	var resultMutex sync.Mutex
+	var wg sync.WaitGroup
+
 	for _, channel := range channels {
-		models := channel.GetModels()
-		interval := getChannelSamplingInterval(channel)
-		channelName := channel.Name
-		if channelName == "" {
-			channelName = fmt.Sprintf("渠道 #%d", channel.Id)
-		}
+		wg.Add(1)
+		go func(ch *Channel) {
+			defer wg.Done()
 
-		common.SysLog(fmt.Sprintf("[Sampling] 开始采样渠道: %s (ID=%d), 模型数=%d", channelName, channel.Id, len(models)))
-
-		for i, modelName := range models {
-			if modelName == "" {
-				continue
+			models := ch.GetModels()
+			interval := getChannelSamplingInterval(ch)
+			channelName := ch.Name
+			if channelName == "" {
+				channelName = fmt.Sprintf("渠道 #%d", ch.Id)
 			}
 
-			// 检查是否请求停止
-			if samplingStopFlag.Load() {
-				common.SysLog("[Sampling] 收到停止请求，中断采样任务")
-				updateSamplingTaskProgress(doneTasks, successTasks, failedTasks, channelName, modelName, "采样任务已停止")
-				return nil
-			}
+			common.SysLog(fmt.Sprintf("[Sampling] 开始采样渠道: %s (ID=%d), 模型数=%d", channelName, ch.Id, len(models)))
 
-			doneTasks++
-			updateSamplingTaskProgress(doneTasks, successTasks, failedTasks, channelName, modelName,
-				fmt.Sprintf("正在采样: %s / %s (%d/%d)", channelName, modelName, doneTasks, totalTasks))
+			for i, modelName := range models {
+				if modelName == "" {
+					continue
+				}
 
-			common.SysLog(fmt.Sprintf("[Sampling] [%d/%d] 采样渠道=%s, 模型=%s", doneTasks, totalTasks, channelName, modelName))
+				// 检查是否请求停止
+				if samplingStopFlag.Load() {
+					common.SysLog(fmt.Sprintf("[Sampling] 渠道 %s 收到停止请求，中断", channelName))
+					return
+				}
 
-			// 模型间间隔（第一个模型不需要等待）
-			if i > 0 && interval > 0 {
-				time.Sleep(time.Duration(interval) * time.Second)
-			}
+				// 模型间间隔（第一个模型不需要等待）
+				if i > 0 && interval > 0 {
+					time.Sleep(time.Duration(interval) * time.Second)
+				}
 
-			// 检查是否请求停止
-			if samplingStopFlag.Load() {
-				common.SysLog("[Sampling] 收到停止请求，中断采样任务")
-				updateSamplingTaskProgress(doneTasks, successTasks, failedTasks, channelName, modelName, "采样任务已停止")
-				return nil
-			}
+				// 检查是否请求停止
+				if samplingStopFlag.Load() {
+					common.SysLog(fmt.Sprintf("[Sampling] 渠道 %s 收到停止请求，中断", channelName))
+					return
+				}
 
-			tps, ttft, err := sampleModelPerformance(channel, modelName, config)
-			if err != nil {
-				failedTasks++
+				currentDone := int(doneAtomic.Add(1))
+				currentSuccess := int(successAtomic.Load())
+				currentFailed := int(failedAtomic.Load())
+
+				updateSamplingTaskProgress(currentDone, currentSuccess, currentFailed, channelName, modelName,
+					fmt.Sprintf("正在采样: %s / %s (%d/%d)", channelName, modelName, currentDone, totalTasks))
+
+				common.SysLog(fmt.Sprintf("[Sampling] [%d/%d] 采样渠道=%s, 模型=%s", currentDone, totalTasks, channelName, modelName))
+
+				tps, ttft, err := sampleModelPerformance(ch, modelName, config)
+				if err != nil {
+					failedAtomic.Add(1)
+					record := SamplingRecord{
+						Channel: channelName,
+						Model:   modelName,
+						Success: false,
+						Message: err.Error(),
+					}
+					resultMutex.Lock()
+					lastResult.FailedList = append(lastResult.FailedList, record)
+					resultMutex.Unlock()
+
+					// 记录到使用日志
+					RecordSamplingLog(ch.Id, channelName, modelName, 0, 0, 0, false, err.Error())
+
+					if errors.Is(err, ErrSamplingForbidden) {
+						common.SysLog(fmt.Sprintf("[Sampling] 渠道 %s 被限流/禁止访问，跳过该渠道剩余模型", channelName))
+						updateSamplingTaskProgress(currentDone, int(successAtomic.Load()), int(failedAtomic.Load()), channelName, modelName,
+							fmt.Sprintf("渠道 %s 被限流，跳过剩余模型", channelName))
+						return // 跳过该渠道剩余模型
+					}
+					common.SysLog(fmt.Sprintf("[Sampling] 采样失败: 渠道=%s, 模型=%s, 错误=%v", channelName, modelName, err))
+					updateSamplingTaskProgress(currentDone, int(successAtomic.Load()), int(failedAtomic.Load()), channelName, modelName,
+						fmt.Sprintf("采样失败: %s / %s", channelName, modelName))
+					continue
+				}
+
+				successAtomic.Add(1)
 				record := SamplingRecord{
 					Channel: channelName,
 					Model:   modelName,
-					Success: false,
-					Message: err.Error(),
+					Success: true,
+					Message: fmt.Sprintf("TPS=%.1f, TTFT=%dms", tps, ttft),
 				}
-				lastResult.FailedList = append(lastResult.FailedList, record)
+				resultMutex.Lock()
+				lastResult.SuccessList = append(lastResult.SuccessList, record)
+				resultMutex.Unlock()
 
-				if errors.Is(err, ErrSamplingForbidden) {
-					common.SysLog(fmt.Sprintf("[Sampling] 渠道 %s 被限流/禁止访问，跳过该渠道剩余模型", channelName))
-					updateSamplingTaskProgress(doneTasks, successTasks, failedTasks, channelName, modelName,
-						fmt.Sprintf("渠道 %s 被限流，跳过剩余模型", channelName))
-					break // 跳过该渠道剩余模型
+				common.SysLog(fmt.Sprintf("[Sampling] 采样成功: 渠道=%s, 模型=%s, TPS=%.1f, TTFT=%dms", channelName, modelName, tps, ttft))
+
+				// 记录到使用日志
+				RecordSamplingLog(ch.Id, channelName, modelName, tps, ttft, ttft, true,
+					fmt.Sprintf("采样成功 TPS=%.1f TTFT=%dms", tps, ttft))
+
+				if err := UpsertModelPerformance(ch.Id, modelName, tps, ttft); err != nil {
+					common.SysError(fmt.Sprintf("[Sampling] 保存性能数据失败: 渠道=%s, 模型=%s, 错误=%v", channelName, modelName, err))
+					updateSamplingTaskProgress(currentDone, int(successAtomic.Load()), int(failedAtomic.Load()), channelName, modelName,
+						fmt.Sprintf("保存数据失败: %s / %s", channelName, modelName))
+				} else {
+					updateSamplingTaskProgress(currentDone, int(successAtomic.Load()), int(failedAtomic.Load()), channelName, modelName,
+						fmt.Sprintf("完成: %s / %s (TPS=%.1f, TTFT=%dms)", channelName, modelName, tps, ttft))
 				}
-				common.SysLog(fmt.Sprintf("[Sampling] 采样失败: 渠道=%s, 模型=%s, 错误=%v", channelName, modelName, err))
-				updateSamplingTaskProgress(doneTasks, successTasks, failedTasks, channelName, modelName,
-					fmt.Sprintf("采样失败: %s / %s", channelName, modelName))
-				continue
 			}
 
-			successTasks++
-			record := SamplingRecord{
-				Channel: channelName,
-				Model:   modelName,
-				Success: true,
-				Message: fmt.Sprintf("TPS=%.1f, TTFT=%dms", tps, ttft),
-			}
-			lastResult.SuccessList = append(lastResult.SuccessList, record)
-
-			common.SysLog(fmt.Sprintf("[Sampling] 采样成功: 渠道=%s, 模型=%s, TPS=%.1f, TTFT=%dms", channelName, modelName, tps, ttft))
-
-			if err := UpsertModelPerformance(channel.Id, modelName, tps, ttft); err != nil {
-				common.SysError(fmt.Sprintf("[Sampling] 保存性能数据失败: 渠道=%s, 模型=%s, 错误=%v", channelName, modelName, err))
-				updateSamplingTaskProgress(doneTasks, successTasks, failedTasks, channelName, modelName,
-					fmt.Sprintf("保存数据失败: %s / %s", channelName, modelName))
-			} else {
-				updateSamplingTaskProgress(doneTasks, successTasks, failedTasks, channelName, modelName,
-					fmt.Sprintf("完成: %s / %s (TPS=%.1f, TTFT=%dms)", channelName, modelName, tps, ttft))
-			}
-		}
+			common.SysLog(fmt.Sprintf("[Sampling] 渠道 %s 采样完成", channelName))
+		}(channel)
 	}
+
+	wg.Wait()
+
+	doneTasks := int(doneAtomic.Load())
+	successTasks := int(successAtomic.Load())
+	failedTasks := int(failedAtomic.Load())
 
 	common.SysLog(fmt.Sprintf("[Sampling] 采样任务完成，总计=%d, 成功=%d, 失败=%d", totalTasks, successTasks, failedTasks))
 	updateSamplingTaskProgress(doneTasks, successTasks, failedTasks, "", "",
@@ -291,8 +318,11 @@ func getChannelSamplingInterval(channel *Channel) int {
 
 // sampleModelPerformance 对单个模型执行采样，返回 TPS 和 TTFT
 func sampleModelPerformance(channel *Channel, modelName string, config *SamplingConfig) (tps float64, ttft int, err error) {
+	logPrefix := fmt.Sprintf("[Sampling][渠道=%s,模型=%s]", channel.Name, modelName)
+
 	baseURL := channel.GetBaseURL()
 	if baseURL == "" {
+		common.SysError(fmt.Sprintf("%s 渠道 %d 没有 base URL", logPrefix, channel.Id))
 		return 0, 0, fmt.Errorf("channel %d has no base URL", channel.Id)
 	}
 
@@ -308,12 +338,14 @@ func sampleModelPerformance(channel *Channel, modelName string, config *Sampling
 
 	req, err := http.NewRequest("POST", url, strings.NewReader(requestBody))
 	if err != nil {
+		common.SysError(fmt.Sprintf("%s 创建请求失败: %v", logPrefix, err))
 		return 0, 0, fmt.Errorf("create request failed: %w", err)
 	}
 
 	// 设置请求头
 	keys := channel.GetKeys()
 	if len(keys) == 0 {
+		common.SysError(fmt.Sprintf("%s 渠道 %d 没有密钥", logPrefix, channel.Id))
 		return 0, 0, fmt.Errorf("channel %d has no keys", channel.Id)
 	}
 	req.Header.Set("Content-Type", "application/json")
@@ -325,15 +357,22 @@ func sampleModelPerformance(channel *Channel, modelName string, config *Sampling
 
 	// 记录开始时间
 	startTime := time.Now()
+	common.SysLog(fmt.Sprintf("%s 开始请求 URL=%s, PromptLen=%d, MaxTokens=%d", logPrefix, url, len(config.Prompt), config.MaxTokens))
 
 	resp, err := client.Do(req)
 	if err != nil {
+		common.SysError(fmt.Sprintf("%s HTTP 请求失败: %v", logPrefix, err))
 		return 0, 0, fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
+		bodyStr := string(body)
+		if len(bodyStr) > 500 {
+			bodyStr = bodyStr[:500] + "..."
+		}
+		common.SysError(fmt.Sprintf("%s 响应异常: status=%d, body=%s", logPrefix, resp.StatusCode, bodyStr))
 		// 429/401/403 表示被限流或禁止访问，触发熔断跳过该渠道剩余模型
 		if resp.StatusCode == http.StatusTooManyRequests ||
 			resp.StatusCode == http.StatusUnauthorized ||
@@ -345,6 +384,7 @@ func sampleModelPerformance(channel *Channel, modelName string, config *Sampling
 
 	// 计算 TTFT（首次响应时间）
 	ttftMs := int(time.Since(startTime).Milliseconds())
+	common.SysLog(fmt.Sprintf("%s 首字节到达: TTFT=%dms", logPrefix, ttftMs))
 
 	// 读取流式响应并计算 TPS
 	totalTokens := 0
@@ -361,6 +401,7 @@ func sampleModelPerformance(channel *Channel, modelName string, config *Sampling
 			break
 		}
 		if readErr != nil {
+			common.SysError(fmt.Sprintf("%s 读取响应流出错: %v", logPrefix, readErr))
 			break
 		}
 	}
@@ -370,6 +411,7 @@ func sampleModelPerformance(channel *Channel, modelName string, config *Sampling
 		tps = float64(totalTokens) / elapsed
 	}
 
+	common.SysLog(fmt.Sprintf("%s 采样完成: elapsed=%.2fs, tokens=%d, TPS=%.1f", logPrefix, elapsed, totalTokens, tps))
 	return tps, ttftMs, nil
 }
 

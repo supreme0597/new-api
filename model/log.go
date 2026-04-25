@@ -295,6 +295,35 @@ func RecordTaskBillingLog(params RecordTaskBillingLogParams) {
 	}
 }
 
+// RecordSamplingLog 记录测试渠道采样请求到使用日志
+func RecordSamplingLog(channelId int, channelName string, modelName string, tps float64, ttft int, useTimeMs int, success bool, message string) {
+	if !common.LogConsumeEnabled {
+		return
+	}
+	other := map[string]interface{}{
+		"tps":          tps,
+		"ttft":         ttft,
+		"success":      success,
+		"channel_name": channelName,
+		"is_sampling":  true,
+	}
+	log := &Log{
+		UserId:    0,
+		Username:  "system",
+		CreatedAt: common.GetTimestamp(),
+		Type:      LogTypeConsume,
+		Content:   message,
+		ModelName: modelName,
+		Quota:     0,
+		ChannelId: channelId,
+		UseTime:   useTimeMs,
+		Other:     common.MapToJsonStr(other),
+	}
+	if err := LOG_DB.Create(log).Error; err != nil {
+		common.SysError("failed to record sampling log: " + err.Error())
+	}
+}
+
 func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, startIdx int, num int, channel int, group string, requestId string) (logs []*Log, total int64, err error) {
 	var tx *gorm.DB
 	if logType == LogTypeUnknown {
