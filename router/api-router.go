@@ -274,6 +274,17 @@ func SetApiRouter(router gin.IRouter) {
 			modelPerformanceAdminRoute.POST("/stop", controller.StopSamplingTask)
 		}
 
+		// 渠道来源分析（仅管理员）
+		channelAnalyticsRoute := apiRouter.Group("/channel-analytics")
+		channelAnalyticsRoute.Use(middleware.AdminAuth())
+		{
+			channelAnalyticsRoute.GET("/overview", controller.GetChannelAnalyticsOverview)
+			channelAnalyticsRoute.GET("/sources", controller.GetChannelAnalyticsSources)
+			channelAnalyticsRoute.GET("/trend", controller.GetChannelAnalyticsTrend)
+			channelAnalyticsRoute.GET("/source/:source", controller.GetChannelAnalyticsSourceDetail)
+			channelAnalyticsRoute.GET("/source/:source/users", controller.GetChannelAnalyticsUserRanking)
+		}
+
 		// 渠道来源映射管理（仅超级管理员）
 		channelSourceMappingRoute := apiRouter.Group("/channel-source-mapping")
 		channelSourceMappingRoute.Use(middleware.RootAuth())

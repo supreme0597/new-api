@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { API, isAdmin, showError, timestamp2string } from '../../helpers';
 import { getDefaultTime, getInitialTimestamp } from '../../helpers/dashboard';
@@ -29,6 +29,7 @@ import { useMinimumLoadingTime } from '../common/useMinimumLoadingTime';
 export const useDashboardData = (userState, userDispatch, statusState) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const isMobile = useIsMobile();
   const initialized = useRef(false);
 
@@ -39,8 +40,9 @@ export const useDashboardData = (userState, userDispatch, statusState) => {
   const showLoading = useMinimumLoadingTime(loading);
 
   // ========== 输入状态 ==========
+  const urlUsername = searchParams.get('username') || '';
   const [inputs, setInputs] = useState({
-    username: '',
+    username: urlUsername,
     token_name: '',
     model_name: '',
     start_timestamp: getInitialTimestamp(),

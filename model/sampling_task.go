@@ -36,19 +36,31 @@ type LastSamplingResult struct {
 	FailedList  []SamplingRecord `json:"failed_list"`
 }
 
+// ChannelSamplingStatus 单个渠道的采样状态
+type ChannelSamplingStatus struct {
+	ChannelId    int    `json:"channel_id"`
+	ChannelName  string `json:"channel_name"`
+	TotalTasks   int    `json:"total_tasks"`
+	DoneTasks    int    `json:"done_tasks"`
+	SuccessTasks int    `json:"success_tasks"`
+	FailedTasks  int    `json:"failed_tasks"`
+	Message      string `json:"message"`
+}
+
 // SamplingTaskStatus 采样任务执行状态
 type SamplingTaskStatus struct {
-	IsRunning      bool                `json:"is_running"`
-	TotalTasks     int                 `json:"total_tasks"`
-	DoneTasks      int                 `json:"done_tasks"`
-	SuccessTasks   int                 `json:"success_tasks"`
-	FailedTasks    int                 `json:"failed_tasks"`
-	CurrentChannel string              `json:"current_channel"`
-	CurrentModel   string              `json:"current_model"`
-	Message        string              `json:"message"`
-	UpdatedAt      int64               `json:"updated_at"`
-	StopRequested  bool                `json:"stop_requested"`
-	LastResult     *LastSamplingResult `json:"last_result"`
+	IsRunning      bool                     `json:"is_running"`
+	TotalTasks     int                      `json:"total_tasks"`
+	DoneTasks      int                      `json:"done_tasks"`
+	SuccessTasks   int                      `json:"success_tasks"`
+	FailedTasks    int                      `json:"failed_tasks"`
+	CurrentChannel string                   `json:"current_channel"`
+	CurrentModel   string                   `json:"current_model"`
+	Message        string                   `json:"message"`
+	UpdatedAt      int64                    `json:"updated_at"`
+	StopRequested  bool                     `json:"stop_requested"`
+	LastResult     *LastSamplingResult      `json:"last_result"`
+	Channels       []*ChannelSamplingStatus `json:"channels"`
 }
 
 var (
@@ -82,6 +94,23 @@ func updateSamplingTaskProgress(done, success, failed int, channel, model, messa
 	samplingTaskStatus.UpdatedAt = common.GetTimestamp()
 }
 
+func updateChannelSamplingProgress(channelId int, channelName string, done, success, failed, total int, message string) {
+	samplingTaskMutex.Lock()
+	defer samplingTaskMutex.Unlock()
+	for _, ch := range samplingTaskStatus.Channels {
+		if ch.ChannelId == channelId {
+			ch.ChannelName = channelName
+			ch.DoneTasks = done
+			ch.SuccessTasks = success
+			ch.FailedTasks = failed
+			ch.TotalTasks = total
+			ch.Message = message
+			break
+		}
+	}
+	samplingTaskStatus.UpdatedAt = common.GetTimestamp()
+}
+
 // RunSamplingTask 执行采样任务
 // 遍历所有测试渠道，对每个模型执行采样
 func RunSamplingTask() error {
@@ -100,6 +129,7 @@ func RunSamplingTask() error {
 	samplingTaskStatus.Message = "正在准备采样任务..."
 	samplingTaskStatus.UpdatedAt = common.GetTimestamp()
 	samplingTaskStatus.StopRequested = false
+	samplingTaskStatus.Channels = make([]*ChannelSamplingStatus, 0)
 	samplingTaskMutex.Unlock()
 
 	samplingStopFlag.Store(false)
@@ -163,18 +193,33 @@ func RunSamplingTask() error {
 
 	common.SysLog(fmt.Sprintf("[Sampling] 使用采样 Prompt (长度=%d), MaxTokens=%d", len(prompt), maxTokens))
 
-	// 计算总任务数
+	// 计算总任务数，并初始化渠道状态
 	totalTasks := 0
+	channelStatuses := make(map[int]*ChannelSamplingStatus)
 	for _, channel := range channels {
+		chTotal := 0
 		for _, modelName := range channel.GetModels() {
 			if modelName != "" {
+				chTotal++
 				totalTasks++
 			}
+		}
+		channelName := channel.Name
+		if channelName == "" {
+			channelName = fmt.Sprintf("渠道 #%d", channel.Id)
+		}
+		channelStatuses[channel.Id] = &ChannelSamplingStatus{
+			ChannelId:   channel.Id,
+			ChannelName: channelName,
+			TotalTasks:  chTotal,
 		}
 	}
 
 	samplingTaskMutex.Lock()
 	samplingTaskStatus.TotalTasks = totalTasks
+	for _, chStatus := range channelStatuses {
+		samplingTaskStatus.Channels = append(samplingTaskStatus.Channels, chStatus)
+	}
 	samplingTaskMutex.Unlock()
 
 	common.SysLog(fmt.Sprintf("[Sampling] 总计需要采样 %d 个模型", totalTasks))
@@ -203,6 +248,12 @@ func RunSamplingTask() error {
 				channelName = fmt.Sprintf("渠道 #%d", ch.Id)
 			}
 
+			// 渠道级计数器
+			chDone := 0
+			chSuccess := 0
+			chFailed := 0
+			chTotal := channelStatuses[ch.Id].TotalTasks
+
 			common.SysLog(fmt.Sprintf("[Sampling] 开始采样渠道: %s (ID=%d), 模型数=%d", channelName, ch.Id, len(models)))
 
 			for i, modelName := range models {
@@ -230,15 +281,19 @@ func RunSamplingTask() error {
 				currentDone := int(doneAtomic.Add(1))
 				currentSuccess := int(successAtomic.Load())
 				currentFailed := int(failedAtomic.Load())
+				chDone++
 
 				updateSamplingTaskProgress(currentDone, currentSuccess, currentFailed, channelName, modelName,
 					fmt.Sprintf("正在采样: %s / %s (%d/%d)", channelName, modelName, currentDone, totalTasks))
+				updateChannelSamplingProgress(ch.Id, channelName, chDone, chSuccess, chFailed, chTotal,
+					fmt.Sprintf("正在采样: %s", modelName))
 
 				common.SysLog(fmt.Sprintf("[Sampling] [%d/%d] 采样渠道=%s, 模型=%s", currentDone, totalTasks, channelName, modelName))
 
 				tps, ttft, err := sampleModelPerformance(ch, modelName, config)
 				if err != nil {
 					failedAtomic.Add(1)
+					chFailed++
 					record := SamplingRecord{
 						Channel: channelName,
 						Model:   modelName,
@@ -254,17 +309,21 @@ func RunSamplingTask() error {
 
 					if errors.Is(err, ErrSamplingForbidden) {
 						common.SysLog(fmt.Sprintf("[Sampling] 渠道 %s 被限流/禁止访问，跳过该渠道剩余模型", channelName))
-						updateSamplingTaskProgress(currentDone, int(successAtomic.Load()), int(failedAtomic.Load()), channelName, modelName,
+						updateSamplingTaskProgress(int(doneAtomic.Load()), int(successAtomic.Load()), int(failedAtomic.Load()), channelName, modelName,
 							fmt.Sprintf("渠道 %s 被限流，跳过剩余模型", channelName))
+						updateChannelSamplingProgress(ch.Id, channelName, chDone, chSuccess, chFailed, chTotal, "被限流，跳过剩余模型")
 						return // 跳过该渠道剩余模型
 					}
 					common.SysLog(fmt.Sprintf("[Sampling] 采样失败: 渠道=%s, 模型=%s, 错误=%v", channelName, modelName, err))
-					updateSamplingTaskProgress(currentDone, int(successAtomic.Load()), int(failedAtomic.Load()), channelName, modelName,
+					updateSamplingTaskProgress(int(doneAtomic.Load()), int(successAtomic.Load()), int(failedAtomic.Load()), channelName, modelName,
 						fmt.Sprintf("采样失败: %s / %s", channelName, modelName))
+					updateChannelSamplingProgress(ch.Id, channelName, chDone, chSuccess, chFailed, chTotal,
+						fmt.Sprintf("失败: %s", modelName))
 					continue
 				}
 
 				successAtomic.Add(1)
+				chSuccess++
 				record := SamplingRecord{
 					Channel: channelName,
 					Model:   modelName,
@@ -283,15 +342,20 @@ func RunSamplingTask() error {
 
 				if err := UpsertModelPerformance(ch.Id, modelName, tps, ttft); err != nil {
 					common.SysError(fmt.Sprintf("[Sampling] 保存性能数据失败: 渠道=%s, 模型=%s, 错误=%v", channelName, modelName, err))
-					updateSamplingTaskProgress(currentDone, int(successAtomic.Load()), int(failedAtomic.Load()), channelName, modelName,
+					updateSamplingTaskProgress(int(doneAtomic.Load()), int(successAtomic.Load()), int(failedAtomic.Load()), channelName, modelName,
 						fmt.Sprintf("保存数据失败: %s / %s", channelName, modelName))
+					updateChannelSamplingProgress(ch.Id, channelName, chDone, chSuccess, chFailed, chTotal,
+						fmt.Sprintf("保存失败: %s", modelName))
 				} else {
-					updateSamplingTaskProgress(currentDone, int(successAtomic.Load()), int(failedAtomic.Load()), channelName, modelName,
+					updateSamplingTaskProgress(int(doneAtomic.Load()), int(successAtomic.Load()), int(failedAtomic.Load()), channelName, modelName,
 						fmt.Sprintf("完成: %s / %s (TPS=%.1f, TTFT=%dms)", channelName, modelName, tps, ttft))
+					updateChannelSamplingProgress(ch.Id, channelName, chDone, chSuccess, chFailed, chTotal,
+						fmt.Sprintf("完成: %s", modelName))
 				}
 			}
 
 			common.SysLog(fmt.Sprintf("[Sampling] 渠道 %s 采样完成", channelName))
+			updateChannelSamplingProgress(ch.Id, channelName, chDone, chSuccess, chFailed, chTotal, "采样完成")
 		}(channel)
 	}
 

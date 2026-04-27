@@ -46,6 +46,8 @@ import ModelDeploymentPage from './pages/ModelDeployment';
 import Playground from './pages/Playground';
 import Subscription from './pages/Subscription';
 import ModelPerformance from './pages/ModelPerformance';
+import ChannelAnalytics from './pages/ChannelAnalytics';
+import ChannelAnalyticsDetail from './pages/ChannelAnalytics/Detail';
 import OAuth2Callback from './components/auth/OAuth2Callback';
 import PersonalSetting from './components/settings/PersonalSetting';
 import Setup from './pages/Setup';
@@ -133,6 +135,22 @@ function App() {
           }
         />
         <Route path='/model-performance' element={<ModelPerformance />} />
+        <Route
+          path='/console/channel-analytics'
+          element={
+            <AdminRoute>
+              <ChannelAnalytics />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path='/console/channel-analytics/:source'
+          element={
+            <AdminRoute>
+              <ChannelAnalyticsDetail />
+            </AdminRoute>
+          }
+        />
         <Route
           path='/console/channel'
           element={

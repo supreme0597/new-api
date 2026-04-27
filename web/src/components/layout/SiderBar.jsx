@@ -46,6 +46,7 @@ const routerMap = {
   task: '/console/task',
   models: '/console/models',
   modelPerformance: '/model-performance',
+  channelAnalytics: '/console/channel-analytics',
   samplingConfig: '/console/sampling-config',
   deployment: '/console/deployment',
   playground: '/console/playground',
@@ -107,9 +108,9 @@ const SiderBar = ({ onNavigate = () => {} }) => {
           localStorage.getItem('enable_task') === 'true' ? '' : 'tableHiddle',
       },
       {
-        text: t('模型排行'),
-        itemKey: 'modelPerformance',
-        to: '/model-performance',
+        text: t('渠道分析'),
+        itemKey: 'channelAnalytics',
+        to: '/channel-analytics',
       },
     ];
 

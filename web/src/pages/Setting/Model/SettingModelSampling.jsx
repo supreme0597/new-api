@@ -409,7 +409,12 @@ export default function SettingModelSampling(props) {
                     {t('总计')} {samplingStatus.last_result.total}
                   </Tag>
                 </div>
-                <Collapse accordion>
+                <Collapse
+                  defaultActiveKey={[
+                    samplingStatus.last_result.success_list?.length > 0 ? 'success' : '',
+                    samplingStatus.last_result.failed_list?.length > 0 ? 'failed' : '',
+                  ].filter(Boolean)}
+                >
                   {samplingStatus.last_result.success_list?.length > 0 && (
                     <Collapse.Panel
                       header={
@@ -464,9 +469,10 @@ export default function SettingModelSampling(props) {
                 style={{
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: 8,
+                  gap: 10,
                 }}
               >
+                {/* 全局进度 */}
                 <div
                   style={{
                     display: 'flex',
@@ -501,9 +507,78 @@ export default function SettingModelSampling(props) {
                     {samplingStatus.message}
                   </Text>
                 )}
-                <Text type='tertiary' size='small'>
-                  {t('当前')}：{t('多个渠道并行采样中')}
-                </Text>
+
+                {/* 分渠道进度 */}
+                {samplingStatus.channels && samplingStatus.channels.length > 0 && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 8,
+                      marginTop: 4,
+                    }}
+                  >
+                    <Text type='secondary' size='small' strong>
+                      {t('渠道进度')}
+                    </Text>
+                    {samplingStatus.channels.map((ch) => (
+                      <div
+                        key={ch.channel_id}
+                        style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: 4,
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                          }}
+                        >
+                          <Text type='tertiary' size='small'>
+                            {ch.channel_name}
+                          </Text>
+                          <Text type='tertiary' size='small'>
+                            {ch.done_tasks || 0} / {ch.total_tasks || 0}
+                            {ch.success_tasks > 0 && (
+                              <span style={{ color: 'var(--semi-color-success)', marginLeft: 6 }}>
+                                ✓ {ch.success_tasks}
+                              </span>
+                            )}
+                            {ch.failed_tasks > 0 && (
+                              <span style={{ color: 'var(--semi-color-danger)', marginLeft: 6 }}>
+                                ✗ {ch.failed_tasks}
+                              </span>
+                            )}
+                          </Text>
+                        </div>
+                        {ch.total_tasks > 0 && (
+                          <Progress
+                            percent={Math.round(
+                              ((ch.done_tasks || 0) / ch.total_tasks) * 100,
+                            )}
+                            showInfo={false}
+                            size='small'
+                            stroke={
+                              ch.failed_tasks > 0 && ch.done_tasks === ch.total_tasks
+                                ? 'var(--semi-color-danger)'
+                                : ch.done_tasks === ch.total_tasks
+                                  ? 'var(--semi-color-success)'
+                                  : 'var(--semi-color-primary)'
+                            }
+                          />
+                        )}
+                        {ch.message && (
+                          <Text type='tertiary' size='small'>
+                            {ch.message}
+                          </Text>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </Card>
           )}
