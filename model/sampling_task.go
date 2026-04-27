@@ -64,9 +64,10 @@ type SamplingTaskStatus struct {
 }
 
 var (
-	samplingTaskStatus SamplingTaskStatus
-	samplingTaskMutex  sync.RWMutex
-	samplingStopFlag   atomic.Bool
+	samplingTaskStatus   SamplingTaskStatus
+	samplingTaskMutex    sync.RWMutex
+	samplingStopFlag     atomic.Bool
+	samplingConfigNotify = make(chan struct{}, 1) // 通知调度器配置已变更
 )
 
 // GetSamplingTaskStatus 获取当前采样任务状态
@@ -612,40 +613,110 @@ func StopSamplingTask() error {
 func StartSamplingScheduler() {
 	go func() {
 		common.SysLog("[Sampling] 定时采样调度器已启动")
+		// 首次启动时等待一小段时间，确保系统初始化完成（OptionMap 加载等）
+		interruptibleSleep(10 * time.Second)
 		for {
 			interval := getSamplingIntervalMinutes()
 			if interval <= 0 {
 				// 定时采样已关闭，等待一段时间后重新检查配置
-				time.Sleep(5 * time.Minute)
+				common.SysLog("[Sampling] 定时采样已关闭（间隔=0），5 分钟后重新检查")
+				interruptibleSleep(5 * time.Minute)
 				continue
 			}
 
-			// 等待一个间隔周期
-			time.Sleep(time.Duration(interval) * time.Minute)
-
-			// 检查是否已有采样任务在运行
+			// 先检查是否已有采样任务在运行
 			samplingTaskMutex.RLock()
 			isRunning := samplingTaskStatus.IsRunning
 			samplingTaskMutex.RUnlock()
 
 			if isRunning {
 				common.SysLog("[Sampling] 跳过本次定时采样，已有任务正在运行")
+				interruptibleSleep(time.Duration(interval) * time.Minute)
 				continue
 			}
 
-			// 检查当前时间是否在采样时间段内
+			// 先检查当前时间是否在采样时间段内
 			if !isWithinSamplingWindow() {
+				// 不在采样窗口，计算距离窗口开始的等待时间
+				sleepDuration := calcSleepUntilWindowStart(interval)
 				startMin, endMin := getSamplingTimeRange()
 				startHour, startMinOnly := startMin/60, startMin%60
 				endHour, endMinOnly := endMin/60, endMin%60
-				common.SysLog(fmt.Sprintf("[Sampling] 当前时间不在采样时间段 %02d:%02d - %02d:%02d 内，跳过", startHour, startMinOnly, endHour, endMinOnly))
+				common.SysLog(fmt.Sprintf("[Sampling] 当前时间不在采样时间段 %02d:%02d - %02d:%02d 内，等待 %v", startHour, startMinOnly, endHour, endMinOnly, sleepDuration))
+				interruptibleSleep(sleepDuration)
 				continue
 			}
 
+			// 在采样窗口内，执行采样任务
 			common.SysLog("[Sampling] 定时采样触发")
 			if err := RunSamplingTask(); err != nil {
 				common.SysError(fmt.Sprintf("[Sampling] 定时采样任务执行失败: %v", err))
 			}
+
+			// 执行完毕后再等待一个间隔周期
+			common.SysLog(fmt.Sprintf("[Sampling] 下次采样将在 %d 分钟后", interval))
+			interruptibleSleep(time.Duration(interval) * time.Minute)
 		}
 	}()
+}
+
+// interruptibleSleep 可被配置变更通知打断的 sleep
+// 当收到 samplingConfigNotify 信号时立即返回，使调度器重新读取最新配置
+func interruptibleSleep(d time.Duration) {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		// 正常超时
+	case <-samplingConfigNotify:
+		// 配置变更，提前唤醒
+		common.SysLog("[Sampling] 检测到配置变更，提前唤醒调度器")
+	}
+}
+
+// NotifySamplingConfigChange 通知调度器采样配置已变更
+// 调度器会立即重新读取配置并重新计算调度时间
+func NotifySamplingConfigChange() {
+	select {
+	case samplingConfigNotify <- struct{}{}:
+	default:
+		// channel 已有信号，无需重复发送
+	}
+}
+
+// calcSleepUntilWindowStart 计算距离下一个采样窗口开始的等待时间
+// 如果当前不在窗口内，返回到窗口开始的时间；如果无法精确计算，返回 interval 分钟
+func calcSleepUntilWindowStart(interval int) time.Duration {
+	startMin, endMin := getSamplingTimeRange()
+	now := time.Now()
+	currentMin := now.Hour()*60 + now.Minute()
+
+	var targetMin int
+	if startMin <= endMin {
+		// 正常区间，如 09:00 - 18:00
+		if currentMin < startMin {
+			// 还没到窗口开始
+			targetMin = startMin
+		} else {
+			// 已过窗口结束，等待明天窗口开始
+			targetMin = startMin + 24*60
+		}
+	} else {
+		// 跨天区间，如 22:00 - 06:00
+		// 当前不在窗口内，说明 currentMin > endMin && currentMin < startMin
+		targetMin = startMin
+		if currentMin > endMin && currentMin < startMin {
+			targetMin = startMin
+		}
+	}
+
+	waitMinutes := targetMin - currentMin
+	if waitMinutes <= 0 {
+		waitMinutes += 24 * 60
+	}
+	// 限制最大等待时间为 interval 分钟，避免等待过久
+	if waitMinutes > interval {
+		waitMinutes = interval
+	}
+	return time.Duration(waitMinutes) * time.Minute
 }
