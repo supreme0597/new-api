@@ -42,11 +42,20 @@ function UsageTrendChart({ data, metric, granularity }) {
     const metricLabel = metric === 'call_count' ? t('调用次数') : t('Token 消耗');
     const granularityLabel = granularity === 'hour' ? t('小时') : granularity === 'week' ? t('周') : t('天');
 
+    // 根据粒度设置 X 轴时间格式
+    const timeFormat = granularity === 'hour'
+      ? '%m-%d %H:%M'  // 小时粒度：04-28 15:00
+      : '%m-%d';       // 天/周粒度：04-28
+
     return {
       type: 'bar',
       data: [{ id: 'barData', values: chartData }],
       xField: 'Time',
       yField: 'Value',
+      axes: [
+        { orient: 'bottom', label: { formatMethod: (val) => val } },
+        { orient: 'left', label: { autoHide: true } },
+      ],
       title: {
         visible: true,
         text: `${t('用量趋势')}（${metricLabel}）`,
