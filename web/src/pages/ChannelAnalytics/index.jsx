@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { API } from '../../helpers/api';
@@ -12,17 +12,25 @@ import {
   Select,
   Space,
   Typography,
-  Tooltip,
+  Avatar,
 } from '@douyinfe/semi-ui';
-import { IconDownload } from '@douyinfe/semi-icons';
+import {
+  PieChart,
+  TrendingUp,
+  Users,
+  Layers,
+  Activity,
+} from 'lucide-react';
+import { VChart } from '@visactor/react-vchart';
 import { renderNumber, renderQuota } from '../../helpers/render';
+import { CARD_PROPS, CHART_CONFIG } from '../../constants/dashboard.constants';
 
 const { Title, Text } = Typography;
 
-// 颜色列表
+// 颜色列表（与数据看板 baseColors 完全一致）
 const SOURCE_COLORS = [
-  '#1664ff', '#69b1ff', '#91caff', '#bae0ff', '#e6f4ff',
-  '#ff8a00', '#52c41a', '#722ed1', '#eb2f96', '#13c2c2',
+  '#1664FF', '#1AC6FF', '#FF8A00', '#3CC780', '#7442D4',
+  '#FFC400', '#304D77', '#B48DEB', '#009488', '#FF7DDA',
 ];
 
 // 格式化大数字
@@ -32,12 +40,78 @@ function formatLargeNumber(num) {
   return String(num);
 }
 
-// 环形图组件
-function DonutChart({ data, total, title, colorKey = 'call_count' }) {
+// 统计卡片组件（与数据看板 StatsCards 完全一致的样式）
+function StatCard({ title, value, avatarColor, icon }) {
+  return (
+    <Card
+      {...CARD_PROPS}
+      className='!rounded-2xl w-full'
+      title={
+        <div className='flex items-center gap-2'>
+          <Avatar size='small' color={avatarColor}>
+            {icon}
+          </Avatar>
+          <span className='text-xs text-gray-500'>{title}</span>
+        </div>
+      }
+    >
+      <div className='text-2xl font-semibold'>{value}</div>
+    </Card>
+  );
+}
+
+// VChart 饼图组件
+function SourcePieChart({ data, title, colorKey = 'call_count' }) {
   const { t } = useTranslation();
+
+  const chartData = useMemo(() => {
+    return (data || []).map((d, i) => ({
+      type: d.source,
+      value: d[colorKey] || 0,
+      color: SOURCE_COLORS[i % SOURCE_COLORS.length],
+    }));
+  }, [data, colorKey]);
+
+  const total = chartData.reduce((sum, d) => sum + d.value, 0);
+
+  const spec = useMemo(() => ({
+    type: 'pie',
+    data: [{ id: 'id0', values: chartData }],
+    outerRadius: 0.75,
+    innerRadius: 0.5,
+    padAngle: 0.6,
+    valueField: 'value',
+    categoryField: 'type',
+    pie: {
+      style: { cornerRadius: 8 },
+      state: {
+        hover: { outerRadius: 0.8, stroke: '#000', lineWidth: 1 },
+        selected: { outerRadius: 0.8, stroke: '#000', lineWidth: 1 },
+      },
+    },
+    title: {
+      visible: true,
+      text: title,
+      subtext: `${t('总计')}：${formatLargeNumber(total)}`,
+    },
+    legends: { visible: true, orient: 'left' },
+    label: { visible: true },
+    tooltip: {
+      mark: {
+        content: [{ key: (datum) => datum['type'], value: (datum) => renderNumber(datum['value']) }],
+      },
+    },
+    color: {
+      specified: chartData.reduce((map, d) => {
+        map[d.type] = d.color;
+        return map;
+      }, {}),
+    },
+  }), [chartData, title, total, t]);
+
   if (!data || data.length === 0) {
     return (
-      <Card style={{ height: '100%' }}>
+      <Card {...CARD_PROPS} className='!rounded-2xl'>
         <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--semi-color-text-2)' }}>
           {t('暂无数据')}
         </div>
@@ -45,76 +119,76 @@ function DonutChart({ data, total, title, colorKey = 'call_count' }) {
     );
   }
 
-  const totalValue = total || data.reduce((sum, d) => sum + (d[colorKey] || 0), 0);
-  const circumference = 2 * Math.PI * 50;
-  let offset = 0;
-
   return (
-    <Card style={{ height: '100%' }}>
-      <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 12 }}>{title}</div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 24, padding: '8px 0' }}>
-        <div style={{ position: 'relative', width: 120, height: 120 }}>
-          <svg viewBox="0 0 120 120" style={{ transform: 'rotate(-90deg)' }}>
-            <circle cx="60" cy="60" r="50" fill="none" stroke="var(--semi-color-fill-0)" strokeWidth="12" />
-            {data.map((d, i) => {
-              const value = d[colorKey] || 0;
-              const ratio = totalValue > 0 ? value / totalValue : 0;
-              const dashLength = ratio * circumference;
-              const dashOffset = -offset;
-              offset += dashLength;
-              return (
-                <circle
-                  key={i}
-                  cx="60"
-                  cy="60"
-                  r="50"
-                  fill="none"
-                  stroke={SOURCE_COLORS[i % SOURCE_COLORS.length]}
-                  strokeWidth="12"
-                  strokeDasharray={`${dashLength} ${circumference - dashLength}`}
-                  strokeDashoffset={dashOffset}
-                  style={{ transition: 'all 0.3s' }}
-                />
-              );
-            })}
-          </svg>
-          <div style={{
-            position: 'absolute', inset: 0, display: 'flex',
-            alignItems: 'center', justifyContent: 'center', flexDirection: 'column',
-          }}>
-            <div style={{ fontSize: 11, color: 'var(--semi-color-text-2)' }}>{t('总计')}</div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--semi-color-text-0)' }}>
-              {formatLargeNumber(totalValue)}
-            </div>
-          </div>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 12 }}>
-          {data.map((d, i) => {
-            const value = d[colorKey] || 0;
-            const pct = totalValue > 0 ? ((value / totalValue) * 100).toFixed(0) : 0;
-            return (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{
-                  width: 8, height: 8, borderRadius: 2,
-                  background: SOURCE_COLORS[i % SOURCE_COLORS.length],
-                }} />
-                <span>{d.source}</span>
-                <span style={{ color: 'var(--semi-color-text-2)', marginLeft: 'auto', paddingLeft: 12 }}>{pct}%</span>
-              </div>
-            );
-          })}
-        </div>
+    <Card {...CARD_PROPS} className='!rounded-2xl' bodyStyle={{ padding: 0 }}>
+      <div className='h-80 p-2'>
+        <VChart spec={spec} option={CHART_CONFIG} />
       </div>
     </Card>
   );
 }
 
-// 趋势图（简化版：柱状图）
-function TrendChart({ data, sources, range, granularity }) {
+// VChart 折线图组件
+function SourceTrendChart({ data, sources, range, granularity }) {
   const { t } = useTranslation();
+
+  const chartData = useMemo(() => {
+    if (!data || data.length === 0) return [];
+    const result = [];
+    data.forEach((d) => {
+      result.push({
+        Time: d.time,
+        Source: d.source,
+        Count: d.call_count || 0,
+      });
+    });
+    return result;
+  }, [data]);
+
+  const spec = useMemo(() => {
+    const colorMap = {};
+    sources.forEach((s, i) => {
+      colorMap[s] = SOURCE_COLORS[i % SOURCE_COLORS.length];
+    });
+
+    return {
+      type: 'line',
+      data: [{ id: 'lineData', values: chartData }],
+      xField: 'Time',
+      yField: 'Count',
+      seriesField: 'Source',
+      legends: { visible: true, selectMode: 'single' },
+      title: {
+        visible: true,
+        text: t('各来源使用次数趋势'),
+        subtext: `${t('范围')}：${range === '1d' ? t('近 1 天') : range === '7d' ? t('近 7 天') : t('近 30 天')} · ${t('粒度')}：${granularity === 'hour' ? t('小时') : granularity === 'week' ? t('周') : t('天')}`,
+      },
+      tooltip: {
+        mark: {
+          content: [{ key: (datum) => datum['Source'], value: (datum) => renderNumber(datum['Count']) }],
+        },
+        dimension: {
+          content: [{ key: (datum) => datum['Source'], value: (datum) => datum['Count'] || 0 }],
+          updateContent: (array) => {
+            array.sort((a, b) => b.value - a.value);
+            let sum = 0;
+            array.forEach((item) => {
+              const value = parseFloat(item.value) || 0;
+              sum += value;
+              item.value = renderNumber(value);
+            });
+            array.unshift({ key: t('总计'), value: renderNumber(sum) });
+            return array;
+          },
+        },
+      },
+      color: { specified: colorMap },
+    };
+  }, [chartData, sources, range, granularity, t]);
+
   if (!data || data.length === 0) {
     return (
-      <Card>
+      <Card {...CARD_PROPS} className='!rounded-2xl'>
         <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--semi-color-text-2)' }}>
           {t('暂无数据')}
         </div>
@@ -122,91 +196,10 @@ function TrendChart({ data, sources, range, granularity }) {
     );
   }
 
-  // 按时间分组
-  const timeMap = {};
-  data.forEach((d) => {
-    if (!timeMap[d.time]) timeMap[d.time] = {};
-    timeMap[d.time][d.source] = d.call_count;
-  });
-  const times = Object.keys(timeMap).sort();
-
-  // 找到最大值
-  let maxVal = 0;
-  times.forEach((t) => {
-    sources.forEach((s) => {
-      const v = timeMap[t]?.[s] || 0;
-      if (v > maxVal) maxVal = v;
-    });
-  });
-
   return (
-    <Card>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
-        <div style={{ fontWeight: 600, fontSize: 14 }}>
-          📈 {t('各来源使用次数趋势图')}
-        </div>
-        <Space spacing={8}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            <Text type="tertiary" size="small">{t('范围')}</Text>
-            <Select size="small" value={range} style={{ minWidth: 100 }}
-              onChange={() => {}} disabled
-            >
-              <Select.Option value="1d">{t('近 1 天')}</Select.Option>
-              <Select.Option value="7d">{t('近 7 天')}</Select.Option>
-              <Select.Option value="30d">{t('近 30 天')}</Select.Option>
-            </Select>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            <Text type="tertiary" size="small">{t('粒度')}</Text>
-            <Select size="small" value={granularity} style={{ minWidth: 80 }}
-              onChange={() => {}} disabled
-            >
-              <Select.Option value="hour">{t('小时')}</Select.Option>
-              <Select.Option value="day">{t('天')}</Select.Option>
-              <Select.Option value="week">{t('周')}</Select.Option>
-            </Select>
-          </div>
-        </Space>
-      </div>
-
-      {/* 简易柱状图 */}
-      <div style={{ height: 160, display: 'flex', alignItems: 'flex-end', gap: 2, padding: '0 4px', overflow: 'hidden' }}>
-        {times.map((time, i) => (
-          <Tooltip key={i} content={`${time}: ${sources.map(s => `${s}: ${timeMap[time]?.[s] || 0}`).join(', ')}`}>
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 1, alignItems: 'center', minWidth: 0 }}>
-              {sources.map((source, si) => {
-                const val = timeMap[time]?.[source] || 0;
-                const height = maxVal > 0 ? (val / maxVal) * 140 : 0;
-                return (
-                  <div key={si} style={{
-                    width: '100%', maxWidth: 16,
-                    height: Math.max(height, 1),
-                    background: SOURCE_COLORS[si % SOURCE_COLORS.length],
-                    borderRadius: '2px 2px 0 0',
-                    opacity: 0.85,
-                  }} />
-                );
-              })}
-            </div>
-          </Tooltip>
-        ))}
-      </div>
-
-      {/* 时间轴标签 */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--semi-color-text-2)', marginTop: 4, padding: '0 4px' }}>
-        {times.length > 0 && <span>{times[0]?.slice(5)}</span>}
-        {times.length > 2 && <span>{times[Math.floor(times.length / 2)]?.slice(5)}</span>}
-        {times.length > 1 && <span>{times[times.length - 1]?.slice(5)}</span>}
-      </div>
-
-      {/* 图例 */}
-      <div style={{ display: 'flex', gap: 16, justifyContent: 'center', marginTop: 8, fontSize: 12 }}>
-        {sources.map((source, i) => (
-          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            <div style={{ width: 8, height: 3, borderRadius: 2, background: SOURCE_COLORS[i % SOURCE_COLORS.length] }} />
-            {source}
-          </div>
-        ))}
+    <Card {...CARD_PROPS} className='!rounded-2xl' bodyStyle={{ padding: 0 }}>
+      <div className='h-80 p-2'>
+        <VChart spec={spec} option={CHART_CONFIG} />
       </div>
     </Card>
   );
@@ -292,9 +285,9 @@ const ChannelAnalytics = () => {
       render: (text) => <Tag color="cyan">{text}</Tag>,
     },
     {
-      title: t('渠道数'),
-      dataIndex: 'channel_count',
-      key: 'channel_count',
+      title: t('模型数'),
+      dataIndex: 'model_count',
+      key: 'model_count',
       render: (text) => renderNumber(text),
     },
     {
@@ -358,28 +351,36 @@ const ChannelAnalytics = () => {
           </Space>
         </div>
 
-        {/* 概览卡片 */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
-          <Card bodyStyle={{ padding: 16 }}>
-            <div style={{ fontSize: 12, color: 'var(--semi-color-text-2)', marginBottom: 6 }}>{t('来源总数')}</div>
-            <div style={{ fontSize: 22, fontWeight: 700, color: '#1664ff' }}>{overview?.source_count || 0}</div>
-          </Card>
-          <Card bodyStyle={{ padding: 16 }}>
-            <div style={{ fontSize: 12, color: 'var(--semi-color-text-2)', marginBottom: 6 }}>{t('总调用次数')}</div>
-            <div style={{ fontSize: 22, fontWeight: 700 }}>{formatLargeNumber(overview?.total_calls || 0)}</div>
-          </Card>
-          <Card bodyStyle={{ padding: 16 }}>
-            <div style={{ fontSize: 12, color: 'var(--semi-color-text-2)', marginBottom: 6 }}>{t('总 Token 消耗')}</div>
-            <div style={{ fontSize: 22, fontWeight: 700, color: '#28a745' }}>{formatLargeNumber(overview?.total_tokens || 0)}</div>
-          </Card>
-          <Card bodyStyle={{ padding: 16 }}>
-            <div style={{ fontSize: 12, color: 'var(--semi-color-text-2)', marginBottom: 6 }}>{t('活跃用户数')}</div>
-            <div style={{ fontSize: 22, fontWeight: 700, color: '#ff8a00' }}>{renderNumber(overview?.active_users || 0)}</div>
-          </Card>
+        {/* 概览卡片 - 与数据看板 StatsCards 完全一致的风格 */}
+        <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-5'>
+          <StatCard
+            title={t('来源总数')}
+            value={overview?.source_count || 0}
+            avatarColor='blue'
+            icon={<Layers size={16} />}
+          />
+          <StatCard
+            title={t('总调用次数')}
+            value={formatLargeNumber(overview?.total_calls || 0)}
+            avatarColor='indigo'
+            icon={<Activity size={16} />}
+          />
+          <StatCard
+            title={t('总 Token 消耗')}
+            value={formatLargeNumber(overview?.total_tokens || 0)}
+            avatarColor='green'
+            icon={<TrendingUp size={16} />}
+          />
+          <StatCard
+            title={t('活跃用户数')}
+            value={renderNumber(overview?.active_users || 0)}
+            avatarColor='orange'
+            icon={<Users size={16} />}
+          />
         </div>
 
         {/* 来源对比表格 */}
-        <Card style={{ marginBottom: 16 }}>
+        <Card {...CARD_PROPS} className='!rounded-2xl mb-4'>
           <Table
             columns={columns}
             dataSource={sortedSources}
@@ -390,38 +391,28 @@ const ChannelAnalytics = () => {
           />
         </Card>
 
-        {/* 环形图 */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
-          <DonutChart
+        {/* 饼图 */}
+        <div className='grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4'>
+          <SourcePieChart
             data={sortedSources.slice(0, 8)}
-            total={overview?.total_calls}
-            title={`📊 ${t('各来源调用量占比')}`}
+            title={t('各来源调用量占比')}
             colorKey="call_count"
           />
-          <DonutChart
+          <SourcePieChart
             data={sortedSources.slice(0, 8)}
-            total={overview?.total_tokens}
-            title={`🔥 ${t('各来源 Token 消耗占比')}`}
+            title={t('各来源 Token 消耗占比')}
             colorKey="token_count"
           />
         </div>
 
         {/* 趋势图 */}
-        <TrendChart
+        <SourceTrendChart
           data={trendData}
           sources={sourceNames}
           range={range}
           granularity={granularity}
         />
 
-        {/* 说明 */}
-        <div style={{
-          fontSize: 12, color: 'var(--semi-color-text-2)', marginTop: 16,
-          padding: '8px 12px', background: 'var(--semi-color-fill-0)',
-          borderRadius: 4, borderLeft: '3px solid var(--semi-color-text-2)',
-        }}>
-          💡 {t('渠道来源是通用属性，所有渠道均可设置。点击「查看详情」可下钻到单个来源的用量统计和用户分析。')}
-        </div>
       </Spin>
     </div>
   );

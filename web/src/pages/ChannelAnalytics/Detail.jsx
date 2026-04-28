@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate } from 'react-router-dom';
 import { API } from '../../helpers/api';
@@ -12,15 +12,13 @@ import {
   Space,
   Typography,
   Tag,
-  Tooltip,
   Breadcrumb,
 } from '@douyinfe/semi-ui';
+import { VChart } from '@visactor/react-vchart';
 import { renderNumber } from '../../helpers/render';
+import { CARD_PROPS, CHART_CONFIG } from '../../constants/dashboard.constants';
 
 const { Title, Text } = Typography;
-
-// 颜色列表
-const BAR_COLORS = ['#1664ff', '#69b1ff', '#91caff', '#bae0ff', '#e6f4ff'];
 
 function formatLargeNumber(num) {
   if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
@@ -28,12 +26,58 @@ function formatLargeNumber(num) {
   return String(num);
 }
 
-// 用量趋势图（柱状图）
+// VChart 柱状图组件
 function UsageTrendChart({ data, metric, granularity }) {
   const { t } = useTranslation();
+
+  const chartData = useMemo(() => {
+    if (!data || data.length === 0) return [];
+    return data.map((d) => ({
+      Time: d.time,
+      Value: metric === 'call_count' ? d.call_count : d.token_count,
+    }));
+  }, [data, metric]);
+
+  const spec = useMemo(() => {
+    const metricLabel = metric === 'call_count' ? t('调用次数') : t('Token 消耗');
+    const granularityLabel = granularity === 'hour' ? t('小时') : granularity === 'week' ? t('周') : t('天');
+
+    return {
+      type: 'bar',
+      data: [{ id: 'barData', values: chartData }],
+      xField: 'Time',
+      yField: 'Value',
+      title: {
+        visible: true,
+        text: `${t('用量趋势')}（${metricLabel}）`,
+        subtext: `${t('粒度')}：${granularityLabel}`,
+      },
+      bar: {
+        style: { cornerRadius: [4, 4, 0, 0] },
+        state: {
+          hover: { stroke: '#000', lineWidth: 1 },
+        },
+      },
+      label: {
+        visible: true,
+        position: 'top',
+        style: {
+          fontSize: 11,
+          fill: '#666',
+        },
+      },
+      tooltip: {
+        mark: {
+          content: [{ key: metricLabel, value: (datum) => renderNumber(datum['Value']) }],
+        },
+      },
+      color: '#1664ff',
+    };
+  }, [chartData, metric, granularity, t]);
+
   if (!data || data.length === 0) {
     return (
-      <Card>
+      <Card {...CARD_PROPS} className='!rounded-2xl'>
         <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--semi-color-text-2)' }}>
           {t('暂无数据')}
         </div>
@@ -41,34 +85,10 @@ function UsageTrendChart({ data, metric, granularity }) {
     );
   }
 
-  const values = data.map(d => metric === 'call_count' ? d.call_count : d.token_count);
-  const maxVal = Math.max(...values, 1);
-
   return (
-    <Card>
-      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, padding: '8px 4px', height: 140, overflow: 'hidden' }}>
-        {data.map((d, i) => {
-          const val = metric === 'call_count' ? d.call_count : d.token_count;
-          const height = (val / maxVal) * 120;
-          return (
-            <Tooltip key={i} content={`${d.time}: ${formatLargeNumber(val)}`}>
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 0 }}>
-                <div style={{
-                  width: '100%', maxWidth: 24,
-                  height: Math.max(height, 2),
-                  background: BAR_COLORS[i % BAR_COLORS.length],
-                  borderRadius: '3px 3px 0 0',
-                  opacity: 0.85,
-                }} />
-              </div>
-            </Tooltip>
-          );
-        })}
-      </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--semi-color-text-2)', marginTop: 4, padding: '0 4px' }}>
-        {data.length > 0 && <span>{data[0].time?.slice(5)}</span>}
-        {data.length > 2 && <span>{data[Math.floor(data.length / 2)].time?.slice(5)}</span>}
-        {data.length > 1 && <span>{data[data.length - 1].time?.slice(5)}</span>}
+    <Card {...CARD_PROPS} className='!rounded-2xl' bodyStyle={{ padding: 0 }}>
+      <div className='h-72 p-2'>
+        <VChart spec={spec} option={CHART_CONFIG} />
       </div>
     </Card>
   );
@@ -210,7 +230,7 @@ const ChannelAnalyticsDetail = () => {
             <div>
               <Title heading={4} style={{ margin: 0 }}>{decodedSource}</Title>
               <Text type="tertiary" size="small">
-                {detail ? `${detail.channel_count} ${t('个渠道')} · ${renderNumber(detail.call_count)} ${t('次调用')} · ${formatLargeNumber(detail.token_count)} Token · ${renderNumber(detail.active_users)} ${t('个活跃用户')}（${rangeLabel}）` : ''}
+                {detail ? `${detail.model_count} ${t('个模型')} · ${renderNumber(detail.call_count)} ${t('次调用')} · ${formatLargeNumber(detail.token_count)} Token · ${renderNumber(detail.active_users)} ${t('个活跃用户')}（${rangeLabel}）` : ''}
               </Text>
             </div>
           </div>
@@ -221,6 +241,14 @@ const ChannelAnalyticsDetail = () => {
                 <Select.Option value="1d">{t('近 1 天')}</Select.Option>
                 <Select.Option value="7d">{t('近 7 天')}</Select.Option>
                 <Select.Option value="30d">{t('近 30 天')}</Select.Option>
+              </Select>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <Text type="tertiary" size="small">{t('粒度')}</Text>
+              <Select size="small" value={granularity} onChange={setGranularity} style={{ minWidth: 80 }}>
+                <Select.Option value="hour">{t('小时')}</Select.Option>
+                <Select.Option value="day">{t('天')}</Select.Option>
+                <Select.Option value="week">{t('周')}</Select.Option>
               </Select>
             </div>
             <Button theme="solid" onClick={loadData}>{t('刷新数据')}</Button>
@@ -264,14 +292,6 @@ const ChannelAnalyticsDetail = () => {
                 </button>
               </div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <Text type="tertiary" size="small">{t('粒度')}</Text>
-              <Select size="small" value={granularity} onChange={setGranularity} style={{ minWidth: 80 }}>
-                <Select.Option value="hour">{t('小时')}</Select.Option>
-                <Select.Option value="day">{t('天')}</Select.Option>
-                <Select.Option value="week">{t('周')}</Select.Option>
-              </Select>
-            </div>
           </div>
           <UsageTrendChart data={trendData} metric={metric} granularity={granularity} />
         </div>
@@ -290,7 +310,7 @@ const ChannelAnalyticsDetail = () => {
               </Select>
             </div>
           </div>
-          <Card bodyStyle={{ padding: 0 }}>
+          <Card {...CARD_PROPS} className='!rounded-2xl' bodyStyle={{ padding: 0 }}>
             <Table
               columns={userColumns}
               dataSource={users}
@@ -308,16 +328,7 @@ const ChannelAnalyticsDetail = () => {
           </Card>
         </div>
 
-        {/* 说明 */}
-        <div style={{
-          fontSize: 12, color: 'var(--semi-color-text-2)', marginTop: 16,
-          padding: '8px 12px', background: 'var(--semi-color-fill-0)',
-          borderRadius: 4, borderLeft: '3px solid var(--semi-color-text-2)',
-        }}>
-          🔗 {t('来源详情 → 点击用户 → 使用日志（带用户+来源过滤）')}
-          <br />
-          🔗 {t('模型性能排行请前往「模型响应速度排行榜」页面查看。')}
-        </div>
+
       </Spin>
     </div>
   );

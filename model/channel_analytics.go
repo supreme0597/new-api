@@ -16,11 +16,11 @@ type ChannelSourceOverview struct {
 
 // ChannelSourceStat 按来源分组的统计
 type ChannelSourceStat struct {
-	Source       string `json:"source"`
-	ChannelCount int    `json:"channel_count"`
-	ActiveUsers  int    `json:"active_users"`
-	CallCount    int    `json:"call_count"`
-	TokenCount   int    `json:"token_count"`
+	Source      string `json:"source"`
+	ModelCount  int    `json:"model_count"`
+	ActiveUsers int    `json:"active_users"`
+	CallCount   int    `json:"call_count"`
+	TokenCount  int    `json:"token_count"`
 }
 
 // ChannelSourceTrendPoint 趋势数据点
@@ -88,23 +88,30 @@ func GetChannelSourceOverview(startTimestamp, endTimestamp int64) (*ChannelSourc
 
 // GetChannelSourceStats 获取各来源的详细统计
 func GetChannelSourceStats(startTimestamp, endTimestamp int64) ([]ChannelSourceStat, error) {
-	// 先获取每个 source 的渠道数（排除测试渠道）
-	type sourceChannelCount struct {
-		Source       string `json:"source"`
-		ChannelCount int    `json:"channel_count"`
+	// 从 logs JOIN channels 获取各来源的模型数（排除测试渠道）
+	type sourceModelCount struct {
+		Source     string `json:"source"`
+		ModelCount int    `json:"model_count"`
 	}
-	var channelCounts []sourceChannelCount
-	if err := DB.Model(&Channel{}).
-		Select("source, COUNT(*) as channel_count").
-		Where("source IS NOT NULL AND source != ''").
-		Where("is_test_channel = ?", commonFalseVal).
-		Group("source").
-		Find(&channelCounts).Error; err != nil {
+	var modelCounts []sourceModelCount
+	txModel := LOG_DB.Table("logs").
+		Select("channels.source, COUNT(DISTINCT logs.model_name) as model_count").
+		Joins("JOIN channels ON logs.channel_id = channels.id").
+		Where("logs.type = ?", LogTypeConsume).
+		Where("channels.source IS NOT NULL AND channels.source != ''").
+		Where("channels.is_test_channel = ?", commonFalseVal)
+	if startTimestamp != 0 {
+		txModel = txModel.Where("logs.created_at >= ?", startTimestamp)
+	}
+	if endTimestamp != 0 {
+		txModel = txModel.Where("logs.created_at <= ?", endTimestamp)
+	}
+	if err := txModel.Group("channels.source").Find(&modelCounts).Error; err != nil {
 		return nil, err
 	}
-	channelCountMap := make(map[string]int, len(channelCounts))
-	for _, cc := range channelCounts {
-		channelCountMap[cc.Source] = cc.ChannelCount
+	modelCountMap := make(map[string]int, len(modelCounts))
+	for _, mc := range modelCounts {
+		modelCountMap[mc.Source] = mc.ModelCount
 	}
 
 	// 从 logs JOIN channels 获取各来源的调用统计（排除测试渠道）
@@ -137,11 +144,11 @@ func GetChannelSourceStats(startTimestamp, endTimestamp int64) ([]ChannelSourceS
 	stats := make([]ChannelSourceStat, 0, len(logStats))
 	for _, ls := range logStats {
 		stats = append(stats, ChannelSourceStat{
-			Source:       ls.Source,
-			ChannelCount: channelCountMap[ls.Source],
-			ActiveUsers:  ls.ActiveUsers,
-			CallCount:    ls.CallCount,
-			TokenCount:   ls.TokenCount,
+			Source:      ls.Source,
+			ModelCount:  modelCountMap[ls.Source],
+			ActiveUsers: ls.ActiveUsers,
+			CallCount:   ls.CallCount,
+			TokenCount:  ls.TokenCount,
 		})
 	}
 
@@ -245,12 +252,21 @@ func GetChannelSourceUserRanking(source string, startTimestamp, endTimestamp int
 
 // GetChannelSourceDetail 获取单个来源的详情统计
 func GetChannelSourceDetail(source string, startTimestamp, endTimestamp int64) (*ChannelSourceStat, error) {
-	// 渠道数（排除测试渠道）
-	var channelCount int64
-	if err := DB.Model(&Channel{}).
-		Where("source = ?", source).
-		Where("is_test_channel = ?", commonFalseVal).
-		Count(&channelCount).Error; err != nil {
+	// 模型数：该来源下实际调用过的不同模型数量（排除测试渠道）
+	var modelCount int64
+	txModel := LOG_DB.Table("logs").
+		Select("COUNT(DISTINCT logs.model_name) as model_count").
+		Joins("JOIN channels ON logs.channel_id = channels.id").
+		Where("logs.type = ?", LogTypeConsume).
+		Where("channels.source = ?", source).
+		Where("channels.is_test_channel = ?", commonFalseVal)
+	if startTimestamp != 0 {
+		txModel = txModel.Where("logs.created_at >= ?", startTimestamp)
+	}
+	if endTimestamp != 0 {
+		txModel = txModel.Where("logs.created_at <= ?", endTimestamp)
+	}
+	if err := txModel.Scan(&modelCount).Error; err != nil {
 		return nil, err
 	}
 
@@ -280,11 +296,11 @@ func GetChannelSourceDetail(source string, startTimestamp, endTimestamp int64) (
 	}
 
 	return &ChannelSourceStat{
-		Source:       source,
-		ChannelCount: int(channelCount),
-		ActiveUsers:  result.ActiveUsers,
-		CallCount:    result.CallCount,
-		TokenCount:   result.TokenCount,
+		Source:      source,
+		ModelCount:  int(modelCount),
+		ActiveUsers: result.ActiveUsers,
+		CallCount:   result.CallCount,
+		TokenCount:  result.TokenCount,
 	}, nil
 }
 
@@ -293,11 +309,11 @@ func getTimeBucketExpr(granularity string) string {
 	switch granularity {
 	case "hour":
 		if common.UsingPostgreSQL {
-			return "to_char(to_timestamp(logs.created_at), 'YYYY-MM-DD HH24:00:00')"
+			return "to_char(to_timestamp(logs.created_at), 'YYYY-MM-DD HH24:00')"
 		} else if common.UsingSQLite {
-			return "strftime('%Y-%m-%d %H:00:00', logs.created_at, 'unixepoch')"
+			return "strftime('%Y-%m-%d %H:00', logs.created_at, 'unixepoch')"
 		}
-		return "DATE_FORMAT(FROM_UNIXTIME(logs.created_at), '%Y-%m-%d %H:00:00')"
+		return "DATE_FORMAT(FROM_UNIXTIME(logs.created_at), '%Y-%m-%d %H:00')"
 	case "day":
 		if common.UsingPostgreSQL {
 			return "to_char(to_timestamp(logs.created_at), 'YYYY-MM-DD')"

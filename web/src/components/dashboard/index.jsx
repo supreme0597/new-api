@@ -87,7 +87,8 @@ const Dashboard = () => {
 
   // ========== 数据处理 ==========
   const loadUserData = async () => {
-    if (dashboardData.isAdminUser) {
+    // 有 username 过滤时不加载用户排行数据（避免覆盖已过滤的单个用户图表）
+    if (dashboardData.isAdminUser && !dashboardData.inputs.username) {
       const userData = await dashboardData.loadUserQuotaData();
       if (userData && userData.length > 0) {
         dashboardCharts.updateUserChartData(userData);
@@ -146,9 +147,10 @@ const Dashboard = () => {
   );
 
   // ========== Effects ==========
+  // username 变化时重新加载图表数据（从渠道分析点击用户跳转时带上 username 参数）
   useEffect(() => {
     initChart();
-  }, []);
+  }, [dashboardData.inputs.username]);
 
   return (
     <div className='h-full'>
