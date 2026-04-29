@@ -340,7 +340,8 @@ const ChannelAnalyticsDetail = () => {
               onRow={(record) => ({
                 style: { cursor: 'pointer' },
                 onClick: () => {
-                  navigate(`/console?username=${encodeURIComponent(record.username)}`);
+                  const { startTimestamp, endTimestamp } = getTimestamps(range);
+                  navigate(`/console?username=${encodeURIComponent(record.username)}&start_timestamp=${startTimestamp}&end_timestamp=${endTimestamp}`);
                 },
               })}
             />

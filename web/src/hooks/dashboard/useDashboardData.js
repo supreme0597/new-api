@@ -41,12 +41,19 @@ export const useDashboardData = (userState, userDispatch, statusState) => {
 
   // ========== 输入状态 ==========
   const urlUsername = searchParams.get('username') || '';
+  const urlStartTimestamp = searchParams.get('start_timestamp');
+  const urlEndTimestamp = searchParams.get('end_timestamp');
+
   const [inputs, setInputs] = useState({
     username: urlUsername,
     token_name: '',
     model_name: '',
-    start_timestamp: getInitialTimestamp(),
-    end_timestamp: timestamp2string(new Date().getTime() / 1000 + 3600),
+    start_timestamp: urlStartTimestamp
+      ? timestamp2string(Number(urlStartTimestamp))
+      : getInitialTimestamp(),
+    end_timestamp: urlEndTimestamp
+      ? timestamp2string(Number(urlEndTimestamp))
+      : timestamp2string(new Date().getTime() / 1000 + 3600),
     channel: '',
     data_export_default_time: '',
   });
