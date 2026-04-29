@@ -13,6 +13,7 @@ import {
   Space,
   Typography,
   Avatar,
+  DatePicker,
 } from '@douyinfe/semi-ui';
 import {
   PieChart,
@@ -262,9 +263,19 @@ const ChannelAnalytics = () => {
   const [trendData, setTrendData] = useState([]);
   const [range, setRange] = useState('30d');
   const [granularity, setGranularity] = useState('day');
+  const [customRange, setCustomRange] = useState([
+    new Date(Date.now() - 7 * 86400000),
+    new Date(),
+  ]);
 
   // 时间范围转换
   const getTimestamps = useCallback((r) => {
+    if (r === 'custom' && customRange && customRange[0] && customRange[1]) {
+      return {
+        startTimestamp: Math.floor(customRange[0].getTime() / 1000),
+        endTimestamp: Math.floor(customRange[1].getTime() / 1000),
+      };
+    }
     const now = Math.floor(Date.now() / 1000);
     let start = 0;
     switch (r) {
@@ -274,7 +285,7 @@ const ChannelAnalytics = () => {
       default: start = now - 30 * 86400;
     }
     return { startTimestamp: start, endTimestamp: now };
-  }, []);
+  }, [customRange]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -304,7 +315,8 @@ const ChannelAnalytics = () => {
   useEffect(() => {
     if (range === '1d') setGranularity('hour');
     else if (range === '7d') setGranularity('day');
-    else setGranularity('day');
+    else if (range === '30d') setGranularity('day');
+    // custom 保持当前粒度不变
   }, [range]);
 
   // 来源名称列表（用于图表）
@@ -382,7 +394,9 @@ const ChannelAnalytics = () => {
           <div>
             <Title heading={4} style={{ margin: 0 }}>{t('用量统计')}</Title>
             <Text type="tertiary" size="small">
-              {t('统计时间')}：{range === '1d' ? t('近 1 天') : range === '7d' ? t('近 7 天') : t('近 30 天')} · {granularity === 'hour' ? t('按小时') : granularity === 'week' ? t('按周') : t('按天')}
+              {range === 'custom'
+                ? `${t('统计时间')}：${customRange[0]?.toLocaleString()} ~ ${customRange[1]?.toLocaleString()} · ${granularity === 'hour' ? t('按小时') : granularity === 'week' ? t('按周') : t('按天')}`
+                : `${t('统计时间')}：${range === '1d' ? t('近 1 天') : range === '7d' ? t('近 7 天') : t('近 30 天')} · ${granularity === 'hour' ? t('按小时') : granularity === 'week' ? t('按周') : t('按天')}`}
             </Text>
           </div>
           <Space>
@@ -390,7 +404,16 @@ const ChannelAnalytics = () => {
               <Select.Option value="1d">{t('近 1 天')}</Select.Option>
               <Select.Option value="7d">{t('近 7 天')}</Select.Option>
               <Select.Option value="30d">{t('近 30 天')}</Select.Option>
+              <Select.Option value="custom">{t('自定义')}</Select.Option>
             </Select>
+            {range === 'custom' && (
+              <DatePicker
+                type="dateTimeRange"
+                value={customRange}
+                onChange={(dates) => setCustomRange(dates)}
+                style={{ width: 280 }}
+              />
+            )}
             <Select value={granularity} onChange={setGranularity} style={{ minWidth: 80 }}>
               <Select.Option value="hour">{t('小时')}</Select.Option>
               <Select.Option value="day">{t('天')}</Select.Option>

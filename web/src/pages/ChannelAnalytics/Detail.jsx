@@ -14,6 +14,7 @@ import {
   Breadcrumb,
   IconButton,
   Checkbox,
+  DatePicker,
 } from '@douyinfe/semi-ui';
 import { VChart } from '@visactor/react-vchart';
 import { RefreshCw } from 'lucide-react';
@@ -229,12 +230,22 @@ const ChannelAnalyticsDetail = () => {
   const [users, setUsers] = useState([]);
   const [range, setRange] = useState('30d');
   const [granularity, setGranularity] = useState('day');
+  const [customRange, setCustomRange] = useState([
+    new Date(Date.now() - 7 * 86400000),
+    new Date(),
+  ]);
   const [metric, setMetric] = useState('token_count'); // call_count | token_count
   const [topN, setTopN] = useState(10);
   const [selectedModels, setSelectedModels] = useState([]);
   const [allModels, setAllModels] = useState([]);
 
   const getTimestamps = useCallback((r) => {
+    if (r === 'custom' && customRange && customRange[0] && customRange[1]) {
+      return {
+        startTimestamp: Math.floor(customRange[0].getTime() / 1000),
+        endTimestamp: Math.floor(customRange[1].getTime() / 1000),
+      };
+    }
     const now = Math.floor(Date.now() / 1000);
     let start = 0;
     switch (r) {
@@ -244,7 +255,7 @@ const ChannelAnalyticsDetail = () => {
       default: start = now - 30 * 86400;
     }
     return { startTimestamp: start, endTimestamp: now };
-  }, []);
+  }, [customRange]);
 
   const loadData = useCallback(async () => {
     if (!decodedSource) return;
@@ -314,10 +325,13 @@ const ChannelAnalyticsDetail = () => {
   useEffect(() => {
     if (range === '1d') setGranularity('hour');
     else if (range === '7d') setGranularity('day');
-    else setGranularity('day');
+    else if (range === '30d') setGranularity('day');
+    // custom 保持当前粒度不变
   }, [range]);
 
-  const rangeLabel = range === '1d' ? t('近 1 天') : range === '7d' ? t('近 7 天') : t('近 30 天');
+  const rangeLabel = range === 'custom'
+    ? `${customRange[0]?.toLocaleString()} ~ ${customRange[1]?.toLocaleString()}`
+    : range === '1d' ? t('近 1 天') : range === '7d' ? t('近 7 天') : t('近 30 天');
 
   // 过滤趋势数据（只显示选中的模型）
   const filteredTrendData = useMemo(() => {
@@ -424,7 +438,16 @@ const ChannelAnalyticsDetail = () => {
                 <Select.Option value="1d">{t('近 1 天')}</Select.Option>
                 <Select.Option value="7d">{t('近 7 天')}</Select.Option>
                 <Select.Option value="30d">{t('近 30 天')}</Select.Option>
+                <Select.Option value="custom">{t('自定义')}</Select.Option>
               </Select>
+              {range === 'custom' && (
+                <DatePicker
+                  type="dateTimeRange"
+                  value={customRange}
+                  onChange={(dates) => setCustomRange(dates)}
+                  style={{ width: 280 }}
+                />
+              )}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
               <Text type="tertiary" size="small">{t('粒度')}</Text>
