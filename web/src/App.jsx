@@ -136,6 +136,23 @@ function App() {
         />
         <Route path='/model-performance' element={<ModelPerformance />} />
         <Route
+          path='/channel-analytics'
+          element={
+            <AdminRoute>
+              <ChannelAnalytics />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path='/channel-analytics/:source'
+          element={
+            <AdminRoute>
+              <ChannelAnalyticsDetail />
+            </AdminRoute>
+          }
+        />
+        {/* 保留旧路径兼容 */}
+        <Route
           path='/console/channel-analytics'
           element={
             <AdminRoute>

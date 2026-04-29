@@ -19,7 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 
 import { useMemo } from 'react';
 
-export const useNavigation = (t, docsLink, headerNavModules) => {
+export const useNavigation = (t, docsLink, headerNavModules, isAdminUser) => {
   const mainNavLinks = useMemo(() => {
     // 默认配置，如果没有传入配置则显示所有模块
     const defaultModules = {
@@ -44,6 +44,12 @@ export const useNavigation = (t, docsLink, headerNavModules) => {
         text: t('控制台'),
         itemKey: 'console',
         to: '/console',
+      },
+      {
+        text: t('渠道分析'),
+        itemKey: 'channelAnalytics',
+        to: '/channel-analytics',
+        requireAdmin: true,
       },
       {
         text: t('模型广场'),
@@ -74,6 +80,10 @@ export const useNavigation = (t, docsLink, headerNavModules) => {
 
     // 根据配置过滤导航链接
     return allLinks.filter((link) => {
+      // 管理员权限过滤
+      if (link.requireAdmin && !isAdminUser) {
+        return false;
+      }
       if (link.itemKey === 'docs') {
         return docsLink && modules.docs;
       }
@@ -85,7 +95,7 @@ export const useNavigation = (t, docsLink, headerNavModules) => {
       }
       return modules[link.itemKey] === true;
     });
-  }, [t, docsLink, headerNavModules]);
+  }, [t, docsLink, headerNavModules, isAdminUser]);
 
   return {
     mainNavLinks,

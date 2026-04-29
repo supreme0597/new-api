@@ -107,11 +107,6 @@ const SiderBar = ({ onNavigate = () => {} }) => {
         className:
           localStorage.getItem('enable_task') === 'true' ? '' : 'tableHiddle',
       },
-      {
-        text: t('渠道分析'),
-        itemKey: 'channelAnalytics',
-        to: '/channel-analytics',
-      },
     ];
 
     // 根据配置过滤项目
