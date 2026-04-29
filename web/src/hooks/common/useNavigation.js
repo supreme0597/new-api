@@ -81,7 +81,7 @@ export const useNavigation = (t, docsLink, headerNavModules, isAdminUser) => {
 
     // 根据配置过滤导航链接
     return allLinks.filter((link) => {
-      // 管理员权限过滤
+      // 管理员权限过滤：requireAdmin 的链接必须管理员才能看到
       if (link.requireAdmin && !isAdminUser) {
         return false;
       }
@@ -94,7 +94,9 @@ export const useNavigation = (t, docsLink, headerNavModules, isAdminUser) => {
           ? modules.pricing.enabled
           : modules.pricing;
       }
-      return modules[link.itemKey] === true;
+      // 后端配置中未明确设置的字段，默认显示（undefined 视为 true）
+      const moduleValue = modules[link.itemKey];
+      return moduleValue === undefined ? true : moduleValue === true;
     });
   }, [t, docsLink, headerNavModules, isAdminUser]);
 
