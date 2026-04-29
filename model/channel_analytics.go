@@ -442,6 +442,9 @@ func GetChannelSourceDetail(source string, startTimestamp, endTimestamp int64) (
 }
 
 // getTimeBucketExpr 获取跨数据库兼容的时间分组表达式
+// 注意：MySQL 的 DATE() 返回 DATE 类型，配合 parseTime=true 时会被驱动转为 time.Time，
+// 导致 JSON 序列化后变成 ISO 格式（2026-04-25T00:00:00Z）。
+// 因此统一使用 DATE_FORMAT 返回 VARCHAR 字符串，避免类型转换问题。
 func getTimeBucketExpr(granularity string) string {
 	switch granularity {
 	case "hour":
@@ -457,7 +460,7 @@ func getTimeBucketExpr(granularity string) string {
 		} else if common.UsingSQLite {
 			return "strftime('%Y-%m-%d', logs.created_at, 'unixepoch')"
 		}
-		return "DATE(FROM_UNIXTIME(logs.created_at))"
+		return "DATE_FORMAT(FROM_UNIXTIME(logs.created_at), '%Y-%m-%d')"
 	case "week":
 		if common.UsingPostgreSQL {
 			return "to_char(date_trunc('week', to_timestamp(logs.created_at)), 'YYYY-MM-DD')"
