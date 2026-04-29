@@ -156,6 +156,7 @@ function SourceTrendChart({ data, sources, range, granularity }) {
         Count: d.call_count || 0,
       });
     });
+    result.sort((a, b) => a.Time.localeCompare(b.Time));
     return result;
   }, [data, granularity]);
 

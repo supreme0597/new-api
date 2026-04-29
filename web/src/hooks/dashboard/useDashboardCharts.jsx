@@ -140,6 +140,12 @@ export const useDashboardCharts = (
       text: t('模型消耗分布'),
       subtext: `${t('总计')}：${renderQuota(0, 2)}`,
     },
+    axes: [
+      {
+        orient: 'bottom',
+        type: 'band',
+      },
+    ],
     bar: {
       state: {
         hover: {
@@ -213,6 +219,12 @@ export const useDashboardCharts = (
       text: t('调用趋势'),
       subtext: '',
     },
+    axes: [
+      {
+        orient: 'bottom',
+        type: 'band',
+      },
+    ],
     tooltip: {
       mark: {
         content: [
@@ -271,6 +283,14 @@ export const useDashboardCharts = (
       text: t('模型调用次数排行'),
       subtext: '',
     },
+    axes: [
+      {
+        orient: 'bottom',
+        type: 'band',
+        bandPadding: 0.3,
+        paddingInner: 0.4,
+      },
+    ],
     bar: {
       state: {
         hover: {

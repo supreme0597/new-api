@@ -49,7 +49,7 @@ function UsageTrendChart({ data, metric, granularity }) {
     return data.map((d) => ({
       Time: formatTime(d.time),
       Value: metric === 'call_count' ? d.call_count : d.token_count,
-    }));
+    })).sort((a, b) => a.Time.localeCompare(b.Time));
   }, [data, metric, granularity]);
 
   const spec = useMemo(() => {
