@@ -40,6 +40,22 @@ type ChannelSourceUserRanking struct {
 	TokenCount int    `json:"token_count"`
 }
 
+// ChannelModelStat 按模型分组的统计
+type ChannelModelStat struct {
+	ModelName   string `json:"model_name"`
+	CallCount   int    `json:"call_count"`
+	TokenCount  int    `json:"token_count"`
+	ActiveUsers int    `json:"active_users"`
+}
+
+// ChannelModelTrendPoint 模型趋势数据点
+type ChannelModelTrendPoint struct {
+	Time       string `json:"time"`
+	ModelName  string `json:"model_name"`
+	CallCount  int    `json:"call_count"`
+	TokenCount int    `json:"token_count"`
+}
+
 // getChannelIDsBySource 获取指定来源的渠道ID列表（兼容 LOG_DB 与 DB 分离的场景）
 func getChannelIDsBySource(source string) ([]int, error) {
 	var channelIDs []int
@@ -327,7 +343,7 @@ func getSourceByChannelID() (map[int]string, error) {
 }
 
 // GetChannelSourceUserRanking 获取指定来源的活跃用户排行
-func GetChannelSourceUserRanking(source string, startTimestamp, endTimestamp int64, limit int) ([]ChannelSourceUserRanking, error) {
+func GetChannelSourceUserRanking(source string, startTimestamp, endTimestamp int64, limit int, modelName string) ([]ChannelSourceUserRanking, error) {
 	if limit <= 0 {
 		limit = 10
 	}
@@ -357,6 +373,10 @@ func GetChannelSourceUserRanking(source string, startTimestamp, endTimestamp int
 		Where("logs.type = ?", LogTypeConsume).
 		Where("logs.channel_id IN ?", channelIDs).
 		Where("logs.user_id > 0") // 排除系统用户（如采样的 user_id=0）
+
+	if modelName != "" {
+		tx = tx.Where("logs.model_name = ?", modelName)
+	}
 
 	if startTimestamp != 0 {
 		tx = tx.Where("logs.created_at >= ?", startTimestamp)
@@ -439,6 +459,104 @@ func GetChannelSourceDetail(source string, startTimestamp, endTimestamp int64) (
 		CallCount:   result.CallCount,
 		TokenCount:  result.TokenCount,
 	}, nil
+}
+
+// GetChannelModelStats 获取指定来源下各模型的统计
+func GetChannelModelStats(source string, startTimestamp, endTimestamp int64) ([]ChannelModelStat, error) {
+	// 获取该来源的渠道ID
+	channelIDs, err := getChannelIDsBySource(source)
+	if err != nil {
+		return nil, err
+	}
+	if len(channelIDs) == 0 {
+		return []ChannelModelStat{}, nil
+	}
+
+	type rawModelStat struct {
+		ModelName   string `json:"model_name"`
+		CallCount   int    `json:"call_count"`
+		TokenCount  int    `json:"token_count"`
+		ActiveUsers int    `json:"active_users"`
+	}
+	var rawStats []rawModelStat
+
+	tx := LOG_DB.Table("logs").
+		Select("logs.model_name, COUNT(*) as call_count, COALESCE(SUM(logs.prompt_tokens + logs.completion_tokens), 0) as token_count, COUNT(DISTINCT logs.user_id) as active_users").
+		Where("logs.type = ?", LogTypeConsume).
+		Where("logs.channel_id IN ?", channelIDs).
+		Where("logs.model_name IS NOT NULL AND logs.model_name != ''")
+
+	if startTimestamp != 0 {
+		tx = tx.Where("logs.created_at >= ?", startTimestamp)
+	}
+	if endTimestamp != 0 {
+		tx = tx.Where("logs.created_at <= ?", endTimestamp)
+	}
+
+	if err := tx.Group("logs.model_name").Order("call_count DESC").Find(&rawStats).Error; err != nil {
+		return nil, err
+	}
+
+	result := make([]ChannelModelStat, 0, len(rawStats))
+	for _, r := range rawStats {
+		result = append(result, ChannelModelStat{
+			ModelName:   r.ModelName,
+			CallCount:   r.CallCount,
+			TokenCount:  r.TokenCount,
+			ActiveUsers: r.ActiveUsers,
+		})
+	}
+	return result, nil
+}
+
+// GetChannelModelTrend 获取指定来源下各模型的趋势数据
+func GetChannelModelTrend(source string, startTimestamp, endTimestamp int64, granularity string) ([]ChannelModelTrendPoint, error) {
+	timeExpr := getTimeBucketExpr(granularity)
+
+	// 获取该来源的渠道ID
+	channelIDs, err := getChannelIDsBySource(source)
+	if err != nil {
+		return nil, err
+	}
+	if len(channelIDs) == 0 {
+		return []ChannelModelTrendPoint{}, nil
+	}
+
+	type rawTrendPoint struct {
+		TimeBucket string `json:"time_bucket"`
+		ModelName  string `json:"model_name"`
+		CallCount  int    `json:"call_count"`
+		TokenCount int    `json:"token_count"`
+	}
+	var rawPoints []rawTrendPoint
+
+	tx := LOG_DB.Table("logs").
+		Select(fmt.Sprintf("%s as time_bucket, logs.model_name, COUNT(*) as call_count, COALESCE(SUM(logs.prompt_tokens + logs.completion_tokens), 0) as token_count", timeExpr)).
+		Where("logs.type = ?", LogTypeConsume).
+		Where("logs.channel_id IN ?", channelIDs).
+		Where("logs.model_name IS NOT NULL AND logs.model_name != ''")
+
+	if startTimestamp != 0 {
+		tx = tx.Where("logs.created_at >= ?", startTimestamp)
+	}
+	if endTimestamp != 0 {
+		tx = tx.Where("logs.created_at <= ?", endTimestamp)
+	}
+
+	if err := tx.Group("time_bucket, logs.model_name").Order("time_bucket ASC").Find(&rawPoints).Error; err != nil {
+		return nil, err
+	}
+
+	result := make([]ChannelModelTrendPoint, 0, len(rawPoints))
+	for _, rp := range rawPoints {
+		result = append(result, ChannelModelTrendPoint{
+			Time:       rp.TimeBucket,
+			ModelName:  rp.ModelName,
+			CallCount:  rp.CallCount,
+			TokenCount: rp.TokenCount,
+		})
+	}
+	return result, nil
 }
 
 // getTimeBucketExpr 获取跨数据库兼容的时间分组表达式

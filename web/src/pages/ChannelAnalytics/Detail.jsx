@@ -13,6 +13,7 @@ import {
   Tag,
   Breadcrumb,
   IconButton,
+  Checkbox,
 } from '@douyinfe/semi-ui';
 import { VChart } from '@visactor/react-vchart';
 import { RefreshCw } from 'lucide-react';
@@ -27,98 +28,84 @@ function formatLargeNumber(num) {
   return String(num);
 }
 
-// VChart 面积折线图组件
-function UsageTrendChart({ data, metric, granularity }) {
+// 颜色列表（与数据看板 baseColors 一致）
+const MODEL_COLORS = [
+  '#1664FF', '#1AC6FF', '#FF8A00', '#3CC780', '#7442D4',
+  '#FFC400', '#304D77', '#B48DEB', '#009488', '#FF7DDA',
+];
+
+// VChart 饼图组件（模型占比）
+function ModelPieChart({ data, title, colorKey = 'call_count' }) {
   const { t } = useTranslation();
 
   const chartData = useMemo(() => {
-    if (!data || data.length === 0) return [];
-    // 时间格式化：去掉年份，day/week 只显示 MM-DD，hour 显示 MM-DD HH:mm
-    // 兼容两种格式：MySQL '2026-04-25 15:00' 和 ISO '2026-04-25T15:00:00Z'
-    const formatTime = (time) => {
-      if (!time) return time;
-      // 统一替换 T 为空格，去掉 Z 和尾部秒数
-      const normalized = time.replace('T', ' ').replace('Z', '');
-      const parts = normalized.split(' ');
-      const datePart = parts[0]; // YYYY-MM-DD
-      const dateWithoutYear = datePart.slice(5); // MM-DD
-      if (parts[1] && granularity === 'hour') {
-        return `${dateWithoutYear} ${parts[1].slice(0, 5)}`; // MM-DD HH:mm
-      }
-      return dateWithoutYear; // MM-DD
-    };
-    return data.map((d) => ({
-      Time: formatTime(d.time),
-      Value: metric === 'call_count' ? d.call_count : d.token_count,
-    })).sort((a, b) => a.Time.localeCompare(b.Time));
-  }, [data, metric, granularity]);
+    return (data || []).map((d, i) => ({
+      type: d.model_name,
+      value: d[colorKey] || 0,
+      color: MODEL_COLORS[i % MODEL_COLORS.length],
+    }));
+  }, [data, colorKey]);
 
-  const spec = useMemo(() => {
-    const metricLabel = metric === 'call_count' ? t('调用次数') : t('Token 消耗');
-    const granularityLabel = granularity === 'hour' ? t('小时') : granularity === 'week' ? t('周') : t('天');
-    const lineColor = '#1664FF';
+  const total = chartData.reduce((sum, d) => sum + d.value, 0);
 
-    return {
-      type: 'common',
-      data: [{ id: 'areaData', values: chartData }],
-      series: [
-        {
-          type: 'area',
-          dataIndex: 0,
-          xField: 'Time',
-          yField: 'Value',
-          seriesField: () => metricLabel,
-          area: {
-            style: {
-              fill: {
-                gradient: 'linear',
-                x0: 0, y0: 0, x1: 0, y1: 1,
-                stops: [
-                  { offset: 0, color: lineColor + '40' },
-                  { offset: 1, color: lineColor + '05' },
-                ],
-              },
-            },
-          },
-          line: {
-            style: { stroke: lineColor, lineWidth: 2 },
-          },
-          point: {
-            visible: true,
-            size: 4,
-            style: { fill: lineColor, stroke: '#fff', lineWidth: 1.5 },
-            state: { hover: { size: 6 } },
-          },
-          label: {
-            visible: true,
-            position: 'top',
-            style: {
-              fontSize: 10,
-              fill: '#666',
-            },
-            formatMethod: (value) => formatLargeNumber(value),
+  const spec = useMemo(() => ({
+    type: 'pie',
+    data: [{ id: 'id0', values: chartData }],
+    outerRadius: 0.75,
+    innerRadius: 0.5,
+    padAngle: 0.6,
+    valueField: 'value',
+    categoryField: 'type',
+    pie: {
+      style: { cornerRadius: 8 },
+      state: {
+        hover: { outerRadius: 0.8, stroke: '#000', lineWidth: 1 },
+        selected: { outerRadius: 0.8, stroke: '#000', lineWidth: 1 },
+      },
+    },
+    title: {
+      visible: true,
+      text: title,
+      subtext: `${t('总计')}：${formatLargeNumber(total)}`,
+    },
+    legends: {
+      visible: true,
+      orient: 'left',
+      item: {
+        label: {
+          formatMethod: (text) => {
+            const item = chartData.find(d => d.type === text);
+            if (item) {
+              const pct = total > 0 ? ((item.value / total) * 100).toFixed(1) : '0.0';
+              return `${text}  ${pct}%`;
+            }
+            return text;
           },
         },
-      ],
-      title: {
-        visible: true,
-        text: `${t('用量趋势')}（${metricLabel}）`,
-        subtext: `${t('粒度')}：${granularityLabel}`,
       },
-      legends: { visible: true },
-      tooltip: {
-        mark: {
-          content: [{ key: metricLabel, value: (datum) => formatLargeNumber(datum['Value']) }],
-        },
+    },
+    label: {
+      visible: true,
+      style: { fontSize: 11, lineHeight: 16 },
+      content: (datum) => {
+        const pct = total > 0 ? ((datum.value / total) * 100).toFixed(1) : '0.0';
+        return `${datum.type}\n${pct}%`;
       },
-      axes: [
-        { orient: 'bottom', type: 'band', label: { autoHide: true, autoRotate: true, formatMethod: (val) => val } },
-        { orient: 'left', label: { autoHide: true, formatMethod: (val) => formatLargeNumber(val) }, nice: true },
-      ],
-      color: [lineColor],
-      crosshair: { visible: true, line: { type: 'line', style: { stroke: '#999', lineDash: [4, 4] } } },
-    };
-  }, [chartData, metric, granularity, t]);
+    },
+    tooltip: {
+      mark: {
+        content: [
+          { key: (datum) => datum['type'], value: (datum) => `${renderNumber(datum['value'])} (${total > 0 ? ((datum.value / total) * 100).toFixed(1) : '0.0'}%)` },
+        ],
+      },
+    },
+    color: {
+      specified: chartData.reduce((map, d) => {
+        map[d.type] = d.color;
+        return map;
+      }, {}),
+    },
+  }), [chartData, title, total, t]);
 
   if (!data || data.length === 0) {
     return (
@@ -132,7 +119,97 @@ function UsageTrendChart({ data, metric, granularity }) {
 
   return (
     <Card {...CARD_PROPS} className='!rounded-2xl' bodyStyle={{ padding: 0 }}>
-      <div className='h-72 p-2'>
+      <div className='h-80 p-2'>
+        <VChart spec={spec} option={CHART_CONFIG} />
+      </div>
+    </Card>
+  );
+}
+
+// VChart 多模型折线图组件
+function ModelTrendChart({ data, models, metric, granularity }) {
+  const { t } = useTranslation();
+
+  const chartData = useMemo(() => {
+    if (!data || data.length === 0) return [];
+    const formatTime = (time) => {
+      if (!time) return time;
+      const normalized = time.replace('T', ' ').replace('Z', '');
+      const parts = normalized.split(' ');
+      const datePart = parts[0];
+      const dateWithoutYear = datePart.slice(5);
+      if (parts[1] && granularity === 'hour') {
+        return `${dateWithoutYear} ${parts[1].slice(0, 5)}`;
+      }
+      return dateWithoutYear;
+    };
+    const result = [];
+    data.forEach((d) => {
+      result.push({
+        Time: formatTime(d.time),
+        Model: d.model_name,
+        Count: metric === 'call_count' ? d.call_count : d.token_count,
+      });
+    });
+    result.sort((a, b) => a.Time.localeCompare(b.Time));
+    return result;
+  }, [data, metric, granularity]);
+
+  const spec = useMemo(() => {
+    const colorMap = {};
+    models.forEach((m, i) => {
+      colorMap[m] = MODEL_COLORS[i % MODEL_COLORS.length];
+    });
+
+    return {
+      type: 'line',
+      data: [{ id: 'lineData', values: chartData }],
+      xField: 'Time',
+      yField: 'Count',
+      axes: [
+        { orient: 'bottom', type: 'band', label: { autoHide: true, autoRotate: true, formatMethod: (val) => val } },
+        { orient: 'left', label: { autoHide: true, formatMethod: (val) => formatLargeNumber(val) }, nice: true },
+      ],
+      seriesField: 'Model',
+      legends: { visible: true, selectMode: 'single' },
+      title: { visible: false },
+      tooltip: {
+        mark: {
+          content: [{ key: (datum) => datum['Model'], value: (datum) => renderNumber(datum['Count']) }],
+        },
+        dimension: {
+          content: [{ key: (datum) => datum['Model'], value: (datum) => datum['Count'] || 0 }],
+          updateContent: (array) => {
+            array.sort((a, b) => b.value - a.value);
+            let sum = 0;
+            array.forEach((item) => {
+              const value = parseFloat(item.value) || 0;
+              sum += value;
+              item.value = renderNumber(value);
+            });
+            array.unshift({ key: t('总计'), value: renderNumber(sum) });
+            return array;
+          },
+        },
+      },
+      crosshair: { visible: true, line: { type: 'line', style: { stroke: '#999', lineDash: [4, 4] } } },
+      color: { specified: colorMap },
+    };
+  }, [chartData, models, t]);
+
+  if (!data || data.length === 0) {
+    return (
+      <Card {...CARD_PROPS} className='!rounded-2xl'>
+        <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--semi-color-text-2)' }}>
+          {t('暂无数据')}
+        </div>
+      </Card>
+    );
+  }
+
+  return (
+    <Card {...CARD_PROPS} className='!rounded-2xl' bodyStyle={{ padding: 0 }}>
+      <div className='h-80 p-2'>
         <VChart spec={spec} option={CHART_CONFIG} />
       </div>
     </Card>
@@ -147,12 +224,15 @@ const ChannelAnalyticsDetail = () => {
 
   const [loading, setLoading] = useState(false);
   const [detail, setDetail] = useState(null);
-  const [trendData, setTrendData] = useState([]);
+  const [modelStats, setModelStats] = useState([]);
+  const [modelTrendData, setModelTrendData] = useState([]);
   const [users, setUsers] = useState([]);
   const [range, setRange] = useState('30d');
   const [granularity, setGranularity] = useState('day');
   const [metric, setMetric] = useState('token_count'); // call_count | token_count
   const [topN, setTopN] = useState(10);
+  const [selectedModels, setSelectedModels] = useState([]);
+  const [allModels, setAllModels] = useState([]);
 
   const getTimestamps = useCallback((r) => {
     const now = Math.floor(Date.now() / 1000);
@@ -171,12 +251,15 @@ const ChannelAnalyticsDetail = () => {
     setLoading(true);
     try {
       const { startTimestamp, endTimestamp } = getTimestamps(range);
-      const [detailRes, trendRes, usersRes] = await Promise.all([
+      const [detailRes, modelsRes, modelTrendRes, usersRes] = await Promise.all([
         API.get(`/api/channel-analytics/source/${encodeURIComponent(decodedSource)}`, {
           params: { start_timestamp: startTimestamp, end_timestamp: endTimestamp },
         }),
-        API.get('/api/channel-analytics/trend', {
-          params: { start_timestamp: startTimestamp, end_timestamp: endTimestamp, granularity, source: decodedSource },
+        API.get(`/api/channel-analytics/source/${encodeURIComponent(decodedSource)}/models`, {
+          params: { start_timestamp: startTimestamp, end_timestamp: endTimestamp },
+        }),
+        API.get(`/api/channel-analytics/source/${encodeURIComponent(decodedSource)}/model-trend`, {
+          params: { start_timestamp: startTimestamp, end_timestamp: endTimestamp, granularity },
         }),
         API.get(`/api/channel-analytics/source/${encodeURIComponent(decodedSource)}/users`, {
           params: { start_timestamp: startTimestamp, end_timestamp: endTimestamp, limit: topN },
@@ -184,7 +267,17 @@ const ChannelAnalyticsDetail = () => {
       ]);
 
       if (detailRes.data.success) setDetail(detailRes.data.data);
-      if (trendRes.data.success) setTrendData(trendRes.data.data || []);
+      if (modelsRes.data.success) {
+        const stats = modelsRes.data.data || [];
+        setModelStats(stats);
+        const modelNames = stats.map(s => s.model_name);
+        setAllModels(modelNames);
+        // 默认全选
+        if (selectedModels.length === 0) {
+          setSelectedModels(modelNames);
+        }
+      }
+      if (modelTrendRes.data.success) setModelTrendData(modelTrendRes.data.data || []);
       if (usersRes.data.success) setUsers(usersRes.data.data || []);
     } catch (e) {
       showError(e.message);
@@ -193,9 +286,30 @@ const ChannelAnalyticsDetail = () => {
     }
   }, [decodedSource, range, granularity, topN, getTimestamps]);
 
+  // 当选择模型变化时，重新加载用户排行
+  const loadUsers = useCallback(async () => {
+    if (!decodedSource) return;
+    try {
+      const { startTimestamp, endTimestamp } = getTimestamps(range);
+      const params = { start_timestamp: startTimestamp, end_timestamp: endTimestamp, limit: topN };
+      // 如果只选了一个模型，传给后端过滤
+      if (selectedModels.length === 1) {
+        params.model_name = selectedModels[0];
+      }
+      const usersRes = await API.get(`/api/channel-analytics/source/${encodeURIComponent(decodedSource)}/users`, { params });
+      if (usersRes.data.success) setUsers(usersRes.data.data || []);
+    } catch (e) {
+      showError(e.message);
+    }
+  }, [decodedSource, range, topN, selectedModels, getTimestamps]);
+
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    loadUsers();
+  }, [loadUsers]);
 
   useEffect(() => {
     if (range === '1d') setGranularity('hour');
@@ -204,6 +318,30 @@ const ChannelAnalyticsDetail = () => {
   }, [range]);
 
   const rangeLabel = range === '1d' ? t('近 1 天') : range === '7d' ? t('近 7 天') : t('近 30 天');
+
+  // 过滤趋势数据（只显示选中的模型）
+  const filteredTrendData = useMemo(() => {
+    if (!modelTrendData || modelTrendData.length === 0) return [];
+    if (selectedModels.length === 0) return modelTrendData;
+    return modelTrendData.filter(d => selectedModels.includes(d.model_name));
+  }, [modelTrendData, selectedModels]);
+
+  const handleModelToggle = (modelName) => {
+    setSelectedModels(prev => {
+      if (prev.includes(modelName)) {
+        return prev.filter(m => m !== modelName);
+      }
+      return [...prev, modelName];
+    });
+  };
+
+  const handleSelectAllModels = () => {
+    setSelectedModels([...allModels]);
+  };
+
+  const handleDeselectAllModels = () => {
+    setSelectedModels([]);
+  };
 
   const userColumns = [
     {
@@ -300,51 +438,118 @@ const ChannelAnalyticsDetail = () => {
           </Space>
         </div>
 
-        {/* 用量趋势 */}
+        {/* 模型占比饼图 */}
+        <div className='grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4'>
+          <ModelPieChart
+            data={modelStats}
+            title={t('各模型调用次数占比')}
+            colorKey="call_count"
+          />
+          <ModelPieChart
+            data={modelStats}
+            title={t('各模型 Token 消耗占比')}
+            colorKey="token_count"
+          />
+        </div>
+
+        {/* 模型趋势折线图 */}
         <div style={{ marginBottom: 20 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
             <div>
-              <div style={{ fontSize: 14, fontWeight: 600 }}>{t('用量趋势')}</div>
-              <div style={{
-                display: 'inline-flex', background: 'var(--semi-color-fill-0)',
-                borderRadius: 6, padding: 2, gap: 2, marginTop: 6,
-              }}>
-                <button
-                  onClick={() => setMetric('token_count')}
-                  style={{
-                    padding: '4px 14px', fontSize: 12, borderRadius: 4, cursor: 'pointer',
-                    border: 'none', lineHeight: '20px',
-                    background: metric === 'token_count' ? 'var(--semi-color-bg-0)' : 'transparent',
-                    color: metric === 'token_count' ? 'var(--semi-color-primary)' : 'var(--semi-color-text-2)',
-                    fontWeight: metric === 'token_count' ? 600 : 400,
-                    boxShadow: metric === 'token_count' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-                  }}
-                >
-                  {t('Token 消耗')}
-                </button>
-                <button
-                  onClick={() => setMetric('call_count')}
-                  style={{
-                    padding: '4px 14px', fontSize: 12, borderRadius: 4, cursor: 'pointer',
-                    border: 'none', lineHeight: '20px',
-                    background: metric === 'call_count' ? 'var(--semi-color-bg-0)' : 'transparent',
-                    color: metric === 'call_count' ? 'var(--semi-color-primary)' : 'var(--semi-color-text-2)',
-                    fontWeight: metric === 'call_count' ? 600 : 400,
-                    boxShadow: metric === 'call_count' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-                  }}
-                >
-                  {t('调用次数')}
-                </button>
+              <div style={{ fontSize: 14, fontWeight: 600 }}>{t('模型使用趋势')}</div>
+              <div style={{ fontSize: 12, color: 'var(--semi-color-text-2)', marginTop: 4 }}>
+                {t('默认显示全部模型')} · {t('点击图例可聚焦单个模型')}
               </div>
             </div>
+            <div className='toggle-group'>
+              <button
+                onClick={() => setMetric('token_count')}
+                style={{
+                  padding: '4px 14px', fontSize: 12, borderRadius: 4, cursor: 'pointer',
+                  border: 'none', lineHeight: '20px',
+                  background: metric === 'token_count' ? 'var(--semi-color-bg-0)' : 'transparent',
+                  color: metric === 'token_count' ? 'var(--semi-color-primary)' : 'var(--semi-color-text-2)',
+                  fontWeight: metric === 'token_count' ? 600 : 400,
+                  boxShadow: metric === 'token_count' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                }}
+              >
+                {t('Token 消耗')}
+              </button>
+              <button
+                onClick={() => setMetric('call_count')}
+                style={{
+                  padding: '4px 14px', fontSize: 12, borderRadius: 4, cursor: 'pointer',
+                  border: 'none', lineHeight: '20px',
+                  background: metric === 'call_count' ? 'var(--semi-color-bg-0)' : 'transparent',
+                  color: metric === 'call_count' ? 'var(--semi-color-primary)' : 'var(--semi-color-text-2)',
+                  fontWeight: metric === 'call_count' ? 600 : 400,
+                  boxShadow: metric === 'call_count' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                }}
+              >
+                {t('调用次数')}
+              </button>
+            </div>
           </div>
-          <UsageTrendChart data={trendData} metric={metric} granularity={granularity} />
+          <ModelTrendChart
+            data={filteredTrendData}
+            models={selectedModels}
+            metric={metric}
+            granularity={granularity}
+          />
+          {/* 模型选择器 */}
+          <div style={{ marginTop: 12, padding: '12px 16px', background: 'var(--semi-color-fill-0)', borderRadius: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <span style={{ fontSize: 12, color: 'var(--semi-color-text-2)' }}>{t('选择模型')}：</span>
+              <Space>
+                <span
+                  style={{ fontSize: 11, color: 'var(--semi-color-primary)', cursor: 'pointer' }}
+                  onClick={handleSelectAllModels}
+                >
+                  {t('全选')}
+                </span>
+                <span
+                  style={{ fontSize: 11, color: 'var(--semi-color-primary)', cursor: 'pointer' }}
+                  onClick={handleDeselectAllModels}
+                >
+                  {t('清空')}
+                </span>
+              </Space>
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {allModels.map((modelName, i) => (
+                <Checkbox
+                  key={modelName}
+                  checked={selectedModels.includes(modelName)}
+                  onChange={() => handleModelToggle(modelName)}
+                  style={{ marginRight: 0 }}
+                >
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <span
+                      style={{
+                        width: 8, height: 8, borderRadius: '50%',
+                        background: MODEL_COLORS[i % MODEL_COLORS.length],
+                        display: 'inline-block',
+                      }}
+                    />
+                    <span style={{ fontSize: 12 }}>{modelName}</span>
+                  </span>
+                </Checkbox>
+              ))}
+            </div>
+          </div>
         </div>
 
         {/* 活跃用户排行 */}
         <div style={{ marginTop: 20, paddingTop: 20, borderTop: '1px solid var(--semi-color-border)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
-            <div style={{ fontSize: 14, fontWeight: 600 }}>{t('活跃用户排行')}（{t('点击可查看该用户使用日志')}）</div>
+            <div style={{ fontSize: 14, fontWeight: 600 }}>
+              {t('活跃用户排行')}
+              {selectedModels.length === 1 && (
+                <span style={{ fontSize: 12, color: 'var(--semi-color-text-2)', marginLeft: 8 }}>
+                  ({selectedModels[0]})
+                </span>
+              )}
+            </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
               <Text type="tertiary" size="small">{t('显示')}</Text>
               <Select size="small" value={topN} onChange={setTopN} style={{ minWidth: 80 }}>
@@ -373,7 +578,6 @@ const ChannelAnalyticsDetail = () => {
             />
           </Card>
         </div>
-
 
       </Spin>
     </div>

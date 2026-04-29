@@ -283,6 +283,8 @@ func SetApiRouter(router gin.IRouter) {
 			channelAnalyticsRoute.GET("/trend", controller.GetChannelAnalyticsTrend)
 			channelAnalyticsRoute.GET("/source/:source", controller.GetChannelAnalyticsSourceDetail)
 			channelAnalyticsRoute.GET("/source/:source/users", controller.GetChannelAnalyticsUserRanking)
+			channelAnalyticsRoute.GET("/source/:source/models", controller.GetChannelAnalyticsModels)
+			channelAnalyticsRoute.GET("/source/:source/model-trend", controller.GetChannelAnalyticsModelTrend)
 		}
 
 		// 渠道来源映射管理（仅超级管理员）
