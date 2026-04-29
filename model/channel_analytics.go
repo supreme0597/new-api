@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/QuantumNous/new-api/common"
+	"gorm.io/gorm"
 )
 
 // ChannelSourceOverview 渠道来源概览统计
@@ -39,6 +40,53 @@ type ChannelSourceUserRanking struct {
 	TokenCount int    `json:"token_count"`
 }
 
+// getChannelIDsBySource 获取指定来源的渠道ID列表（兼容 LOG_DB 与 DB 分离的场景）
+func getChannelIDsBySource(source string) ([]int, error) {
+	var channelIDs []int
+	tx := DB.Model(&Channel{}).
+		Where("source IS NOT NULL AND source != ''").
+		Where("is_test_channel = ?", commonFalseVal)
+	if source != "" {
+		tx = tx.Where("source = ?", source)
+	}
+	if err := tx.Pluck("id", &channelIDs).Error; err != nil {
+		return nil, err
+	}
+	return channelIDs, nil
+}
+
+// getAllSourceChannelIDs 获取所有来源的渠道ID映射（来源 → 渠道ID列表）
+func getAllSourceChannelIDs() (map[string][]int, error) {
+	type sourceChannels struct {
+		Source string `json:"source"`
+		ID     int    `json:"id"`
+	}
+	var results []sourceChannels
+	err := DB.Model(&Channel{}).
+		Select("source, id").
+		Where("source IS NOT NULL AND source != ''").
+		Where("is_test_channel = ?", commonFalseVal).
+		Find(&results).Error
+	if err != nil {
+		return nil, err
+	}
+
+	sourceMap := make(map[string][]int)
+	for _, r := range results {
+		sourceMap[r.Source] = append(sourceMap[r.Source], r.ID)
+	}
+	return sourceMap, nil
+}
+
+// buildChannelIDFilter 构建渠道ID过滤条件（当 channelIDs 不为空时添加 IN 条件）
+func buildChannelIDFilter(tx *gorm.DB, channelIDs []int) *gorm.DB {
+	if len(channelIDs) > 0 {
+		return tx.Where("logs.channel_id IN ?", channelIDs)
+	}
+	// 没有 channel 时返回一个不可能匹配的条件
+	return tx.Where("1 = 0")
+}
+
 // GetChannelSourceOverview 获取渠道来源概览
 func GetChannelSourceOverview(startTimestamp, endTimestamp int64) (*ChannelSourceOverview, error) {
 	overview := &ChannelSourceOverview{}
@@ -54,13 +102,25 @@ func GetChannelSourceOverview(startTimestamp, endTimestamp int64) (*ChannelSourc
 	}
 	overview.SourceCount = len(distinctSources)
 
-	// 总调用次数、总 Token、活跃用户 — 从 logs JOIN channels 按 source 过滤（排除测试渠道）
+	// 获取所有有来源的渠道ID
+	sourceMap, err := getAllSourceChannelIDs()
+	if err != nil {
+		return nil, err
+	}
+	var allChannelIDs []int
+	for _, ids := range sourceMap {
+		allChannelIDs = append(allChannelIDs, ids...)
+	}
+
+	if len(allChannelIDs) == 0 {
+		return overview, nil
+	}
+
+	// 总调用次数、总 Token、活跃用户 — 使用 channel_id IN 过滤（兼容 LOG_DB 与 DB 分离）
 	tx := LOG_DB.Table("logs").
 		Select("COUNT(*) as total_calls, COALESCE(SUM(logs.prompt_tokens + logs.completion_tokens), 0) as total_tokens, COUNT(DISTINCT logs.user_id) as active_users").
-		Joins("JOIN channels ON logs.channel_id = channels.id").
 		Where("logs.type = ?", LogTypeConsume).
-		Where("channels.source IS NOT NULL AND channels.source != ''").
-		Where("channels.is_test_channel = ?", commonFalseVal)
+		Where("logs.channel_id IN ?", allChannelIDs)
 
 	if startTimestamp != 0 {
 		tx = tx.Where("logs.created_at >= ?", startTimestamp)
@@ -88,67 +148,66 @@ func GetChannelSourceOverview(startTimestamp, endTimestamp int64) (*ChannelSourc
 
 // GetChannelSourceStats 获取各来源的详细统计
 func GetChannelSourceStats(startTimestamp, endTimestamp int64) ([]ChannelSourceStat, error) {
-	// 从 logs JOIN channels 获取各来源的模型数（排除测试渠道）
-	type sourceModelCount struct {
-		Source     string `json:"source"`
-		ModelCount int    `json:"model_count"`
-	}
-	var modelCounts []sourceModelCount
-	txModel := LOG_DB.Table("logs").
-		Select("channels.source, COUNT(DISTINCT logs.model_name) as model_count").
-		Joins("JOIN channels ON logs.channel_id = channels.id").
-		Where("logs.type = ?", LogTypeConsume).
-		Where("channels.source IS NOT NULL AND channels.source != ''").
-		Where("channels.is_test_channel = ?", commonFalseVal)
-	if startTimestamp != 0 {
-		txModel = txModel.Where("logs.created_at >= ?", startTimestamp)
-	}
-	if endTimestamp != 0 {
-		txModel = txModel.Where("logs.created_at <= ?", endTimestamp)
-	}
-	if err := txModel.Group("channels.source").Find(&modelCounts).Error; err != nil {
-		return nil, err
-	}
-	modelCountMap := make(map[string]int, len(modelCounts))
-	for _, mc := range modelCounts {
-		modelCountMap[mc.Source] = mc.ModelCount
-	}
-
-	// 从 logs JOIN channels 获取各来源的调用统计（排除测试渠道）
-	type sourceLogStat struct {
-		Source      string `json:"source"`
-		CallCount   int    `json:"call_count"`
-		TokenCount  int    `json:"token_count"`
-		ActiveUsers int    `json:"active_users"`
-	}
-	var logStats []sourceLogStat
-	tx := LOG_DB.Table("logs").
-		Select("channels.source, COUNT(*) as call_count, COALESCE(SUM(logs.prompt_tokens + logs.completion_tokens), 0) as token_count, COUNT(DISTINCT logs.user_id) as active_users").
-		Joins("JOIN channels ON logs.channel_id = channels.id").
-		Where("logs.type = ?", LogTypeConsume).
-		Where("channels.source IS NOT NULL AND channels.source != ''").
-		Where("channels.is_test_channel = ?", commonFalseVal)
-
-	if startTimestamp != 0 {
-		tx = tx.Where("logs.created_at >= ?", startTimestamp)
-	}
-	if endTimestamp != 0 {
-		tx = tx.Where("logs.created_at <= ?", endTimestamp)
-	}
-
-	if err := tx.Group("channels.source").Find(&logStats).Error; err != nil {
+	// 获取所有来源的渠道ID映射
+	sourceMap, err := getAllSourceChannelIDs()
+	if err != nil {
 		return nil, err
 	}
 
-	// 合并数据
-	stats := make([]ChannelSourceStat, 0, len(logStats))
-	for _, ls := range logStats {
+	if len(sourceMap) == 0 {
+		return []ChannelSourceStat{}, nil
+	}
+
+	// 按来源分别查询统计数据
+	stats := make([]ChannelSourceStat, 0, len(sourceMap))
+	for source, channelIDs := range sourceMap {
+		if len(channelIDs) == 0 {
+			continue
+		}
+
+		// 模型数
+		var modelCount int64
+		txModel := LOG_DB.Table("logs").
+			Select("COUNT(DISTINCT logs.model_name)").
+			Where("logs.type = ?", LogTypeConsume).
+			Where("logs.channel_id IN ?", channelIDs)
+		if startTimestamp != 0 {
+			txModel = txModel.Where("logs.created_at >= ?", startTimestamp)
+		}
+		if endTimestamp != 0 {
+			txModel = txModel.Where("logs.created_at <= ?", endTimestamp)
+		}
+		if err := txModel.Scan(&modelCount).Error; err != nil {
+			return nil, err
+		}
+
+		// 调用统计
+		type sourceLogStat struct {
+			CallCount   int `json:"call_count"`
+			TokenCount  int `json:"token_count"`
+			ActiveUsers int `json:"active_users"`
+		}
+		var logStat sourceLogStat
+		tx := LOG_DB.Table("logs").
+			Select("COUNT(*) as call_count, COALESCE(SUM(logs.prompt_tokens + logs.completion_tokens), 0) as token_count, COUNT(DISTINCT logs.user_id) as active_users").
+			Where("logs.type = ?", LogTypeConsume).
+			Where("logs.channel_id IN ?", channelIDs)
+		if startTimestamp != 0 {
+			tx = tx.Where("logs.created_at >= ?", startTimestamp)
+		}
+		if endTimestamp != 0 {
+			tx = tx.Where("logs.created_at <= ?", endTimestamp)
+		}
+		if err := tx.Scan(&logStat).Error; err != nil {
+			return nil, err
+		}
+
 		stats = append(stats, ChannelSourceStat{
-			Source:      ls.Source,
-			ModelCount:  modelCountMap[ls.Source],
-			ActiveUsers: ls.ActiveUsers,
-			CallCount:   ls.CallCount,
-			TokenCount:  ls.TokenCount,
+			Source:      source,
+			ModelCount:  int(modelCount),
+			ActiveUsers: logStat.ActiveUsers,
+			CallCount:   logStat.CallCount,
+			TokenCount:  logStat.TokenCount,
 		})
 	}
 
@@ -160,12 +219,38 @@ func GetChannelSourceTrend(startTimestamp, endTimestamp int64, granularity strin
 	// 构建时间分组表达式（跨数据库兼容）
 	timeExpr := getTimeBucketExpr(granularity)
 
+	// 获取渠道ID
+	var channelIDs []int
+	var err error
+	if source != "" {
+		channelIDs, err = getChannelIDsBySource(source)
+	} else {
+		// 所有来源
+		sourceMap, mapErr := getAllSourceChannelIDs()
+		if mapErr != nil {
+			return nil, mapErr
+		}
+		for _, ids := range sourceMap {
+			channelIDs = append(channelIDs, ids...)
+		}
+	}
+	if err != nil {
+		return nil, err
+	}
+	if len(channelIDs) == 0 {
+		return []ChannelSourceTrendPoint{}, nil
+	}
+
+	// 需要来源信息，构建 channel_id → source 映射
+	sourceByID, err := getSourceByChannelID()
+	if err != nil {
+		return nil, err
+	}
+
 	tx := LOG_DB.Table("logs").
-		Select(fmt.Sprintf("%s as time_bucket, channels.source, COUNT(*) as call_count, COALESCE(SUM(logs.prompt_tokens + logs.completion_tokens), 0) as token_count", timeExpr)).
-		Joins("JOIN channels ON logs.channel_id = channels.id").
+		Select(fmt.Sprintf("%s as time_bucket, logs.channel_id, COUNT(*) as call_count, COALESCE(SUM(logs.prompt_tokens + logs.completion_tokens), 0) as token_count", timeExpr)).
 		Where("logs.type = ?", LogTypeConsume).
-		Where("channels.source IS NOT NULL AND channels.source != ''").
-		Where("channels.is_test_channel = ?", commonFalseVal)
+		Where("logs.channel_id IN ?", channelIDs)
 
 	if startTimestamp != 0 {
 		tx = tx.Where("logs.created_at >= ?", startTimestamp)
@@ -173,32 +258,72 @@ func GetChannelSourceTrend(startTimestamp, endTimestamp int64, granularity strin
 	if endTimestamp != 0 {
 		tx = tx.Where("logs.created_at <= ?", endTimestamp)
 	}
-	if source != "" {
-		tx = tx.Where("channels.source = ?", source)
-	}
 
 	type rawTrendPoint struct {
 		TimeBucket string `json:"time_bucket"`
-		Source     string `json:"source"`
+		ChannelID  int    `json:"channel_id"`
 		CallCount  int    `json:"call_count"`
 		TokenCount int    `json:"token_count"`
 	}
 	var rawPoints []rawTrendPoint
-	if err := tx.Group("time_bucket, channels.source").Order("time_bucket ASC").Find(&rawPoints).Error; err != nil {
+	if err := tx.Group("time_bucket, logs.channel_id").Order("time_bucket ASC").Find(&rawPoints).Error; err != nil {
 		return nil, err
 	}
 
-	points := make([]ChannelSourceTrendPoint, 0, len(rawPoints))
+	// 按 time_bucket + source 聚合
+	type trendKey struct {
+		Time   string
+		Source string
+	}
+	trendMap := make(map[trendKey]*ChannelSourceTrendPoint)
 	for _, rp := range rawPoints {
-		points = append(points, ChannelSourceTrendPoint{
-			Time:       rp.TimeBucket,
-			Source:     rp.Source,
-			CallCount:  rp.CallCount,
-			TokenCount: rp.TokenCount,
-		})
+		src, ok := sourceByID[rp.ChannelID]
+		if !ok {
+			continue
+		}
+		key := trendKey{Time: rp.TimeBucket, Source: src}
+		if existing, ok := trendMap[key]; ok {
+			existing.CallCount += rp.CallCount
+			existing.TokenCount += rp.TokenCount
+		} else {
+			trendMap[key] = &ChannelSourceTrendPoint{
+				Time:       rp.TimeBucket,
+				Source:     src,
+				CallCount:  rp.CallCount,
+				TokenCount: rp.TokenCount,
+			}
+		}
+	}
+
+	points := make([]ChannelSourceTrendPoint, 0, len(trendMap))
+	for _, p := range trendMap {
+		points = append(points, *p)
 	}
 
 	return points, nil
+}
+
+// getSourceByChannelID 获取 channel_id → source 的映射
+func getSourceByChannelID() (map[int]string, error) {
+	type channelSource struct {
+		ID     int    `json:"id"`
+		Source string `json:"source"`
+	}
+	var results []channelSource
+	err := DB.Model(&Channel{}).
+		Select("id, source").
+		Where("source IS NOT NULL AND source != ''").
+		Where("is_test_channel = ?", commonFalseVal).
+		Find(&results).Error
+	if err != nil {
+		return nil, err
+	}
+
+	sourceByID := make(map[int]string, len(results))
+	for _, r := range results {
+		sourceByID[r.ID] = r.Source
+	}
+	return sourceByID, nil
 }
 
 // GetChannelSourceUserRanking 获取指定来源的活跃用户排行
@@ -208,6 +333,15 @@ func GetChannelSourceUserRanking(source string, startTimestamp, endTimestamp int
 	}
 	if limit > 50 {
 		limit = 50
+	}
+
+	// 获取该来源的渠道ID
+	channelIDs, err := getChannelIDsBySource(source)
+	if err != nil {
+		return nil, err
+	}
+	if len(channelIDs) == 0 {
+		return []ChannelSourceUserRanking{}, nil
 	}
 
 	type rawRanking struct {
@@ -220,10 +354,8 @@ func GetChannelSourceUserRanking(source string, startTimestamp, endTimestamp int
 
 	tx := LOG_DB.Table("logs").
 		Select("logs.user_id, logs.username, COUNT(*) as call_count, COALESCE(SUM(logs.prompt_tokens + logs.completion_tokens), 0) as token_count").
-		Joins("JOIN channels ON logs.channel_id = channels.id").
 		Where("logs.type = ?", LogTypeConsume).
-		Where("channels.source = ?", source).
-		Where("channels.is_test_channel = ?", commonFalseVal).
+		Where("logs.channel_id IN ?", channelIDs).
 		Where("logs.user_id > 0") // 排除系统用户（如采样的 user_id=0）
 
 	if startTimestamp != 0 {
@@ -252,14 +384,21 @@ func GetChannelSourceUserRanking(source string, startTimestamp, endTimestamp int
 
 // GetChannelSourceDetail 获取单个来源的详情统计
 func GetChannelSourceDetail(source string, startTimestamp, endTimestamp int64) (*ChannelSourceStat, error) {
-	// 模型数：该来源下实际调用过的不同模型数量（排除测试渠道）
+	// 获取该来源的渠道ID
+	channelIDs, err := getChannelIDsBySource(source)
+	if err != nil {
+		return nil, err
+	}
+	if len(channelIDs) == 0 {
+		return &ChannelSourceStat{Source: source}, nil
+	}
+
+	// 模型数：该来源下实际调用过的不同模型数量
 	var modelCount int64
 	txModel := LOG_DB.Table("logs").
-		Select("COUNT(DISTINCT logs.model_name) as model_count").
-		Joins("JOIN channels ON logs.channel_id = channels.id").
+		Select("COUNT(DISTINCT logs.model_name)").
 		Where("logs.type = ?", LogTypeConsume).
-		Where("channels.source = ?", source).
-		Where("channels.is_test_channel = ?", commonFalseVal)
+		Where("logs.channel_id IN ?", channelIDs)
 	if startTimestamp != 0 {
 		txModel = txModel.Where("logs.created_at >= ?", startTimestamp)
 	}
@@ -270,7 +409,7 @@ func GetChannelSourceDetail(source string, startTimestamp, endTimestamp int64) (
 		return nil, err
 	}
 
-	// 调用统计（排除测试渠道）
+	// 调用统计
 	type detailResult struct {
 		CallCount   int `json:"call_count"`
 		TokenCount  int `json:"token_count"`
@@ -279,10 +418,8 @@ func GetChannelSourceDetail(source string, startTimestamp, endTimestamp int64) (
 	var result detailResult
 	tx := LOG_DB.Table("logs").
 		Select("COUNT(*) as call_count, COALESCE(SUM(logs.prompt_tokens + logs.completion_tokens), 0) as token_count, COUNT(DISTINCT logs.user_id) as active_users").
-		Joins("JOIN channels ON logs.channel_id = channels.id").
 		Where("logs.type = ?", LogTypeConsume).
-		Where("channels.source = ?", source).
-		Where("channels.is_test_channel = ?", commonFalseVal)
+		Where("logs.channel_id IN ?", channelIDs)
 
 	if startTimestamp != 0 {
 		tx = tx.Where("logs.created_at >= ?", startTimestamp)
