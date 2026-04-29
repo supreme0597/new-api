@@ -348,7 +348,7 @@ const ChannelAnalytics = () => {
         {/* 头部 */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
           <div>
-            <Title heading={4} style={{ margin: 0 }}>{t('渠道来源分析')}</Title>
+            <Title heading={4} style={{ margin: 0 }}>{t('用量统计')}</Title>
             <Text type="tertiary" size="small">
               {t('统计时间')}：{range === '1d' ? t('近 1 天') : range === '7d' ? t('近 7 天') : t('近 30 天')} · {granularity === 'hour' ? t('按小时') : granularity === 'week' ? t('按周') : t('按天')}
             </Text>

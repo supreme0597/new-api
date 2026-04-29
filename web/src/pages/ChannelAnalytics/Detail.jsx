@@ -224,7 +224,7 @@ const ChannelAnalyticsDetail = () => {
         {/* 面包屑 */}
         <Breadcrumb style={{ marginBottom: 16 }}>
           <Breadcrumb.Item>
-            <a onClick={() => navigate('/console/channel-analytics')}>{t('渠道分析')}</a>
+            <a onClick={() => navigate('/channel-analytics')}>{t('用量统计')}</a>
           </Breadcrumb.Item>
           <Breadcrumb.Item>{decodedSource}</Breadcrumb.Item>
         </Breadcrumb>

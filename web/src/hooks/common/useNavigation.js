@@ -57,7 +57,7 @@ export const useNavigation = (t, docsLink, headerNavModules, isAdminUser) => {
         to: '/model-performance',
       },
       {
-        text: t('渠道分析'),
+        text: t('用量统计'),
         itemKey: 'channelAnalytics',
         to: '/channel-analytics',
         requireAdmin: true,
