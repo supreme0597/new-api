@@ -8,13 +8,14 @@ import {
   Table,
   Spin,
   Select,
-  Button,
   Space,
   Typography,
   Tag,
   Breadcrumb,
+  IconButton,
 } from '@douyinfe/semi-ui';
 import { VChart } from '@visactor/react-vchart';
+import { RefreshCw } from 'lucide-react';
 import { renderNumber } from '../../helpers/render';
 import { CARD_PROPS, CHART_CONFIG } from '../../constants/dashboard.constants';
 
@@ -26,7 +27,7 @@ function formatLargeNumber(num) {
   return String(num);
 }
 
-// VChart 柱状图组件
+// VChart 面积折线图组件
 function UsageTrendChart({ data, metric, granularity }) {
   const { t } = useTranslation();
 
@@ -55,42 +56,67 @@ function UsageTrendChart({ data, metric, granularity }) {
   const spec = useMemo(() => {
     const metricLabel = metric === 'call_count' ? t('调用次数') : t('Token 消耗');
     const granularityLabel = granularity === 'hour' ? t('小时') : granularity === 'week' ? t('周') : t('天');
+    const lineColor = '#1664FF';
 
     return {
-      type: 'bar',
-      data: [{ id: 'barData', values: chartData }],
-      xField: 'Time',
-      yField: 'Value',
+      type: 'common',
+      data: [{ id: 'areaData', values: chartData }],
+      series: [
+        {
+          type: 'area',
+          dataIndex: 0,
+          xField: 'Time',
+          yField: 'Value',
+          seriesField: () => metricLabel,
+          area: {
+            style: {
+              fill: {
+                gradient: 'linear',
+                x0: 0, y0: 0, x1: 0, y1: 1,
+                stops: [
+                  { offset: 0, color: lineColor + '40' },
+                  { offset: 1, color: lineColor + '05' },
+                ],
+              },
+            },
+          },
+          line: {
+            style: { stroke: lineColor, lineWidth: 2 },
+          },
+          point: {
+            visible: true,
+            size: 4,
+            style: { fill: lineColor, stroke: '#fff', lineWidth: 1.5 },
+            state: { hover: { size: 6 } },
+          },
+          label: {
+            visible: true,
+            position: 'top',
+            style: {
+              fontSize: 10,
+              fill: '#666',
+            },
+            formatMethod: (value) => formatLargeNumber(value),
+          },
+        },
+      ],
       title: {
         visible: true,
         text: `${t('用量趋势')}（${metricLabel}）`,
         subtext: `${t('粒度')}：${granularityLabel}`,
       },
-      bar: {
-        style: { cornerRadius: [4, 4, 0, 0] },
-        state: {
-          hover: { stroke: '#000', lineWidth: 1 },
-        },
-      },
-      label: {
-        visible: true,
-        position: 'top',
-        style: {
-          fontSize: 11,
-          fill: '#666',
-        },
-        formatMethod: (value) => formatLargeNumber(value),
-      },
+      legends: { visible: true },
       tooltip: {
         mark: {
           content: [{ key: metricLabel, value: (datum) => formatLargeNumber(datum['Value']) }],
         },
       },
       axes: [
-        { orient: 'bottom', type: 'band', label: { formatMethod: (val) => val } },
-        { orient: 'left', label: { autoHide: true, formatMethod: (val) => formatLargeNumber(val) } },
+        { orient: 'bottom', type: 'band', label: { autoHide: true, autoRotate: true, formatMethod: (val) => val } },
+        { orient: 'left', label: { autoHide: true, formatMethod: (val) => formatLargeNumber(val) }, nice: true },
       ],
-      color: '#1664ff',
+      color: [lineColor],
+      crosshair: { visible: true, line: { type: 'line', style: { stroke: '#999', lineDash: [4, 4] } } },
     };
   }, [chartData, metric, granularity, t]);
 
@@ -125,7 +151,7 @@ const ChannelAnalyticsDetail = () => {
   const [users, setUsers] = useState([]);
   const [range, setRange] = useState('30d');
   const [granularity, setGranularity] = useState('day');
-  const [metric, setMetric] = useState('call_count'); // call_count | token_count
+  const [metric, setMetric] = useState('token_count'); // call_count | token_count
   const [topN, setTopN] = useState(10);
 
   const getTimestamps = useCallback((r) => {
@@ -270,7 +296,7 @@ const ChannelAnalyticsDetail = () => {
                 <Select.Option value="week">{t('周')}</Select.Option>
               </Select>
             </div>
-            <Button theme="solid" onClick={loadData}>{t('刷新数据')}</Button>
+            <IconButton icon={<RefreshCw size={16} />} onClick={loadData} title={t('刷新数据')} />
           </Space>
         </div>
 
@@ -284,19 +310,6 @@ const ChannelAnalyticsDetail = () => {
                 borderRadius: 6, padding: 2, gap: 2, marginTop: 6,
               }}>
                 <button
-                  onClick={() => setMetric('call_count')}
-                  style={{
-                    padding: '4px 14px', fontSize: 12, borderRadius: 4, cursor: 'pointer',
-                    border: 'none', lineHeight: '20px',
-                    background: metric === 'call_count' ? 'var(--semi-color-bg-0)' : 'transparent',
-                    color: metric === 'call_count' ? 'var(--semi-color-primary)' : 'var(--semi-color-text-2)',
-                    fontWeight: metric === 'call_count' ? 600 : 400,
-                    boxShadow: metric === 'call_count' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-                  }}
-                >
-                  {t('调用次数')}
-                </button>
-                <button
                   onClick={() => setMetric('token_count')}
                   style={{
                     padding: '4px 14px', fontSize: 12, borderRadius: 4, cursor: 'pointer',
@@ -308,6 +321,19 @@ const ChannelAnalyticsDetail = () => {
                   }}
                 >
                   {t('Token 消耗')}
+                </button>
+                <button
+                  onClick={() => setMetric('call_count')}
+                  style={{
+                    padding: '4px 14px', fontSize: 12, borderRadius: 4, cursor: 'pointer',
+                    border: 'none', lineHeight: '20px',
+                    background: metric === 'call_count' ? 'var(--semi-color-bg-0)' : 'transparent',
+                    color: metric === 'call_count' ? 'var(--semi-color-primary)' : 'var(--semi-color-text-2)',
+                    fontWeight: metric === 'call_count' ? 600 : 400,
+                    boxShadow: metric === 'call_count' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                  }}
+                >
+                  {t('调用次数')}
                 </button>
               </div>
             </div>

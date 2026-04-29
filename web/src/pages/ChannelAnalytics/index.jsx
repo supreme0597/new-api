@@ -64,6 +64,11 @@ function StatCard({ title, value, avatarColor, icon }) {
 function SourcePieChart({ data, title, colorKey = 'call_count' }) {
   const { t } = useTranslation();
 
+  // 格式化数值：与表格列保持一致
+  const formatValue = useCallback((val) => {
+    return colorKey === 'token_count' ? formatLargeNumber(val) : renderNumber(val);
+  }, [colorKey]);
+
   const chartData = useMemo(() => {
     return (data || []).map((d, i) => ({
       type: d.source,
@@ -92,13 +97,37 @@ function SourcePieChart({ data, title, colorKey = 'call_count' }) {
     title: {
       visible: true,
       text: title,
-      subtext: `${t('总计')}：${formatLargeNumber(total)}`,
+      subtext: `${t('总计')}：${formatValue(total)}`,
     },
-    legends: { visible: true, orient: 'left' },
-    label: { visible: true },
+    legends: {
+      visible: true,
+      orient: 'left',
+      item: {
+        label: {
+          formatMethod: (text) => {
+            const item = chartData.find(d => d.type === text);
+            if (item) {
+              const pct = total > 0 ? ((item.value / total) * 100).toFixed(1) : '0.0';
+              return `${text}  ${pct}%`;
+            }
+            return text;
+          },
+        },
+      },
+    },
+    label: {
+      visible: true,
+      style: { fontSize: 11, lineHeight: 16 },
+      content: (datum) => {
+        const pct = total > 0 ? ((datum.value / total) * 100).toFixed(1) : '0.0';
+        return `${datum.type}\n${pct}%`;
+      },
+    },
     tooltip: {
       mark: {
-        content: [{ key: (datum) => datum['type'], value: (datum) => renderNumber(datum['value']) }],
+        content: [
+          { key: (datum) => datum['type'], value: (datum) => `${formatValue(datum['value'])} (${total > 0 ? ((datum.value / total) * 100).toFixed(1) : '0.0'}%)` },
+        ],
       },
     },
     color: {
