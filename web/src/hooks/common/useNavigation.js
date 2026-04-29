@@ -25,6 +25,7 @@ export const useNavigation = (t, docsLink, headerNavModules, isAdminUser) => {
     const defaultModules = {
       home: true,
       console: true,
+      channelAnalytics: true,
       pricing: true,
       modelPerformance: true,
       docs: true,
