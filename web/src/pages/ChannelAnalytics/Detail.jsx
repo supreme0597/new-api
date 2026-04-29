@@ -33,9 +33,12 @@ function UsageTrendChart({ data, metric, granularity }) {
   const chartData = useMemo(() => {
     if (!data || data.length === 0) return [];
     // 时间格式化：去掉年份，day/week 只显示 MM-DD，hour 显示 MM-DD HH:mm
+    // 兼容两种格式：MySQL '2026-04-25 15:00' 和 ISO '2026-04-25T15:00:00Z'
     const formatTime = (time) => {
       if (!time) return time;
-      const parts = time.split(' ');
+      // 统一替换 T 为空格，去掉 Z 和尾部秒数
+      const normalized = time.replace('T', ' ').replace('Z', '');
+      const parts = normalized.split(' ');
       const datePart = parts[0]; // YYYY-MM-DD
       const dateWithoutYear = datePart.slice(5); // MM-DD
       if (parts[1] && granularity === 'hour') {
