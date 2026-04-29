@@ -47,12 +47,6 @@ export const useNavigation = (t, docsLink, headerNavModules, isAdminUser) => {
         to: '/console',
       },
       {
-        text: t('渠道分析'),
-        itemKey: 'channelAnalytics',
-        to: '/channel-analytics',
-        requireAdmin: true,
-      },
-      {
         text: t('模型广场'),
         itemKey: 'pricing',
         to: '/pricing',
@@ -61,6 +55,12 @@ export const useNavigation = (t, docsLink, headerNavModules, isAdminUser) => {
         text: t('模型排行'),
         itemKey: 'modelPerformance',
         to: '/model-performance',
+      },
+      {
+        text: t('渠道分析'),
+        itemKey: 'channelAnalytics',
+        to: '/channel-analytics',
+        requireAdmin: true,
       },
       ...(docsLink
         ? [
