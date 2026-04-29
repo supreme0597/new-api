@@ -73,7 +73,7 @@ function UsageTrendChart({ data, metric, granularity }) {
         },
       },
       axes: [
-        { orient: 'bottom', label: { formatMethod: (val) => val } },
+        { orient: 'bottom', type: 'band', label: { formatMethod: (val) => val } },
         { orient: 'left', label: { autoHide: true, formatMethod: (val) => formatLargeNumber(val) } },
       ],
       color: '#1664ff',

@@ -151,18 +151,13 @@ function SourceTrendChart({ data, sources, range, granularity }) {
       colorMap[s] = SOURCE_COLORS[i % SOURCE_COLORS.length];
     });
 
-    // 根据粒度设置 X 轴时间格式
-    const timeFormat = granularity === 'hour'
-      ? '%m-%d %H:%M'  // 小时粒度：04-28 15:00
-      : '%m-%d';       // 天/周粒度：04-28
-
     return {
       type: 'line',
       data: [{ id: 'lineData', values: chartData }],
       xField: 'Time',
       yField: 'Count',
       axes: [
-        { orient: 'bottom', label: { autoHide: true, autoRotate: true } },
+        { orient: 'bottom', type: 'band', label: { autoHide: true, autoRotate: true, formatMethod: (val) => val } },
         { orient: 'left', label: { autoHide: true } },
       ],
       seriesField: 'Source',
