@@ -32,11 +32,22 @@ function UsageTrendChart({ data, metric, granularity }) {
 
   const chartData = useMemo(() => {
     if (!data || data.length === 0) return [];
+    // 时间格式化：去掉年份，day/week 只显示 MM-DD，hour 显示 MM-DD HH:mm
+    const formatTime = (time) => {
+      if (!time) return time;
+      const parts = time.split(' ');
+      const datePart = parts[0]; // YYYY-MM-DD
+      const dateWithoutYear = datePart.slice(5); // MM-DD
+      if (parts[1] && granularity === 'hour') {
+        return `${dateWithoutYear} ${parts[1].slice(0, 5)}`; // MM-DD HH:mm
+      }
+      return dateWithoutYear; // MM-DD
+    };
     return data.map((d) => ({
-      Time: d.time,
+      Time: formatTime(d.time),
       Value: metric === 'call_count' ? d.call_count : d.token_count,
     }));
-  }, [data, metric]);
+  }, [data, metric, granularity]);
 
   const spec = useMemo(() => {
     const metricLabel = metric === 'call_count' ? t('调用次数') : t('Token 消耗');

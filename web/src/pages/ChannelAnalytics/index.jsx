@@ -134,16 +134,28 @@ function SourceTrendChart({ data, sources, range, granularity }) {
 
   const chartData = useMemo(() => {
     if (!data || data.length === 0) return [];
+    // 时间格式化：去掉年份，day/week 只显示 MM-DD，hour 显示 MM-DD HH:mm
+    const formatTime = (time) => {
+      if (!time) return time;
+      // 后端返回格式：YYYY-MM-DD HH:mm 或 YYYY-MM-DD
+      const parts = time.split(' ');
+      const datePart = parts[0]; // YYYY-MM-DD
+      const dateWithoutYear = datePart.slice(5); // MM-DD
+      if (parts[1] && (granularity === 'hour')) {
+        return `${dateWithoutYear} ${parts[1].slice(0, 5)}`; // MM-DD HH:mm
+      }
+      return dateWithoutYear; // MM-DD
+    };
     const result = [];
     data.forEach((d) => {
       result.push({
-        Time: d.time,
+        Time: formatTime(d.time),
         Source: d.source,
         Count: d.call_count || 0,
       });
     });
     return result;
-  }, [data]);
+  }, [data, granularity]);
 
   const spec = useMemo(() => {
     const colorMap = {};
