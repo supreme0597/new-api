@@ -21,8 +21,6 @@ import {
   Users,
   Layers,
   Activity,
-  Wallet,
-  Zap,
 } from 'lucide-react';
 import { VChart } from '@visactor/react-vchart';
 import { renderNumber } from '../../helpers/render';
@@ -36,9 +34,6 @@ const SOURCE_COLORS = [
   '#FFC400', '#304D77', '#B48DEB', '#009488', '#FF7DDA',
 ];
 
-// 分组卡片颜色（与数据看板 StatsCards 一致）
-const STAT_CARD_COLORS = ['bg-blue-50', 'bg-green-50'];
-
 // 格式化大数字
 function formatLargeNumber(num) {
   if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
@@ -46,15 +41,6 @@ function formatLargeNumber(num) {
   return String(num);
 }
 
-// 创建分组标题（与数据看板 createSectionTitle 一致）
-function createSectionTitle(Icon, text) {
-  return (
-    <div className='flex items-center gap-2'>
-      <Icon size={16} />
-      {text}
-    </div>
-  );
-}
 
 // VChart 饼图组件
 function SourcePieChart({ data, title, colorKey = 'call_count' }) {
@@ -294,46 +280,38 @@ const ChannelAnalytics = () => {
   const sourceNames = sources.map(s => s.source);
   const sortedSources = [...sources].sort((a, b) => b.call_count - a.call_count);
 
-  // 分组统计数据（与数据看板 StatsCards 一致的结构）
-  const groupedStatsData = useMemo(() => [
+  // 统计卡片数据（每个指标独立卡片）
+  const statsCards = useMemo(() => [
     {
-      title: createSectionTitle(Wallet, t('来源概况')),
-      color: STAT_CARD_COLORS[0],
-      items: [
-        {
-          title: t('来源总数'),
-          value: overview?.source_count || 0,
-          icon: <Layers size={16} />,
-          avatarColor: 'blue',
-        },
-        {
-          title: t('总调用次数'),
-          value: formatLargeNumber(overview?.total_calls || 0),
-          icon: <Activity size={16} />,
-          avatarColor: 'purple',
-        },
-      ],
+      title: t('来源总数'),
+      value: overview?.source_count || 0,
+      icon: <Layers size={16} />,
+      avatarColor: 'blue',
+      bgColor: 'bg-blue-50',
     },
     {
-      title: createSectionTitle(Zap, t('资源消耗')),
-      color: STAT_CARD_COLORS[1],
-      items: [
-        {
-          title: t('总 Token 消耗'),
-          value: formatLargeNumber(overview?.total_tokens || 0),
-          icon: <TrendingUp size={16} />,
-          avatarColor: 'green',
-          subtitle: overview?.all_tokens
-            ? `${t('全部渠道')}: ${formatLargeNumber(overview.all_tokens)}${overview?.untagged_tokens ? ` · ${t('无来源')}: ${formatLargeNumber(overview.untagged_tokens)}` : ''}${overview?.test_channel_tokens ? ` · ${t('测试')}: ${formatLargeNumber(overview.test_channel_tokens)}` : ''}`
-            : undefined,
-        },
-        {
-          title: t('活跃用户数'),
-          value: renderNumber(overview?.active_users || 0),
-          icon: <Users size={16} />,
-          avatarColor: 'orange',
-        },
-      ],
+      title: t('总调用次数'),
+      value: formatLargeNumber(overview?.total_calls || 0),
+      icon: <Activity size={16} />,
+      avatarColor: 'purple',
+      bgColor: 'bg-purple-50',
+    },
+    {
+      title: t('总 Token 消耗'),
+      value: formatLargeNumber(overview?.total_tokens || 0),
+      icon: <TrendingUp size={16} />,
+      avatarColor: 'green',
+      bgColor: 'bg-green-50',
+      subtitle: overview?.all_tokens
+        ? `${t('全部渠道')}: ${formatLargeNumber(overview.all_tokens)}${overview?.untagged_tokens ? ` · ${t('无来源')}: ${formatLargeNumber(overview.untagged_tokens)}` : ''}${overview?.test_channel_tokens ? ` · ${t('测试')}: ${formatLargeNumber(overview.test_channel_tokens)}` : ''}`
+        : undefined,
+    },
+    {
+      title: t('活跃用户数'),
+      value: renderNumber(overview?.active_users || 0),
+      icon: <Users size={16} />,
+      avatarColor: 'orange',
+      bgColor: 'bg-orange-50',
     },
   ], [overview, t]);
 
@@ -434,33 +412,28 @@ const ChannelAnalytics = () => {
           </div>
         </div>
 
-        {/* 分组统计卡片 - 与数据看板 StatsCards 完全一致的风格 */}
+        {/* 统计卡片 - 每个指标独立展示 */}
         <div className='mb-4'>
-          <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
-            {groupedStatsData.map((group, idx) => (
+          <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4'>
+            {statsCards.map((card, idx) => (
               <Card
                 key={idx}
                 {...CARD_PROPS}
-                className={`${group.color} border-0 !rounded-2xl w-full`}
-                title={group.title}
+                className={`${card.bgColor} border-0 !rounded-2xl w-full`}
               >
-                <div className='space-y-4'>
-                  {group.items.map((item, itemIdx) => (
-                    <div key={itemIdx} className='flex items-center justify-between'>
-                      <div className='flex items-center'>
-                        <Avatar className='mr-3' size='small' color={item.avatarColor}>
-                          {item.icon}
-                        </Avatar>
-                        <div>
-                          <div className='text-xs text-gray-500'>{item.title}</div>
-                          <div className='text-lg font-semibold'>{item.value}</div>
-                        </div>
-                      </div>
-                      {item.subtitle && (
-                        <div className='text-xs text-gray-400 max-w-[200px] text-right'>{item.subtitle}</div>
-                      )}
+                <div className='flex items-center justify-between'>
+                  <div className='flex items-center'>
+                    <Avatar className='mr-3' size='small' color={card.avatarColor}>
+                      {card.icon}
+                    </Avatar>
+                    <div>
+                      <div className='text-xs text-gray-500'>{card.title}</div>
+                      <div className='text-lg font-semibold'>{card.value}</div>
                     </div>
-                  ))}
+                  </div>
+                  {card.subtitle && (
+                    <div className='text-xs text-gray-400 max-w-[200px] text-right'>{card.subtitle}</div>
+                  )}
                 </div>
               </Card>
             ))}
