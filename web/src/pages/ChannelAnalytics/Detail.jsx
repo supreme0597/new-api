@@ -24,7 +24,6 @@ import {
   Users,
   Activity,
   Zap,
-  Wallet,
 } from 'lucide-react';
 import { renderNumber } from '../../helpers/render';
 import { CARD_PROPS, CHART_CONFIG } from '../../constants/dashboard.constants';
@@ -43,18 +42,6 @@ const MODEL_COLORS = [
   '#FFC400', '#304D77', '#B48DEB', '#009488', '#FF7DDA',
 ];
 
-// 分组卡片颜色（与数据看板 StatsCards 一致）
-const STAT_CARD_COLORS = ['bg-blue-50', 'bg-green-50'];
-
-// 创建分组标题（与数据看板 createSectionTitle 一致）
-function createSectionTitle(Icon, text) {
-  return (
-    <div className='flex items-center gap-2'>
-      <Icon size={16} />
-      {text}
-    </div>
-  );
-}
 
 // VChart 饼图组件（模型占比）
 function ModelPieChart({ data, title, colorKey = 'call_count' }) {
@@ -341,43 +328,35 @@ const ChannelAnalyticsDetail = () => {
     return modelTrendData.filter(d => selectedModels.includes(d.model_name));
   }, [modelTrendData, selectedModels]);
 
-  // 分组统计数据（与数据看板 StatsCards 一致的结构）
-  const groupedStatsData = useMemo(() => [
+  // 统计卡片数据（每个指标独立卡片）
+  const statsCards = useMemo(() => [
     {
-      title: createSectionTitle(Wallet, t('来源概况')),
-      color: STAT_CARD_COLORS[0],
-      items: [
-        {
-          title: t('调用次数'),
-          value: detail ? renderNumber(detail.call_count) : 0,
-          icon: <Activity size={16} />,
-          avatarColor: 'blue',
-        },
-        {
-          title: t('模型数'),
-          value: detail?.model_count || 0,
-          icon: <Zap size={16} />,
-          avatarColor: 'purple',
-        },
-      ],
+      title: t('调用次数'),
+      value: detail ? renderNumber(detail.call_count) : 0,
+      icon: <Activity size={16} />,
+      avatarColor: 'blue',
+      bgColor: 'bg-blue-50',
     },
     {
-      title: createSectionTitle(Zap, t('资源消耗')),
-      color: STAT_CARD_COLORS[1],
-      items: [
-        {
-          title: t('Token 消耗'),
-          value: detail ? formatLargeNumber(detail.token_count) : 0,
-          icon: <TrendingUp size={16} />,
-          avatarColor: 'green',
-        },
-        {
-          title: t('活跃用户'),
-          value: detail ? renderNumber(detail.active_users) : 0,
-          icon: <Users size={16} />,
-          avatarColor: 'orange',
-        },
-      ],
+      title: t('模型数'),
+      value: detail?.model_count || 0,
+      icon: <Zap size={16} />,
+      avatarColor: 'purple',
+      bgColor: 'bg-purple-50',
+    },
+    {
+      title: t('Token 消耗'),
+      value: detail ? formatLargeNumber(detail.token_count) : 0,
+      icon: <TrendingUp size={16} />,
+      avatarColor: 'green',
+      bgColor: 'bg-green-50',
+    },
+    {
+      title: t('活跃用户'),
+      value: detail ? renderNumber(detail.active_users) : 0,
+      icon: <Users size={16} />,
+      avatarColor: 'orange',
+      bgColor: 'bg-orange-50',
     },
   ], [detail, t]);
 
@@ -500,30 +479,23 @@ const ChannelAnalyticsDetail = () => {
           </div>
         </div>
 
-        {/* 分组统计卡片 - 与数据看板 StatsCards 完全一致的风格 */}
+        {/* 统计卡片 - 每个指标独立展示 */}
         <div className='mb-4'>
-          <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
-            {groupedStatsData.map((group, idx) => (
+          <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4'>
+            {statsCards.map((card, idx) => (
               <Card
                 key={idx}
                 {...CARD_PROPS}
-                className={`${group.color} border-0 !rounded-2xl w-full`}
-                title={group.title}
+                className={`${card.bgColor} border-0 !rounded-2xl w-full`}
               >
-                <div className='space-y-4'>
-                  {group.items.map((item, itemIdx) => (
-                    <div key={itemIdx} className='flex items-center justify-between'>
-                      <div className='flex items-center'>
-                        <Avatar className='mr-3' size='small' color={item.avatarColor}>
-                          {item.icon}
-                        </Avatar>
-                        <div>
-                          <div className='text-xs text-gray-500'>{item.title}</div>
-                          <div className='text-lg font-semibold'>{item.value}</div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+                <div className='flex items-center'>
+                  <Avatar className='mr-3' size='small' color={card.avatarColor}>
+                    {card.icon}
+                  </Avatar>
+                  <div>
+                    <div className='text-xs text-gray-500'>{card.title}</div>
+                    <div className='text-lg font-semibold'>{card.value}</div>
+                  </div>
                 </div>
               </Card>
             ))}
