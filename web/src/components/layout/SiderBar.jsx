@@ -46,7 +46,7 @@ const routerMap = {
   task: '/console/task',
   models: '/console/models',
   modelPerformance: '/model-performance',
-  channelAnalytics: '/console/channel-analytics',
+  channelAnalytics: '/channel-analytics',
   samplingConfig: '/console/sampling-config',
   deployment: '/console/deployment',
   playground: '/console/playground',

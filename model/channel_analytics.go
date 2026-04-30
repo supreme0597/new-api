@@ -9,10 +9,13 @@ import (
 
 // ChannelSourceOverview 渠道来源概览统计
 type ChannelSourceOverview struct {
-	SourceCount int `json:"source_count"`
-	TotalCalls  int `json:"total_calls"`
-	TotalTokens int `json:"total_tokens"`
-	ActiveUsers int `json:"active_users"`
+	SourceCount       int `json:"source_count"`
+	TotalCalls        int `json:"total_calls"`
+	TotalTokens       int `json:"total_tokens"`
+	ActiveUsers       int `json:"active_users"`
+	UntaggedTokens    int `json:"untagged_tokens"`     // 无来源渠道的 Token
+	TestChannelTokens int `json:"test_channel_tokens"` // 测试渠道的 Token
+	AllTokens         int `json:"all_tokens"`          // 全部消费日志的 Token（不区分渠道）
 }
 
 // ChannelSourceStat 按来源分组的统计
@@ -158,6 +161,68 @@ func GetChannelSourceOverview(startTimestamp, endTimestamp int64) (*ChannelSourc
 	overview.TotalCalls = result.TotalCalls
 	overview.TotalTokens = result.TotalTokens
 	overview.ActiveUsers = result.ActiveUsers
+
+	// 辅助排查：计算无来源渠道、测试渠道、全部渠道的 Token 消耗
+	// 1. 无来源渠道（非测试）
+	var noSourceChannelIDs []int
+	if err := DB.Model(&Channel{}).
+		Where("source IS NULL OR source = ''").
+		Where("is_test_channel = ?", commonFalseVal).
+		Pluck("id", &noSourceChannelIDs).Error; err != nil {
+		return nil, err
+	}
+	if len(noSourceChannelIDs) > 0 {
+		var untaggedRes overviewResult
+		txUntagged := LOG_DB.Table("logs").
+			Select("COUNT(*) as total_calls, COALESCE(SUM(logs.prompt_tokens + logs.completion_tokens), 0) as total_tokens, COUNT(DISTINCT logs.user_id) as active_users").
+			Where("logs.type = ?", LogTypeConsume).
+			Where("logs.channel_id IN ?", noSourceChannelIDs)
+		if startTimestamp != 0 {
+			txUntagged = txUntagged.Where("logs.created_at >= ?", startTimestamp)
+		}
+		if endTimestamp != 0 {
+			txUntagged = txUntagged.Where("logs.created_at <= ?", endTimestamp)
+		}
+		txUntagged.Scan(&untaggedRes)
+		overview.UntaggedTokens = untaggedRes.TotalTokens
+	}
+
+	// 2. 测试渠道
+	var testChannelIDs []int
+	if err := DB.Model(&Channel{}).
+		Where("is_test_channel = ?", commonTrueVal).
+		Pluck("id", &testChannelIDs).Error; err != nil {
+		return nil, err
+	}
+	if len(testChannelIDs) > 0 {
+		var testRes overviewResult
+		txTest := LOG_DB.Table("logs").
+			Select("COUNT(*) as total_calls, COALESCE(SUM(logs.prompt_tokens + logs.completion_tokens), 0) as total_tokens, COUNT(DISTINCT logs.user_id) as active_users").
+			Where("logs.type = ?", LogTypeConsume).
+			Where("logs.channel_id IN ?", testChannelIDs)
+		if startTimestamp != 0 {
+			txTest = txTest.Where("logs.created_at >= ?", startTimestamp)
+		}
+		if endTimestamp != 0 {
+			txTest = txTest.Where("logs.created_at <= ?", endTimestamp)
+		}
+		txTest.Scan(&testRes)
+		overview.TestChannelTokens = testRes.TotalTokens
+	}
+
+	// 3. 全部渠道（不限制 channel_id，仅限制 type 和时间）
+	var allRes overviewResult
+	txAll := LOG_DB.Table("logs").
+		Select("COUNT(*) as total_calls, COALESCE(SUM(logs.prompt_tokens + logs.completion_tokens), 0) as total_tokens, COUNT(DISTINCT logs.user_id) as active_users").
+		Where("logs.type = ?", LogTypeConsume)
+	if startTimestamp != 0 {
+		txAll = txAll.Where("logs.created_at >= ?", startTimestamp)
+	}
+	if endTimestamp != 0 {
+		txAll = txAll.Where("logs.created_at <= ?", endTimestamp)
+	}
+	txAll.Scan(&allRes)
+	overview.AllTokens = allRes.TotalTokens
 
 	return overview, nil
 }

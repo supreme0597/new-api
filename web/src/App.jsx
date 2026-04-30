@@ -152,22 +152,7 @@ function App() {
           }
         />
         {/* 保留旧路径兼容 */}
-        <Route
-          path='/console/channel-analytics'
-          element={
-            <AdminRoute>
-              <ChannelAnalytics />
-            </AdminRoute>
-          }
-        />
-        <Route
-          path='/console/channel-analytics/:source'
-          element={
-            <AdminRoute>
-              <ChannelAnalyticsDetail />
-            </AdminRoute>
-          }
-        />
+
         <Route
           path='/console/channel'
           element={

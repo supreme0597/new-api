@@ -21,9 +21,11 @@ import {
   Users,
   Layers,
   Activity,
+  Wallet,
+  Zap,
 } from 'lucide-react';
 import { VChart } from '@visactor/react-vchart';
-import { renderNumber, renderQuota } from '../../helpers/render';
+import { renderNumber } from '../../helpers/render';
 import { CARD_PROPS, CHART_CONFIG } from '../../constants/dashboard.constants';
 
 const { Title, Text } = Typography;
@@ -34,6 +36,9 @@ const SOURCE_COLORS = [
   '#FFC400', '#304D77', '#B48DEB', '#009488', '#FF7DDA',
 ];
 
+// 分组卡片颜色（与数据看板 StatsCards 一致）
+const STAT_CARD_COLORS = ['bg-blue-50', 'bg-green-50'];
+
 // 格式化大数字
 function formatLargeNumber(num) {
   if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
@@ -41,23 +46,13 @@ function formatLargeNumber(num) {
   return String(num);
 }
 
-// 统计卡片组件（与数据看板 StatsCards 完全一致的样式）
-function StatCard({ title, value, avatarColor, icon }) {
+// 创建分组标题（与数据看板 createSectionTitle 一致）
+function createSectionTitle(Icon, text) {
   return (
-    <Card
-      {...CARD_PROPS}
-      className='!rounded-2xl w-full'
-      title={
-        <div className='flex items-center gap-2'>
-          <Avatar size='small' color={avatarColor}>
-            {icon}
-          </Avatar>
-          <span className='text-xs text-gray-500'>{title}</span>
-        </div>
-      }
-    >
-      <div className='text-2xl font-semibold'>{value}</div>
-    </Card>
+    <div className='flex items-center gap-2'>
+      <Icon size={16} />
+      {text}
+    </div>
   );
 }
 
@@ -65,7 +60,6 @@ function StatCard({ title, value, avatarColor, icon }) {
 function SourcePieChart({ data, title, colorKey = 'call_count' }) {
   const { t } = useTranslation();
 
-  // 格式化数值：与表格列保持一致
   const formatValue = useCallback((val) => {
     return colorKey === 'token_count' ? formatLargeNumber(val) : renderNumber(val);
   }, [colorKey]);
@@ -141,21 +135,13 @@ function SourcePieChart({ data, title, colorKey = 'call_count' }) {
 
   if (!data || data.length === 0) {
     return (
-      <Card {...CARD_PROPS} className='!rounded-2xl'>
-        <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--semi-color-text-2)' }}>
-          {t('暂无数据')}
-        </div>
-      </Card>
+      <div className='flex items-center justify-center h-64 text-gray-400'>
+        {t('暂无数据')}
+      </div>
     );
   }
 
-  return (
-    <Card {...CARD_PROPS} className='!rounded-2xl' bodyStyle={{ padding: 0 }}>
-      <div className='h-80 p-2'>
-        <VChart spec={spec} option={CHART_CONFIG} />
-      </div>
-    </Card>
-  );
+  return <VChart spec={spec} option={CHART_CONFIG} />;
 }
 
 // VChart 折线图组件
@@ -164,19 +150,16 @@ function SourceTrendChart({ data, sources, range, granularity }) {
 
   const chartData = useMemo(() => {
     if (!data || data.length === 0) return [];
-    // 时间格式化：去掉年份，day/week 只显示 MM-DD，hour 显示 MM-DD HH:mm
-    // 兼容两种格式：MySQL '2026-04-25 15:00' 和 ISO '2026-04-25T15:00:00Z'
     const formatTime = (time) => {
       if (!time) return time;
-      // 统一替换 T 为空格，去掉 Z 和尾部秒数
       const normalized = time.replace('T', ' ').replace('Z', '');
       const parts = normalized.split(' ');
-      const datePart = parts[0]; // YYYY-MM-DD
-      const dateWithoutYear = datePart.slice(5); // MM-DD
-      if (parts[1] && (granularity === 'hour')) {
-        return `${dateWithoutYear} ${parts[1].slice(0, 5)}`; // MM-DD HH:mm
+      const datePart = parts[0];
+      const dateWithoutYear = datePart.slice(5);
+      if (parts[1] && granularity === 'hour') {
+        return `${dateWithoutYear} ${parts[1].slice(0, 5)}`;
       }
-      return dateWithoutYear; // MM-DD
+      return dateWithoutYear;
     };
     const result = [];
     data.forEach((d) => {
@@ -207,11 +190,7 @@ function SourceTrendChart({ data, sources, range, granularity }) {
       ],
       seriesField: 'Source',
       legends: { visible: true, selectMode: 'single' },
-      title: {
-        visible: true,
-        text: t('各来源使用次数趋势'),
-        subtext: `${t('范围')}：${range === '1d' ? t('近 1 天') : range === '7d' ? t('近 7 天') : t('近 30 天')} · ${t('粒度')}：${granularity === 'hour' ? t('小时') : granularity === 'week' ? t('周') : t('天')}`,
-      },
+      title: { visible: false },
       tooltip: {
         mark: {
           content: [{ key: (datum) => datum['Source'], value: (datum) => renderNumber(datum['Count']) }],
@@ -231,27 +210,20 @@ function SourceTrendChart({ data, sources, range, granularity }) {
           },
         },
       },
+      crosshair: { visible: true, line: { type: 'line', style: { stroke: '#999', lineDash: [4, 4] } } },
       color: { specified: colorMap },
     };
-  }, [chartData, sources, range, granularity, t]);
+  }, [chartData, sources, t]);
 
   if (!data || data.length === 0) {
     return (
-      <Card {...CARD_PROPS} className='!rounded-2xl'>
-        <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--semi-color-text-2)' }}>
-          {t('暂无数据')}
-        </div>
-      </Card>
+      <div className='flex items-center justify-center h-64 text-gray-400'>
+        {t('暂无数据')}
+      </div>
     );
   }
 
-  return (
-    <Card {...CARD_PROPS} className='!rounded-2xl' bodyStyle={{ padding: 0 }}>
-      <div className='h-80 p-2'>
-        <VChart spec={spec} option={CHART_CONFIG} />
-      </div>
-    </Card>
-  );
+  return <VChart spec={spec} option={CHART_CONFIG} />;
 }
 
 const ChannelAnalytics = () => {
@@ -316,14 +288,54 @@ const ChannelAnalytics = () => {
     if (range === '1d') setGranularity('hour');
     else if (range === '7d') setGranularity('day');
     else if (range === '30d') setGranularity('day');
-    // custom 保持当前粒度不变
   }, [range]);
 
   // 来源名称列表（用于图表）
   const sourceNames = sources.map(s => s.source);
-
-  // 排序后的来源
   const sortedSources = [...sources].sort((a, b) => b.call_count - a.call_count);
+
+  // 分组统计数据（与数据看板 StatsCards 一致的结构）
+  const groupedStatsData = useMemo(() => [
+    {
+      title: createSectionTitle(Wallet, t('来源概况')),
+      color: STAT_CARD_COLORS[0],
+      items: [
+        {
+          title: t('来源总数'),
+          value: overview?.source_count || 0,
+          icon: <Layers size={16} />,
+          avatarColor: 'blue',
+        },
+        {
+          title: t('总调用次数'),
+          value: formatLargeNumber(overview?.total_calls || 0),
+          icon: <Activity size={16} />,
+          avatarColor: 'purple',
+        },
+      ],
+    },
+    {
+      title: createSectionTitle(Zap, t('资源消耗')),
+      color: STAT_CARD_COLORS[1],
+      items: [
+        {
+          title: t('总 Token 消耗'),
+          value: formatLargeNumber(overview?.total_tokens || 0),
+          icon: <TrendingUp size={16} />,
+          avatarColor: 'green',
+          subtitle: overview?.all_tokens
+            ? `${t('全部渠道')}: ${formatLargeNumber(overview.all_tokens)}${overview?.untagged_tokens ? ` · ${t('无来源')}: ${formatLargeNumber(overview.untagged_tokens)}` : ''}${overview?.test_channel_tokens ? ` · ${t('测试')}: ${formatLargeNumber(overview.test_channel_tokens)}` : ''}`
+            : undefined,
+        },
+        {
+          title: t('活跃用户数'),
+          value: renderNumber(overview?.active_users || 0),
+          icon: <Users size={16} />,
+          avatarColor: 'orange',
+        },
+      ],
+    },
+  ], [overview, t]);
 
   const columns = [
     {
@@ -378,7 +390,7 @@ const ChannelAnalytics = () => {
           theme="borderless"
           type="primary"
           size="small"
-          onClick={() => navigate(`/console/channel-analytics/${encodeURIComponent(record.source)}`)}
+          onClick={() => navigate(`/channel-analytics/${encodeURIComponent(record.source)}`)}
         >
           {t('查看详情')} →
         </Button>
@@ -387,19 +399,19 @@ const ChannelAnalytics = () => {
   ];
 
   return (
-    <div style={{ padding: '20px 16px' }}>
+    <div className='h-full px-12'>
       <Spin spinning={loading}>
-        {/* 头部 */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
+        {/* 头部 - 与数据看板 DashboardHeader 风格一致 */}
+        <div className='flex items-center justify-between mb-4'>
           <div>
-            <Title heading={4} style={{ margin: 0 }}>{t('用量统计')}</Title>
+            <h2 className='text-2xl font-semibold text-gray-800'>{t('用量统计')}</h2>
             <Text type="tertiary" size="small">
               {range === 'custom'
                 ? `${t('统计时间')}：${customRange[0]?.toLocaleString()} ~ ${customRange[1]?.toLocaleString()} · ${granularity === 'hour' ? t('按小时') : granularity === 'week' ? t('按周') : t('按天')}`
                 : `${t('统计时间')}：${range === '1d' ? t('近 1 天') : range === '7d' ? t('近 7 天') : t('近 30 天')} · ${granularity === 'hour' ? t('按小时') : granularity === 'week' ? t('按周') : t('按天')}`}
             </Text>
           </div>
-          <Space>
+          <div className='flex items-center gap-3'>
             <Select value={range} onChange={setRange} style={{ minWidth: 120 }}>
               <Select.Option value="1d">{t('近 1 天')}</Select.Option>
               <Select.Option value="7d">{t('近 7 天')}</Select.Option>
@@ -419,39 +431,54 @@ const ChannelAnalytics = () => {
               <Select.Option value="day">{t('天')}</Select.Option>
               <Select.Option value="week">{t('周')}</Select.Option>
             </Select>
-          </Space>
+          </div>
         </div>
 
-        {/* 概览卡片 - 与数据看板 StatsCards 完全一致的风格 */}
-        <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-5'>
-          <StatCard
-            title={t('来源总数')}
-            value={overview?.source_count || 0}
-            avatarColor='blue'
-            icon={<Layers size={16} />}
-          />
-          <StatCard
-            title={t('总调用次数')}
-            value={formatLargeNumber(overview?.total_calls || 0)}
-            avatarColor='indigo'
-            icon={<Activity size={16} />}
-          />
-          <StatCard
-            title={t('总 Token 消耗')}
-            value={formatLargeNumber(overview?.total_tokens || 0)}
-            avatarColor='green'
-            icon={<TrendingUp size={16} />}
-          />
-          <StatCard
-            title={t('活跃用户数')}
-            value={renderNumber(overview?.active_users || 0)}
-            avatarColor='orange'
-            icon={<Users size={16} />}
-          />
+        {/* 分组统计卡片 - 与数据看板 StatsCards 完全一致的风格 */}
+        <div className='mb-4'>
+          <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
+            {groupedStatsData.map((group, idx) => (
+              <Card
+                key={idx}
+                {...CARD_PROPS}
+                className={`${group.color} border-0 !rounded-2xl w-full`}
+                title={group.title}
+              >
+                <div className='space-y-4'>
+                  {group.items.map((item, itemIdx) => (
+                    <div key={itemIdx} className='flex items-center justify-between'>
+                      <div className='flex items-center'>
+                        <Avatar className='mr-3' size='small' color={item.avatarColor}>
+                          {item.icon}
+                        </Avatar>
+                        <div>
+                          <div className='text-xs text-gray-500'>{item.title}</div>
+                          <div className='text-lg font-semibold'>{item.value}</div>
+                        </div>
+                      </div>
+                      {item.subtitle && (
+                        <div className='text-xs text-gray-400 max-w-[200px] text-right'>{item.subtitle}</div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            ))}
+          </div>
         </div>
 
-        {/* 来源对比表格 */}
-        <Card {...CARD_PROPS} className='!rounded-2xl mb-4'>
+        {/* 来源对比 - 独立卡片 */}
+        <Card
+          {...CARD_PROPS}
+          className='!rounded-2xl !mb-4'
+          title={
+            <div className='flex items-center gap-2'>
+              <PieChart size={16} />
+              {t('来源对比')}
+            </div>
+          }
+          bodyStyle={{ padding: 0 }}
+        >
           <Table
             columns={columns}
             dataSource={sortedSources}
@@ -462,28 +489,66 @@ const ChannelAnalytics = () => {
           />
         </Card>
 
-        {/* 饼图 */}
-        <div className='grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4'>
-          <SourcePieChart
-            data={sortedSources.slice(0, 8)}
-            title={t('各来源调用量占比')}
-            colorKey="call_count"
-          />
-          <SourcePieChart
-            data={sortedSources.slice(0, 8)}
-            title={t('各来源 Token 消耗占比')}
-            colorKey="token_count"
-          />
+        {/* 调用量占比 + Token 占比 - 一行2列 */}
+        <div className='grid grid-cols-1 md:grid-cols-2 gap-4 mb-4'>
+          <Card
+            {...CARD_PROPS}
+            className='!rounded-2xl'
+            title={
+              <div className='flex items-center gap-2'>
+                <PieChart size={16} />
+                {t('调用量占比')}
+              </div>
+            }
+          >
+            <div className='h-80 p-2'>
+              <SourcePieChart
+                data={sortedSources.slice(0, 8)}
+                title={t('各来源调用量占比')}
+                colorKey="call_count"
+              />
+            </div>
+          </Card>
+          <Card
+            {...CARD_PROPS}
+            className='!rounded-2xl'
+            title={
+              <div className='flex items-center gap-2'>
+                <PieChart size={16} />
+                {t('Token 占比')}
+              </div>
+            }
+          >
+            <div className='h-80 p-2'>
+              <SourcePieChart
+                data={sortedSources.slice(0, 8)}
+                title={t('各来源 Token 消耗占比')}
+                colorKey="token_count"
+              />
+            </div>
+          </Card>
         </div>
 
-        {/* 趋势图 */}
-        <SourceTrendChart
-          data={trendData}
-          sources={sourceNames}
-          range={range}
-          granularity={granularity}
-        />
-
+        {/* 使用趋势 - 独立卡片 */}
+        <Card
+          {...CARD_PROPS}
+          className='!rounded-2xl !mb-4'
+          title={
+            <div className='flex items-center gap-2'>
+              <TrendingUp size={16} />
+              {t('使用趋势')}
+            </div>
+          }
+        >
+          <div className='h-72 p-2'>
+            <SourceTrendChart
+              data={trendData}
+              sources={sourceNames}
+              range={range}
+              granularity={granularity}
+            />
+          </div>
+        </Card>
       </Spin>
     </div>
   );

@@ -8,16 +8,24 @@ import {
   Table,
   Spin,
   Select,
-  Space,
   Typography,
-  Tag,
   Breadcrumb,
   IconButton,
-  Checkbox,
   DatePicker,
+  Avatar,
+  Tabs,
+  TabPane,
 } from '@douyinfe/semi-ui';
 import { VChart } from '@visactor/react-vchart';
-import { RefreshCw } from 'lucide-react';
+import {
+  RefreshCw,
+  PieChart,
+  TrendingUp,
+  Users,
+  Activity,
+  Zap,
+  Wallet,
+} from 'lucide-react';
 import { renderNumber } from '../../helpers/render';
 import { CARD_PROPS, CHART_CONFIG } from '../../constants/dashboard.constants';
 
@@ -34,6 +42,19 @@ const MODEL_COLORS = [
   '#1664FF', '#1AC6FF', '#FF8A00', '#3CC780', '#7442D4',
   '#FFC400', '#304D77', '#B48DEB', '#009488', '#FF7DDA',
 ];
+
+// 分组卡片颜色（与数据看板 StatsCards 一致）
+const STAT_CARD_COLORS = ['bg-blue-50', 'bg-green-50'];
+
+// 创建分组标题（与数据看板 createSectionTitle 一致）
+function createSectionTitle(Icon, text) {
+  return (
+    <div className='flex items-center gap-2'>
+      <Icon size={16} />
+      {text}
+    </div>
+  );
+}
 
 // VChart 饼图组件（模型占比）
 function ModelPieChart({ data, title, colorKey = 'call_count' }) {
@@ -110,21 +131,13 @@ function ModelPieChart({ data, title, colorKey = 'call_count' }) {
 
   if (!data || data.length === 0) {
     return (
-      <Card {...CARD_PROPS} className='!rounded-2xl'>
-        <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--semi-color-text-2)' }}>
-          {t('暂无数据')}
-        </div>
-      </Card>
+      <div className='flex items-center justify-center h-64 text-gray-400'>
+        {t('暂无数据')}
+      </div>
     );
   }
 
-  return (
-    <Card {...CARD_PROPS} className='!rounded-2xl' bodyStyle={{ padding: 0 }}>
-      <div className='h-80 p-2'>
-        <VChart spec={spec} option={CHART_CONFIG} />
-      </div>
-    </Card>
-  );
+  return <VChart spec={spec} option={CHART_CONFIG} />;
 }
 
 // VChart 多模型折线图组件
@@ -200,21 +213,13 @@ function ModelTrendChart({ data, models, metric, granularity }) {
 
   if (!data || data.length === 0) {
     return (
-      <Card {...CARD_PROPS} className='!rounded-2xl'>
-        <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--semi-color-text-2)' }}>
-          {t('暂无数据')}
-        </div>
-      </Card>
+      <div className='flex items-center justify-center h-64 text-gray-400'>
+        {t('暂无数据')}
+      </div>
     );
   }
 
-  return (
-    <Card {...CARD_PROPS} className='!rounded-2xl' bodyStyle={{ padding: 0 }}>
-      <div className='h-80 p-2'>
-        <VChart spec={spec} option={CHART_CONFIG} />
-      </div>
-    </Card>
-  );
+  return <VChart spec={spec} option={CHART_CONFIG} />;
 }
 
 const ChannelAnalyticsDetail = () => {
@@ -234,7 +239,7 @@ const ChannelAnalyticsDetail = () => {
     new Date(Date.now() - 7 * 86400000),
     new Date(),
   ]);
-  const [metric, setMetric] = useState('token_count'); // call_count | token_count
+  const [metric, setMetric] = useState('token_count');
   const [topN, setTopN] = useState(10);
   const [selectedModels, setSelectedModels] = useState([]);
   const [allModels, setAllModels] = useState([]);
@@ -283,7 +288,6 @@ const ChannelAnalyticsDetail = () => {
         setModelStats(stats);
         const modelNames = stats.map(s => s.model_name);
         setAllModels(modelNames);
-        // 默认全选
         if (selectedModels.length === 0) {
           setSelectedModels(modelNames);
         }
@@ -297,13 +301,11 @@ const ChannelAnalyticsDetail = () => {
     }
   }, [decodedSource, range, granularity, topN, getTimestamps]);
 
-  // 当选择模型变化时，重新加载用户排行
   const loadUsers = useCallback(async () => {
     if (!decodedSource) return;
     try {
       const { startTimestamp, endTimestamp } = getTimestamps(range);
       const params = { start_timestamp: startTimestamp, end_timestamp: endTimestamp, limit: topN };
-      // 如果只选了一个模型，传给后端过滤
       if (selectedModels.length === 1) {
         params.model_name = selectedModels[0];
       }
@@ -326,36 +328,58 @@ const ChannelAnalyticsDetail = () => {
     if (range === '1d') setGranularity('hour');
     else if (range === '7d') setGranularity('day');
     else if (range === '30d') setGranularity('day');
-    // custom 保持当前粒度不变
   }, [range]);
 
   const rangeLabel = range === 'custom'
     ? `${customRange[0]?.toLocaleString()} ~ ${customRange[1]?.toLocaleString()}`
     : range === '1d' ? t('近 1 天') : range === '7d' ? t('近 7 天') : t('近 30 天');
 
-  // 过滤趋势数据（只显示选中的模型）
+  // 过滤趋势数据
   const filteredTrendData = useMemo(() => {
     if (!modelTrendData || modelTrendData.length === 0) return [];
     if (selectedModels.length === 0) return modelTrendData;
     return modelTrendData.filter(d => selectedModels.includes(d.model_name));
   }, [modelTrendData, selectedModels]);
 
-  const handleModelToggle = (modelName) => {
-    setSelectedModels(prev => {
-      if (prev.includes(modelName)) {
-        return prev.filter(m => m !== modelName);
-      }
-      return [...prev, modelName];
-    });
-  };
-
-  const handleSelectAllModels = () => {
-    setSelectedModels([...allModels]);
-  };
-
-  const handleDeselectAllModels = () => {
-    setSelectedModels([]);
-  };
+  // 分组统计数据（与数据看板 StatsCards 一致的结构）
+  const groupedStatsData = useMemo(() => [
+    {
+      title: createSectionTitle(Wallet, t('来源概况')),
+      color: STAT_CARD_COLORS[0],
+      items: [
+        {
+          title: t('调用次数'),
+          value: detail ? renderNumber(detail.call_count) : 0,
+          icon: <Activity size={16} />,
+          avatarColor: 'blue',
+        },
+        {
+          title: t('模型数'),
+          value: detail?.model_count || 0,
+          icon: <Zap size={16} />,
+          avatarColor: 'purple',
+        },
+      ],
+    },
+    {
+      title: createSectionTitle(Zap, t('资源消耗')),
+      color: STAT_CARD_COLORS[1],
+      items: [
+        {
+          title: t('Token 消耗'),
+          value: detail ? formatLargeNumber(detail.token_count) : 0,
+          icon: <TrendingUp size={16} />,
+          avatarColor: 'green',
+        },
+        {
+          title: t('活跃用户'),
+          value: detail ? renderNumber(detail.active_users) : 0,
+          icon: <Users size={16} />,
+          avatarColor: 'orange',
+        },
+      ],
+    },
+  ], [detail, t]);
 
   const userColumns = [
     {
@@ -373,15 +397,12 @@ const ChannelAnalyticsDetail = () => {
       dataIndex: 'username',
       key: 'username',
       render: (text) => (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{
-            width: 32, height: 32, borderRadius: '50%', background: 'var(--semi-color-primary-light-default)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: 'var(--semi-color-primary)', fontSize: 14, fontWeight: 600,
-          }}>
+        <div className='flex items-center gap-2'>
+          <div className='w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold'
+            style={{ background: 'var(--semi-color-primary-light-default)', color: 'var(--semi-color-primary)' }}>
             {text?.charAt(0)?.toUpperCase() || '?'}
           </div>
-          <span style={{ fontWeight: 500 }}>{text}</span>
+          <span className='font-medium'>{text}</span>
         </div>
       ),
     },
@@ -389,7 +410,7 @@ const ChannelAnalyticsDetail = () => {
       title: t('调用次数'),
       dataIndex: 'call_count',
       key: 'call_count',
-      render: (text) => <span style={{ fontWeight: 600 }}>{renderNumber(text)}</span>,
+      render: (text) => <span className='font-semibold'>{renderNumber(text)}</span>,
     },
     {
       title: t('Token'),
@@ -400,39 +421,57 @@ const ChannelAnalyticsDetail = () => {
   ];
 
   return (
-    <div style={{ padding: '20px 16px' }}>
+    <div className='h-full px-12'>
       <Spin spinning={loading}>
         {/* 面包屑 */}
-        <Breadcrumb style={{ marginBottom: 16 }}>
+        <Breadcrumb className='mb-4'>
           <Breadcrumb.Item>
             <a onClick={() => navigate('/channel-analytics')}>{t('用量统计')}</a>
           </Breadcrumb.Item>
           <Breadcrumb.Item>{decodedSource}</Breadcrumb.Item>
         </Breadcrumb>
 
-        {/* 头部 */}
-        <div style={{
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-          marginBottom: 20, paddingBottom: 16, borderBottom: '1px solid var(--semi-color-border)',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <div style={{
-              width: 48, height: 48, borderRadius: 12,
-              background: 'linear-gradient(135deg, #1664ff, #69b1ff)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: '#fff', fontSize: 20, fontWeight: 700,
-            }}>
+        {/* 头部 - 与数据看板 DashboardHeader 风格一致 */}
+        <div className='flex items-center justify-between mb-4'>
+          <div className='flex items-center gap-4'>
+            <div className='w-12 h-12 rounded-xl flex items-center justify-center text-xl font-bold text-white'
+              style={{ background: 'linear-gradient(135deg, #1664ff, #69b1ff)' }}>
               {decodedSource?.charAt(0)?.toUpperCase() || '?'}
             </div>
             <div>
-              <Title heading={4} style={{ margin: 0 }}>{decodedSource}</Title>
+              <h2 className='text-2xl font-semibold text-gray-800'>{decodedSource}</h2>
               <Text type="tertiary" size="small">
                 {detail ? `${detail.model_count} ${t('个模型')} · ${renderNumber(detail.call_count)} ${t('次调用')} · ${formatLargeNumber(detail.token_count)} Token · ${renderNumber(detail.active_users)} ${t('个活跃用户')}（${rangeLabel}）` : ''}
               </Text>
             </div>
           </div>
-          <Space>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <div className='flex items-center gap-3'>
+            {/* 选择模型下拉框 - 时间范围左侧 */}
+            {allModels.length > 0 && (
+              <Select
+                multiple
+                filter
+                value={selectedModels}
+                onChange={setSelectedModels}
+                style={{ minWidth: 240 }}
+                maxTagCount={2}
+                maxTagPlaceholder={(omittedValues) => `+${omittedValues.length}`}
+                placeholder={t('选择模型')}
+              >
+                {allModels.map((modelName, i) => (
+                  <Select.Option key={modelName} value={modelName}>
+                    <span className='flex items-center gap-1.5'>
+                      <span
+                        className='inline-block w-2 h-2 rounded-full flex-shrink-0'
+                        style={{ background: MODEL_COLORS[i % MODEL_COLORS.length] }}
+                      />
+                      <span>{modelName}</span>
+                    </span>
+                  </Select.Option>
+                ))}
+              </Select>
+            )}
+            <div className='flex items-center gap-1'>
               <Text type="tertiary" size="small">{t('时间范围')}</Text>
               <Select value={range} onChange={setRange} style={{ minWidth: 120 }}>
                 <Select.Option value="1d">{t('近 1 天')}</Select.Option>
@@ -449,7 +488,7 @@ const ChannelAnalyticsDetail = () => {
                 />
               )}
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <div className='flex items-center gap-1'>
               <Text type="tertiary" size="small">{t('粒度')}</Text>
               <Select size="small" value={granularity} onChange={setGranularity} style={{ minWidth: 80 }}>
                 <Select.Option value="hour">{t('小时')}</Select.Option>
@@ -458,150 +497,154 @@ const ChannelAnalyticsDetail = () => {
               </Select>
             </div>
             <IconButton icon={<RefreshCw size={16} />} onClick={loadData} title={t('刷新数据')} />
-          </Space>
+          </div>
         </div>
 
-        {/* 模型占比饼图 */}
-        <div className='grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4'>
-          <ModelPieChart
-            data={modelStats}
-            title={t('各模型调用次数占比')}
-            colorKey="call_count"
-          />
-          <ModelPieChart
-            data={modelStats}
-            title={t('各模型 Token 消耗占比')}
-            colorKey="token_count"
-          />
+        {/* 分组统计卡片 - 与数据看板 StatsCards 完全一致的风格 */}
+        <div className='mb-4'>
+          <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
+            {groupedStatsData.map((group, idx) => (
+              <Card
+                key={idx}
+                {...CARD_PROPS}
+                className={`${group.color} border-0 !rounded-2xl w-full`}
+                title={group.title}
+              >
+                <div className='space-y-4'>
+                  {group.items.map((item, itemIdx) => (
+                    <div key={itemIdx} className='flex items-center justify-between'>
+                      <div className='flex items-center'>
+                        <Avatar className='mr-3' size='small' color={item.avatarColor}>
+                          {item.icon}
+                        </Avatar>
+                        <div>
+                          <div className='text-xs text-gray-500'>{item.title}</div>
+                          <div className='text-lg font-semibold'>{item.value}</div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            ))}
+          </div>
         </div>
 
-        {/* 模型趋势折线图 */}
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
-            <div>
-              <div style={{ fontSize: 14, fontWeight: 600 }}>{t('模型使用趋势')}</div>
-              <div style={{ fontSize: 12, color: 'var(--semi-color-text-2)', marginTop: 4 }}>
-                {t('默认显示全部模型')} · {t('点击图例可聚焦单个模型')}
+        {/* 调用分布 + Token 分布 - 一行2列 */}
+        <div className='grid grid-cols-1 md:grid-cols-2 gap-4 mb-4'>
+          <Card
+            {...CARD_PROPS}
+            className='!rounded-2xl'
+            title={
+              <div className='flex items-center gap-2'>
+                <PieChart size={16} />
+                {t('调用分布')}
               </div>
+            }
+          >
+            <div className='h-80 p-2'>
+              <ModelPieChart
+                data={modelStats}
+                title={t('各模型调用次数占比')}
+                colorKey="call_count"
+              />
             </div>
-            <div className='toggle-group'>
-              <button
-                onClick={() => setMetric('token_count')}
-                style={{
-                  padding: '4px 14px', fontSize: 12, borderRadius: 4, cursor: 'pointer',
-                  border: 'none', lineHeight: '20px',
-                  background: metric === 'token_count' ? 'var(--semi-color-bg-0)' : 'transparent',
-                  color: metric === 'token_count' ? 'var(--semi-color-primary)' : 'var(--semi-color-text-2)',
-                  fontWeight: metric === 'token_count' ? 600 : 400,
-                  boxShadow: metric === 'token_count' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-                }}
-              >
-                {t('Token 消耗')}
-              </button>
-              <button
-                onClick={() => setMetric('call_count')}
-                style={{
-                  padding: '4px 14px', fontSize: 12, borderRadius: 4, cursor: 'pointer',
-                  border: 'none', lineHeight: '20px',
-                  background: metric === 'call_count' ? 'var(--semi-color-bg-0)' : 'transparent',
-                  color: metric === 'call_count' ? 'var(--semi-color-primary)' : 'var(--semi-color-text-2)',
-                  fontWeight: metric === 'call_count' ? 600 : 400,
-                  boxShadow: metric === 'call_count' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-                }}
-              >
-                {t('调用次数')}
-              </button>
+          </Card>
+          <Card
+            {...CARD_PROPS}
+            className='!rounded-2xl'
+            title={
+              <div className='flex items-center gap-2'>
+                <PieChart size={16} />
+                {t('Token 分布')}
+              </div>
+            }
+          >
+            <div className='h-80 p-2'>
+              <ModelPieChart
+                data={modelStats}
+                title={t('各模型 Token 消耗占比')}
+                colorKey="token_count"
+              />
             </div>
-          </div>
-          <ModelTrendChart
-            data={filteredTrendData}
-            models={selectedModels}
-            metric={metric}
-            granularity={granularity}
-          />
-          {/* 模型选择器 */}
-          <div style={{ marginTop: 12, padding: '12px 16px', background: 'var(--semi-color-fill-0)', borderRadius: 8 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <span style={{ fontSize: 12, color: 'var(--semi-color-text-2)' }}>{t('选择模型')}：</span>
-              <Space>
-                <span
-                  style={{ fontSize: 11, color: 'var(--semi-color-primary)', cursor: 'pointer' }}
-                  onClick={handleSelectAllModels}
-                >
-                  {t('全选')}
-                </span>
-                <span
-                  style={{ fontSize: 11, color: 'var(--semi-color-primary)', cursor: 'pointer' }}
-                  onClick={handleDeselectAllModels}
-                >
-                  {t('清空')}
-                </span>
-              </Space>
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-              {allModels.map((modelName, i) => (
-                <Checkbox
-                  key={modelName}
-                  checked={selectedModels.includes(modelName)}
-                  onChange={() => handleModelToggle(modelName)}
-                  style={{ marginRight: 0 }}
-                >
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <span
-                      style={{
-                        width: 8, height: 8, borderRadius: '50%',
-                        background: MODEL_COLORS[i % MODEL_COLORS.length],
-                        display: 'inline-block',
-                      }}
-                    />
-                    <span style={{ fontSize: 12 }}>{modelName}</span>
-                  </span>
-                </Checkbox>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* 活跃用户排行 */}
-        <div style={{ marginTop: 20, paddingTop: 20, borderTop: '1px solid var(--semi-color-border)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
-            <div style={{ fontSize: 14, fontWeight: 600 }}>
-              {t('活跃用户排行')}
-              {selectedModels.length === 1 && (
-                <span style={{ fontSize: 12, color: 'var(--semi-color-text-2)', marginLeft: 8 }}>
-                  ({selectedModels[0]})
-                </span>
-              )}
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <Text type="tertiary" size="small">{t('显示')}</Text>
-              <Select size="small" value={topN} onChange={setTopN} style={{ minWidth: 80 }}>
-                <Select.Option value={5}>Top 5</Select.Option>
-                <Select.Option value={10}>Top 10</Select.Option>
-                <Select.Option value={20}>Top 20</Select.Option>
-                <Select.Option value={50}>Top 50</Select.Option>
-              </Select>
-            </div>
-          </div>
-          <Card {...CARD_PROPS} className='!rounded-2xl' bodyStyle={{ padding: 0 }}>
-            <Table
-              columns={userColumns}
-              dataSource={users}
-              rowKey="user_id"
-              pagination={false}
-              size="small"
-              empty={t('暂无数据')}
-              onRow={(record) => ({
-                style: { cursor: 'pointer' },
-                onClick: () => {
-                  const { startTimestamp, endTimestamp } = getTimestamps(range);
-                  navigate(`/console?username=${encodeURIComponent(record.username)}&start_timestamp=${startTimestamp}&end_timestamp=${endTimestamp}`);
-                },
-              })}
-            />
           </Card>
         </div>
 
+        {/* 使用趋势 - 独立卡片，标题右侧 Tabs slash 切换指标 */}
+        <Card
+          {...CARD_PROPS}
+          className='!rounded-2xl !mb-4'
+          title={
+            <div className='flex flex-col lg:flex-row lg:items-center lg:justify-between w-full gap-3'>
+              <div className='flex items-center gap-2'>
+                <TrendingUp size={16} />
+                {t('使用趋势')}
+              </div>
+              <Tabs
+                type='slash'
+                activeKey={metric}
+                onChange={setMetric}
+              >
+                <TabPane tab={<span>{t('Token 消耗')}</span>} itemKey='token_count' />
+                <TabPane tab={<span>{t('调用次数')}</span>} itemKey='call_count' />
+              </Tabs>
+            </div>
+          }
+        >
+          <div className='h-72 p-2'>
+            <ModelTrendChart
+              data={filteredTrendData}
+              models={selectedModels}
+              metric={metric}
+              granularity={granularity}
+            />
+          </div>
+        </Card>
+
+        {/* 活跃用户排行 - 独立卡片 */}
+        <Card
+          {...CARD_PROPS}
+          className='!rounded-2xl'
+          title={
+            <div className='flex items-center justify-between w-full'>
+              <div className='flex items-center gap-2'>
+                <Users size={16} />
+                {t('活跃用户排行')}
+                {selectedModels.length === 1 && (
+                  <span className='text-xs' style={{ color: 'var(--semi-color-text-2)' }}>
+                    ({selectedModels[0]})
+                  </span>
+                )}
+              </div>
+              <div className='flex items-center gap-1'>
+                <Text type="tertiary" size="small">{t('显示')}</Text>
+                <Select size="small" value={topN} onChange={setTopN} style={{ minWidth: 80 }}>
+                  <Select.Option value={5}>Top 5</Select.Option>
+                  <Select.Option value={10}>Top 10</Select.Option>
+                  <Select.Option value={20}>Top 20</Select.Option>
+                  <Select.Option value={50}>Top 50</Select.Option>
+                </Select>
+              </div>
+            </div>
+          }
+          bodyStyle={{ padding: 0 }}
+        >
+          <Table
+            columns={userColumns}
+            dataSource={users}
+            rowKey="user_id"
+            pagination={false}
+            size="small"
+            empty={t('暂无数据')}
+            onRow={(record) => ({
+              style: { cursor: 'pointer' },
+              onClick: () => {
+                const { startTimestamp, endTimestamp } = getTimestamps(range);
+                navigate(`/console?username=${encodeURIComponent(record.username)}&start_timestamp=${startTimestamp}&end_timestamp=${endTimestamp}`);
+              },
+            })}
+          />
+        </Card>
       </Spin>
     </div>
   );
