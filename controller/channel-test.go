@@ -271,7 +271,14 @@ func testChannel(channel *model.Channel, testModel string, endpointType string, 
 	//logInfo.ApiKey = ""
 	common.SysLog(fmt.Sprintf("testing channel %d with model %s , info %+v ", channel.Id, testModel, info.ToString()))
 
-	priceData, err := helper.ModelPriceHelper(c, info, 0, request.GetTokenCountMeta())
+	meta := request.GetTokenCountMeta()
+	tokens, err := service.EstimateRequestToken(c, meta, info)
+	if err != nil {
+		common.SysError(fmt.Sprintf("testing channel %d estimate token error: %v", channel.Id, err))
+	}
+	info.SetEstimatePromptTokens(tokens)
+
+	priceData, err := helper.ModelPriceHelper(c, info, tokens, meta)
 	if err != nil {
 		return testResult{
 			context:     c,
