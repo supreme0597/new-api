@@ -41,31 +41,37 @@ export const useDashboardStats = (
   performanceMetrics,
   navigate,
   t,
+  isAdminUser,
 ) => {
   const groupedStatsData = useMemo(
     () => [
-      {
-        title: createSectionTitle(Wallet, t('账户数据')),
-        color: 'bg-blue-50',
-        items: [
-          {
-            title: t('当前余额'),
-            value: renderQuota(userState?.user?.quota),
-            icon: <IconMoneyExchangeStroked />,
-            avatarColor: 'blue',
-            trendData: [],
-            trendColor: '#3b82f6',
-          },
-          {
-            title: t('历史消耗'),
-            value: renderQuota(userState?.user?.used_quota),
-            icon: <IconHistogram />,
-            avatarColor: 'purple',
-            trendData: [],
-            trendColor: '#8b5cf6',
-          },
-        ],
-      },
+      // 管理员/超级管理员隐藏账户数据卡片（内部个人使用，无账户数据概念）
+      ...(isAdminUser
+        ? []
+        : [
+            {
+              title: createSectionTitle(Wallet, t('账户数据')),
+              color: 'bg-blue-50',
+              items: [
+                {
+                  title: t('当前余额'),
+                  value: renderQuota(userState?.user?.quota),
+                  icon: <IconMoneyExchangeStroked />,
+                  avatarColor: 'blue',
+                  trendData: [],
+                  trendColor: '#3b82f6',
+                },
+                {
+                  title: t('历史消耗'),
+                  value: renderQuota(userState?.user?.used_quota),
+                  icon: <IconHistogram />,
+                  avatarColor: 'purple',
+                  trendData: [],
+                  trendColor: '#8b5cf6',
+                },
+              ],
+            },
+          ]),
       {
         title: createSectionTitle(Activity, t('使用统计')),
         color: 'bg-green-50',
@@ -92,14 +98,19 @@ export const useDashboardStats = (
         title: createSectionTitle(Zap, t('资源消耗')),
         color: 'bg-yellow-50',
         items: [
-          {
-            title: t('统计额度'),
-            value: renderQuota(consumeQuota),
-            icon: <IconCoinMoneyStroked />,
-            avatarColor: 'yellow',
-            trendData: trendData.consumeQuota,
-            trendColor: '#f59e0b',
-          },
+          // 管理员/超级管理员隐藏统计额度（内部个人使用，无额度概念）
+          ...(isAdminUser
+            ? []
+            : [
+                {
+                  title: t('统计额度'),
+                  value: renderQuota(consumeQuota),
+                  icon: <IconCoinMoneyStroked />,
+                  avatarColor: 'yellow',
+                  trendData: trendData.consumeQuota,
+                  trendColor: '#f59e0b',
+                },
+              ]),
           {
             title: t('统计Tokens'),
             value: isNaN(consumeTokens) ? 0 : consumeTokens.toLocaleString(),
@@ -134,6 +145,7 @@ export const useDashboardStats = (
       },
     ],
     [
+      isAdminUser,
       userState?.user?.quota,
       userState?.user?.used_quota,
       userState?.user?.request_count,

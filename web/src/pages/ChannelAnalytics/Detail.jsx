@@ -12,7 +12,6 @@ import {
   Breadcrumb,
   IconButton,
   DatePicker,
-  Avatar,
   Tabs,
   TabPane,
 } from '@douyinfe/semi-ui';
@@ -30,17 +29,17 @@ import { CARD_PROPS, CHART_CONFIG } from '../../constants/dashboard.constants';
 
 const { Title, Text } = Typography;
 
+// 蓝绿色系色板（柔和统一，优先蓝绿）
+const MODEL_COLORS = [
+  '#3b82f6', '#06b6d4', '#14b8a6', '#10b981', '#22c55e',
+  '#84cc16', '#6366f1', '#0ea5e9', '#2dd4bf', '#34d399',
+];
+
 function formatLargeNumber(num) {
   if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
   if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
   return String(num);
 }
-
-// 颜色列表（与数据看板 baseColors 一致）
-const MODEL_COLORS = [
-  '#1664FF', '#1AC6FF', '#FF8A00', '#3CC780', '#7442D4',
-  '#FFC400', '#304D77', '#B48DEB', '#009488', '#FF7DDA',
-];
 
 
 // VChart 饼图组件（模型占比）
@@ -172,7 +171,7 @@ function ModelTrendChart({ data, models, metric, granularity }) {
         { orient: 'left', label: { autoHide: true, formatMethod: (val) => formatLargeNumber(val) }, nice: true },
       ],
       seriesField: 'Model',
-      legends: { visible: true, selectMode: 'single' },
+      legends: { visible: true, selectMode: 'multiple' },
       title: { visible: false },
       tooltip: {
         mark: {
@@ -328,35 +327,27 @@ const ChannelAnalyticsDetail = () => {
     return modelTrendData.filter(d => selectedModels.includes(d.model_name));
   }, [modelTrendData, selectedModels]);
 
-  // 统计卡片数据（每个指标独立卡片）
+  // 统计卡片数据（每个指标独立卡片，加深背景色 + title 彩色图标）
   const statsCards = useMemo(() => [
     {
-      title: t('调用次数'),
+      title: <div className='flex items-center gap-2'><Activity size={16} style={{ color: '#3b82f6' }} />{t('调用次数')}</div>,
       value: detail ? renderNumber(detail.call_count) : 0,
-      icon: <Activity size={16} />,
-      avatarColor: 'blue',
-      bgColor: 'bg-blue-50',
+      bgColor: 'bg-blue-100',
     },
     {
-      title: t('模型数'),
+      title: <div className='flex items-center gap-2'><Zap size={16} style={{ color: '#a855f7' }} />{t('模型数')}</div>,
       value: detail?.model_count || 0,
-      icon: <Zap size={16} />,
-      avatarColor: 'purple',
-      bgColor: 'bg-purple-50',
+      bgColor: 'bg-purple-100',
     },
     {
-      title: t('Token 消耗'),
+      title: <div className='flex items-center gap-2'><TrendingUp size={16} style={{ color: '#22c55e' }} />{t('Token 消耗')}</div>,
       value: detail ? formatLargeNumber(detail.token_count) : 0,
-      icon: <TrendingUp size={16} />,
-      avatarColor: 'green',
-      bgColor: 'bg-green-50',
+      bgColor: 'bg-green-100',
     },
     {
-      title: t('活跃用户'),
+      title: <div className='flex items-center gap-2'><Users size={16} style={{ color: '#f97316' }} />{t('活跃用户')}</div>,
       value: detail ? renderNumber(detail.active_users) : 0,
-      icon: <Users size={16} />,
-      avatarColor: 'orange',
-      bgColor: 'bg-orange-50',
+      bgColor: 'bg-orange-100',
     },
   ], [detail, t]);
 
@@ -479,7 +470,7 @@ const ChannelAnalyticsDetail = () => {
           </div>
         </div>
 
-        {/* 统计卡片 - 每个指标独立展示 */}
+        {/* 统计卡片 - 每个指标独立展示，与数据看板 StatsCards 一致的 title+分隔线+body 风格 */}
         <div className='mb-4'>
           <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4'>
             {statsCards.map((card, idx) => (
@@ -487,16 +478,9 @@ const ChannelAnalyticsDetail = () => {
                 key={idx}
                 {...CARD_PROPS}
                 className={`${card.bgColor} border-0 !rounded-2xl w-full`}
+                title={card.title}
               >
-                <div className='flex items-center'>
-                  <Avatar className='mr-3' size='small' color={card.avatarColor}>
-                    {card.icon}
-                  </Avatar>
-                  <div>
-                    <div className='text-xs text-gray-500'>{card.title}</div>
-                    <div className='text-lg font-semibold'>{card.value}</div>
-                  </div>
-                </div>
+                <div className='text-2xl font-semibold'>{card.value}</div>
               </Card>
             ))}
           </div>

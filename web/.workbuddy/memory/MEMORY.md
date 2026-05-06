@@ -21,8 +21,16 @@
 
 ## 渠道分析统计卡片布局
 - 用量统计总览页：4 个独立指标卡片（来源总数、总调用次数、总 Token 消耗、活跃用户数），4 列 grid 布局（lg:grid-cols-4）
+- 详情页：4 个独立指标卡片（调用次数、模型数、Token 消耗、活跃用户），4 列 grid 布局
 - 每个卡片有独立背景色：blue-50 / purple-50 / green-50 / orange-50
-- 不再使用分组标题（createSectionTitle），每个卡片直接展示指标名+数值+图标
+- 卡片样式与数据看板 StatsCards 一致：Card title（图标+指标名）+ headerLine 分隔线 + body（大字号数值）
+- title 属性传入 JSX（div.flex.items-center.gap-2 包裹图标和文字），利用 Semi Card 的 headerLine 渲染分隔线
+- body 区域：彩色 lucide 图标（size=20, text-xxx-500）+ 数值（text-2xl font-semibold），用 flex items-center gap-3 排列
+
+## 渠道分析图表颜色
+- 使用蓝绿色系色板（柔和统一）：`['#3b82f6', '#06b6d4', '#14b8a6', '#10b981', '#22c55e', '#84cc16', '#6366f1', '#0ea5e9', '#2dd4bf', '#34d399']`
+- 饼图和趋势图按索引轮询取色，来源对比表格 Tag 用 Semi 的 `color="cyan"`
+- 不再使用 `modelToColor()`，避免红/粉/黄等突兀颜色
 
 ## 调用次数统计口径差异
 - ChannelAnalytics 的 `total_calls`/`call_count`：按来源(source)维度聚合，支持时间范围筛选，来自 `/api/channel-analytics/*` 接口

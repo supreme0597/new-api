@@ -12,8 +12,9 @@ import {
   Select,
   Space,
   Typography,
-  Avatar,
   DatePicker,
+  Tabs,
+  TabPane,
 } from '@douyinfe/semi-ui';
 import {
   PieChart,
@@ -28,10 +29,10 @@ import { CARD_PROPS, CHART_CONFIG } from '../../constants/dashboard.constants';
 
 const { Title, Text } = Typography;
 
-// 颜色列表（与数据看板 baseColors 完全一致）
+// 蓝绿色系色板（柔和统一，优先蓝绿）
 const SOURCE_COLORS = [
-  '#1664FF', '#1AC6FF', '#FF8A00', '#3CC780', '#7442D4',
-  '#FFC400', '#304D77', '#B48DEB', '#009488', '#FF7DDA',
+  '#3b82f6', '#06b6d4', '#14b8a6', '#10b981', '#22c55e',
+  '#84cc16', '#6366f1', '#0ea5e9', '#2dd4bf', '#34d399',
 ];
 
 // 格式化大数字
@@ -131,8 +132,12 @@ function SourcePieChart({ data, title, colorKey = 'call_count' }) {
 }
 
 // VChart 折线图组件
-function SourceTrendChart({ data, sources, range, granularity }) {
+function SourceTrendChart({ data, sources, range, granularity, metric }) {
   const { t } = useTranslation();
+
+  const formatValue = useCallback((val) => {
+    return metric === 'token_count' ? formatLargeNumber(val) : renderNumber(val);
+  }, [metric]);
 
   const chartData = useMemo(() => {
     if (!data || data.length === 0) return [];
@@ -152,12 +157,12 @@ function SourceTrendChart({ data, sources, range, granularity }) {
       result.push({
         Time: formatTime(d.time),
         Source: d.source,
-        Count: d.call_count || 0,
+        Count: metric === 'token_count' ? (d.token_count || 0) : (d.call_count || 0),
       });
     });
     result.sort((a, b) => a.Time.localeCompare(b.Time));
     return result;
-  }, [data, granularity]);
+  }, [data, granularity, metric]);
 
   const spec = useMemo(() => {
     const colorMap = {};
@@ -172,14 +177,14 @@ function SourceTrendChart({ data, sources, range, granularity }) {
       yField: 'Count',
       axes: [
         { orient: 'bottom', type: 'band', label: { autoHide: true, autoRotate: true, formatMethod: (val) => val } },
-        { orient: 'left', label: { autoHide: true } },
+        { orient: 'left', label: { autoHide: true, formatMethod: (val) => formatLargeNumber(val) }, nice: true },
       ],
       seriesField: 'Source',
-      legends: { visible: true, selectMode: 'single' },
+      legends: { visible: true, selectMode: 'multiple' },
       title: { visible: false },
       tooltip: {
         mark: {
-          content: [{ key: (datum) => datum['Source'], value: (datum) => renderNumber(datum['Count']) }],
+          content: [{ key: (datum) => datum['Source'], value: (datum) => formatValue(datum['Count']) }],
         },
         dimension: {
           content: [{ key: (datum) => datum['Source'], value: (datum) => datum['Count'] || 0 }],
@@ -189,9 +194,9 @@ function SourceTrendChart({ data, sources, range, granularity }) {
             array.forEach((item) => {
               const value = parseFloat(item.value) || 0;
               sum += value;
-              item.value = renderNumber(value);
+              item.value = formatValue(value);
             });
-            array.unshift({ key: t('总计'), value: renderNumber(sum) });
+            array.unshift({ key: t('总计'), value: formatValue(sum) });
             return array;
           },
         },
@@ -199,7 +204,7 @@ function SourceTrendChart({ data, sources, range, granularity }) {
       crosshair: { visible: true, line: { type: 'line', style: { stroke: '#999', lineDash: [4, 4] } } },
       color: { specified: colorMap },
     };
-  }, [chartData, sources, t]);
+  }, [chartData, sources, metric, t]);
 
   if (!data || data.length === 0) {
     return (
@@ -221,6 +226,7 @@ const ChannelAnalytics = () => {
   const [trendData, setTrendData] = useState([]);
   const [range, setRange] = useState('30d');
   const [granularity, setGranularity] = useState('day');
+  const [metric, setMetric] = useState('token_count');
   const [customRange, setCustomRange] = useState([
     new Date(Date.now() - 7 * 86400000),
     new Date(),
@@ -280,38 +286,30 @@ const ChannelAnalytics = () => {
   const sourceNames = sources.map(s => s.source);
   const sortedSources = [...sources].sort((a, b) => b.call_count - a.call_count);
 
-  // 统计卡片数据（每个指标独立卡片）
+  // 统计卡片数据（每个指标独立卡片，加深背景色 + title 彩色图标）
   const statsCards = useMemo(() => [
     {
-      title: t('来源总数'),
+      title: <div className='flex items-center gap-2'><Layers size={16} style={{ color: '#3b82f6' }} />{t('来源总数')}</div>,
       value: overview?.source_count || 0,
-      icon: <Layers size={16} />,
-      avatarColor: 'blue',
-      bgColor: 'bg-blue-50',
+      bgColor: 'bg-blue-100',
     },
     {
-      title: t('总调用次数'),
+      title: <div className='flex items-center gap-2'><Activity size={16} style={{ color: '#a855f7' }} />{t('总调用次数')}</div>,
       value: formatLargeNumber(overview?.total_calls || 0),
-      icon: <Activity size={16} />,
-      avatarColor: 'purple',
-      bgColor: 'bg-purple-50',
+      bgColor: 'bg-purple-100',
     },
     {
-      title: t('总 Token 消耗'),
+      title: <div className='flex items-center gap-2'><TrendingUp size={16} style={{ color: '#22c55e' }} />{t('总 Token 消耗')}</div>,
       value: formatLargeNumber(overview?.total_tokens || 0),
-      icon: <TrendingUp size={16} />,
-      avatarColor: 'green',
-      bgColor: 'bg-green-50',
+      bgColor: 'bg-green-100',
       subtitle: overview?.all_tokens
         ? `${t('全部渠道')}: ${formatLargeNumber(overview.all_tokens)}${overview?.untagged_tokens ? ` · ${t('无来源')}: ${formatLargeNumber(overview.untagged_tokens)}` : ''}${overview?.test_channel_tokens ? ` · ${t('测试')}: ${formatLargeNumber(overview.test_channel_tokens)}` : ''}`
         : undefined,
     },
     {
-      title: t('活跃用户数'),
+      title: <div className='flex items-center gap-2'><Users size={16} style={{ color: '#f97316' }} />{t('活跃用户数')}</div>,
       value: renderNumber(overview?.active_users || 0),
-      icon: <Users size={16} />,
-      avatarColor: 'orange',
-      bgColor: 'bg-orange-50',
+      bgColor: 'bg-orange-100',
     },
   ], [overview, t]);
 
@@ -344,7 +342,7 @@ const ChannelAnalytics = () => {
       title: t('活跃用户'),
       dataIndex: 'active_users',
       key: 'active_users',
-      render: (text) => <span style={{ fontWeight: 600, color: '#1664ff' }}>{renderNumber(text)}</span>,
+      render: (text) => <span style={{ fontWeight: 600, color: '#3b82f6' }}>{renderNumber(text)}</span>,
     },
     {
       title: t('调用次数'),
@@ -412,7 +410,7 @@ const ChannelAnalytics = () => {
           </div>
         </div>
 
-        {/* 统计卡片 - 每个指标独立展示 */}
+        {/* 统计卡片 - 每个指标独立展示，与数据看板 StatsCards 一致的 title+分隔线+body 风格 */}
         <div className='mb-4'>
           <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4'>
             {statsCards.map((card, idx) => (
@@ -420,21 +418,12 @@ const ChannelAnalytics = () => {
                 key={idx}
                 {...CARD_PROPS}
                 className={`${card.bgColor} border-0 !rounded-2xl w-full`}
+                title={card.title}
               >
-                <div className='flex items-center justify-between'>
-                  <div className='flex items-center'>
-                    <Avatar className='mr-3' size='small' color={card.avatarColor}>
-                      {card.icon}
-                    </Avatar>
-                    <div>
-                      <div className='text-xs text-gray-500'>{card.title}</div>
-                      <div className='text-lg font-semibold'>{card.value}</div>
-                    </div>
-                  </div>
-                  {card.subtitle && (
-                    <div className='text-xs text-gray-400 max-w-[200px] text-right'>{card.subtitle}</div>
-                  )}
-                </div>
+                <div className='text-2xl font-semibold'>{card.value}</div>
+                {card.subtitle && (
+                  <div className='text-xs text-gray-400 mt-1'>{card.subtitle}</div>
+                )}
               </Card>
             ))}
           </div>
@@ -502,14 +491,24 @@ const ChannelAnalytics = () => {
           </Card>
         </div>
 
-        {/* 使用趋势 - 独立卡片 */}
+        {/* 使用趋势 - 独立卡片，标题右侧 Tabs slash 切换指标 */}
         <Card
           {...CARD_PROPS}
           className='!rounded-2xl !mb-4'
           title={
-            <div className='flex items-center gap-2'>
-              <TrendingUp size={16} />
-              {t('使用趋势')}
+            <div className='flex flex-col lg:flex-row lg:items-center lg:justify-between w-full gap-3'>
+              <div className='flex items-center gap-2'>
+                <TrendingUp size={16} />
+                {t('使用趋势')}
+              </div>
+              <Tabs
+                type='slash'
+                activeKey={metric}
+                onChange={setMetric}
+              >
+                <TabPane tab={<span>{t('Token 消耗')}</span>} itemKey='token_count' />
+                <TabPane tab={<span>{t('调用次数')}</span>} itemKey='call_count' />
+              </Tabs>
             </div>
           }
         >
@@ -519,6 +518,7 @@ const ChannelAnalytics = () => {
               sources={sourceNames}
               range={range}
               granularity={granularity}
+              metric={metric}
             />
           </div>
         </Card>
