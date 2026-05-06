@@ -2,6 +2,7 @@ package model
 
 import (
 	"fmt"
+	"sort"
 
 	"github.com/QuantumNous/new-api/common"
 	"gorm.io/gorm"
@@ -54,6 +55,23 @@ type ChannelModelStat struct {
 // ChannelModelTrendPoint 模型趋势数据点
 type ChannelModelTrendPoint struct {
 	Time       string `json:"time"`
+	ModelName  string `json:"model_name"`
+	CallCount  int    `json:"call_count"`
+	TokenCount int    `json:"token_count"`
+}
+
+// ChannelModelComparisonItem 模型对比选项（用于选择器）
+type ChannelModelComparisonItem struct {
+	Source     string `json:"source"`
+	ModelName  string `json:"model_name"`
+	CallCount  int    `json:"call_count"`
+	TokenCount int    `json:"token_count"`
+}
+
+// ChannelModelComparisonPoint 模型对比趋势数据点
+type ChannelModelComparisonPoint struct {
+	Time       string `json:"time"`
+	Source     string `json:"source"`
 	ModelName  string `json:"model_name"`
 	CallCount  int    `json:"call_count"`
 	TokenCount int    `json:"token_count"`
@@ -621,6 +639,192 @@ func GetChannelModelTrend(source string, startTimestamp, endTimestamp int64, gra
 			TokenCount: rp.TokenCount,
 		})
 	}
+	return result, nil
+}
+
+// GetChannelModelComparisonItems 获取所有来源+模型组合列表（用于选择器）
+func GetChannelModelComparisonItems(startTimestamp, endTimestamp int64) ([]ChannelModelComparisonItem, error) {
+	// 获取所有有来源的渠道ID
+	sourceMap, err := getAllSourceChannelIDs()
+	if err != nil {
+		return nil, err
+	}
+	var allChannelIDs []int
+	for _, ids := range sourceMap {
+		allChannelIDs = append(allChannelIDs, ids...)
+	}
+	if len(allChannelIDs) == 0 {
+		return []ChannelModelComparisonItem{}, nil
+	}
+
+	// 需要来源信息
+	sourceByID, err := getSourceByChannelID()
+	if err != nil {
+		return nil, err
+	}
+
+	type rawItem struct {
+		ChannelID  int    `json:"channel_id"`
+		ModelName  string `json:"model_name"`
+		CallCount  int    `json:"call_count"`
+		TokenCount int    `json:"token_count"`
+	}
+
+	tx := LOG_DB.Table("logs").
+		Select("logs.channel_id, logs.model_name, COUNT(*) as call_count, COALESCE(SUM(logs.prompt_tokens + logs.completion_tokens), 0) as token_count").
+		Where("logs.type = ?", LogTypeConsume).
+		Where("logs.channel_id IN ?", allChannelIDs).
+		Where("logs.model_name IS NOT NULL AND logs.model_name != ''")
+
+	if startTimestamp != 0 {
+		tx = tx.Where("logs.created_at >= ?", startTimestamp)
+	}
+	if endTimestamp != 0 {
+		tx = tx.Where("logs.created_at <= ?", endTimestamp)
+	}
+
+	var rawItems []rawItem
+	if err := tx.Group("logs.channel_id, logs.model_name").Find(&rawItems).Error; err != nil {
+		return nil, err
+	}
+
+	// 按 source + model_name 聚合
+	type itemKey struct {
+		Source    string
+		ModelName string
+	}
+	itemMap := make(map[itemKey]*ChannelModelComparisonItem)
+	for _, ri := range rawItems {
+		src, ok := sourceByID[ri.ChannelID]
+		if !ok {
+			continue
+		}
+		key := itemKey{Source: src, ModelName: ri.ModelName}
+		if existing, ok := itemMap[key]; ok {
+			existing.CallCount += ri.CallCount
+			existing.TokenCount += ri.TokenCount
+		} else {
+			itemMap[key] = &ChannelModelComparisonItem{
+				Source:     src,
+				ModelName:  ri.ModelName,
+				CallCount:  ri.CallCount,
+				TokenCount: ri.TokenCount,
+			}
+		}
+	}
+
+	result := make([]ChannelModelComparisonItem, 0, len(itemMap))
+	for _, item := range itemMap {
+		result = append(result, *item)
+	}
+
+	// 按 token_count 降序排列
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].TokenCount > result[j].TokenCount
+	})
+
+	return result, nil
+}
+
+// GetChannelModelComparisonTrend 获取模型对比趋势数据
+func GetChannelModelComparisonTrend(startTimestamp, endTimestamp int64, granularity string, sources []string, modelNames []string) ([]ChannelModelComparisonPoint, error) {
+	timeExpr := getTimeBucketExpr(granularity)
+
+	// 获取所有有来源的渠道ID
+	sourceMap, err := getAllSourceChannelIDs()
+	if err != nil {
+		return nil, err
+	}
+	var allChannelIDs []int
+	for _, ids := range sourceMap {
+		allChannelIDs = append(allChannelIDs, ids...)
+	}
+	if len(allChannelIDs) == 0 {
+		return []ChannelModelComparisonPoint{}, nil
+	}
+
+	// 需要来源信息
+	sourceByID, err := getSourceByChannelID()
+	if err != nil {
+		return nil, err
+	}
+
+	// 如果指定了来源，过滤 channelIDs
+	var filteredChannelIDs []int
+	if len(sources) > 0 {
+		for _, src := range sources {
+			if ids, ok := sourceMap[src]; ok {
+				filteredChannelIDs = append(filteredChannelIDs, ids...)
+			}
+		}
+	} else {
+		filteredChannelIDs = allChannelIDs
+	}
+	if len(filteredChannelIDs) == 0 {
+		return []ChannelModelComparisonPoint{}, nil
+	}
+
+	type rawPoint struct {
+		TimeBucket string `json:"time_bucket"`
+		ChannelID  int    `json:"channel_id"`
+		ModelName  string `json:"model_name"`
+		CallCount  int    `json:"call_count"`
+		TokenCount int    `json:"token_count"`
+	}
+
+	tx := LOG_DB.Table("logs").
+		Select(fmt.Sprintf("%s as time_bucket, logs.channel_id, logs.model_name, COUNT(*) as call_count, COALESCE(SUM(logs.prompt_tokens + logs.completion_tokens), 0) as token_count", timeExpr)).
+		Where("logs.type = ?", LogTypeConsume).
+		Where("logs.channel_id IN ?", filteredChannelIDs).
+		Where("logs.model_name IS NOT NULL AND logs.model_name != ''")
+
+	if startTimestamp != 0 {
+		tx = tx.Where("logs.created_at >= ?", startTimestamp)
+	}
+	if endTimestamp != 0 {
+		tx = tx.Where("logs.created_at <= ?", endTimestamp)
+	}
+	if len(modelNames) > 0 {
+		tx = tx.Where("logs.model_name IN ?", modelNames)
+	}
+
+	var rawPoints []rawPoint
+	if err := tx.Group("time_bucket, logs.channel_id, logs.model_name").Order("time_bucket ASC").Find(&rawPoints).Error; err != nil {
+		return nil, err
+	}
+
+	// 按 time_bucket + source + model_name 聚合
+	type pointKey struct {
+		Time      string
+		Source    string
+		ModelName string
+	}
+	pointMap := make(map[pointKey]*ChannelModelComparisonPoint)
+	for _, rp := range rawPoints {
+		src, ok := sourceByID[rp.ChannelID]
+		if !ok {
+			continue
+		}
+		key := pointKey{Time: rp.TimeBucket, Source: src, ModelName: rp.ModelName}
+		if existing, ok := pointMap[key]; ok {
+			existing.CallCount += rp.CallCount
+			existing.TokenCount += rp.TokenCount
+		} else {
+			pointMap[key] = &ChannelModelComparisonPoint{
+				Time:       rp.TimeBucket,
+				Source:     src,
+				ModelName:  rp.ModelName,
+				CallCount:  rp.CallCount,
+				TokenCount: rp.TokenCount,
+			}
+		}
+	}
+
+	result := make([]ChannelModelComparisonPoint, 0, len(pointMap))
+	for _, p := range pointMap {
+		result = append(result, *p)
+	}
+
 	return result, nil
 }
 

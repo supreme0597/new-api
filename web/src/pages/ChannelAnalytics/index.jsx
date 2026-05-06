@@ -132,7 +132,7 @@ function SourcePieChart({ data, title, colorKey = 'call_count' }) {
 }
 
 // VChart 折线图组件
-function SourceTrendChart({ data, sources, range, granularity, metric }) {
+function SourceTrendChart({ data, granularity, metric }) {
   const { t } = useTranslation();
 
   const formatValue = useCallback((val) => {
@@ -152,21 +152,33 @@ function SourceTrendChart({ data, sources, range, granularity, metric }) {
       }
       return dateWithoutYear;
     };
-    const result = [];
+
+    const aggMap = new Map();
     data.forEach((d) => {
-      result.push({
-        Time: formatTime(d.time),
-        Source: d.source,
-        Count: metric === 'token_count' ? (d.token_count || 0) : (d.call_count || 0),
-      });
+      const timeKey = formatTime(d.time);
+      const count = metric === 'token_count' ? (d.token_count || 0) : (d.call_count || 0);
+      const key = `${timeKey}||${d.source} / ${d.model_name}`;
+      if (aggMap.has(key)) {
+        aggMap.get(key).Count += count;
+      } else {
+        aggMap.set(key, { Time: timeKey, Series: `${d.source} / ${d.model_name}`, Count: count });
+      }
     });
+
+    const result = Array.from(aggMap.values());
     result.sort((a, b) => a.Time.localeCompare(b.Time));
     return result;
   }, [data, granularity, metric]);
 
+  const seriesList = useMemo(() => {
+    const set = new Set();
+    chartData.forEach(d => set.add(d.Series));
+    return Array.from(set);
+  }, [chartData]);
+
   const spec = useMemo(() => {
     const colorMap = {};
-    sources.forEach((s, i) => {
+    seriesList.forEach((s, i) => {
       colorMap[s] = SOURCE_COLORS[i % SOURCE_COLORS.length];
     });
 
@@ -179,15 +191,15 @@ function SourceTrendChart({ data, sources, range, granularity, metric }) {
         { orient: 'bottom', type: 'band', label: { autoHide: true, autoRotate: true, formatMethod: (val) => val } },
         { orient: 'left', label: { autoHide: true, formatMethod: (val) => formatLargeNumber(val) }, nice: true },
       ],
-      seriesField: 'Source',
+      seriesField: 'Series',
       legends: { visible: true, selectMode: 'multiple' },
       title: { visible: false },
       tooltip: {
         mark: {
-          content: [{ key: (datum) => datum['Source'], value: (datum) => formatValue(datum['Count']) }],
+          content: [{ key: (datum) => datum['Series'], value: (datum) => formatValue(datum['Count']) }],
         },
         dimension: {
-          content: [{ key: (datum) => datum['Source'], value: (datum) => datum['Count'] || 0 }],
+          content: [{ key: (datum) => datum['Series'], value: (datum) => datum['Count'] || 0 }],
           updateContent: (array) => {
             array.sort((a, b) => b.value - a.value);
             let sum = 0;
@@ -204,7 +216,7 @@ function SourceTrendChart({ data, sources, range, granularity, metric }) {
       crosshair: { visible: true, line: { type: 'line', style: { stroke: '#999', lineDash: [4, 4] } } },
       color: { specified: colorMap },
     };
-  }, [chartData, sources, metric, t]);
+  }, [chartData, seriesList, metric, t]);
 
   if (!data || data.length === 0) {
     return (
@@ -232,6 +244,16 @@ const ChannelAnalytics = () => {
     new Date(),
   ]);
 
+  // 模型对比相关状态
+  const [comparisonItems, setComparisonItems] = useState([]);
+  const [comparisonData, setComparisonData] = useState([]);
+
+  // 筛选状态
+  const [selectedSources, setSelectedSources] = useState([]);
+  const [selectedModels, setSelectedModels] = useState([]);
+  const [sourcesExpanded, setSourcesExpanded] = useState(false);
+  const [modelsExpanded, setModelsExpanded] = useState(false);
+
   // 时间范围转换
   const getTimestamps = useCallback((r) => {
     if (r === 'custom' && customRange && customRange[0] && customRange[1]) {
@@ -255,15 +277,20 @@ const ChannelAnalytics = () => {
     setLoading(true);
     try {
       const { startTimestamp, endTimestamp } = getTimestamps(range);
-      const [overviewRes, sourcesRes, trendRes] = await Promise.all([
+      const [overviewRes, sourcesRes, trendRes, itemsRes] = await Promise.all([
         API.get('/api/channel-analytics/overview', { params: { start_timestamp: startTimestamp, end_timestamp: endTimestamp } }),
         API.get('/api/channel-analytics/sources', { params: { start_timestamp: startTimestamp, end_timestamp: endTimestamp } }),
         API.get('/api/channel-analytics/trend', { params: { start_timestamp: startTimestamp, end_timestamp: endTimestamp, granularity } }),
+        API.get('/api/channel-analytics/model-comparison/items', { params: { start_timestamp: startTimestamp, end_timestamp: endTimestamp } }),
       ]);
 
       if (overviewRes.data.success) setOverview(overviewRes.data.data);
       if (sourcesRes.data.success) setSources(sourcesRes.data.data || []);
       if (trendRes.data.success) setTrendData(trendRes.data.data || []);
+      if (itemsRes.data.success) {
+        const items = itemsRes.data.data || [];
+        setComparisonItems(items);
+      }
     } catch (e) {
       showError(e.message);
     } finally {
@@ -271,9 +298,37 @@ const ChannelAnalytics = () => {
     }
   }, [range, granularity, getTimestamps]);
 
+  // 加载模型对比趋势数据
+  const loadComparisonTrend = useCallback(async () => {
+    try {
+      const { startTimestamp, endTimestamp } = getTimestamps(range);
+      const params = {
+        start_timestamp: startTimestamp,
+        end_timestamp: endTimestamp,
+        granularity,
+      };
+      if (selectedSources.length > 0) {
+        params.sources = selectedSources.join(',');
+      }
+      if (selectedModels.length > 0) {
+        params.model_names = selectedModels.join(',');
+      }
+      const res = await API.get('/api/channel-analytics/model-comparison/trend', { params });
+      if (res.data.success) {
+        setComparisonData(res.data.data || []);
+      }
+    } catch (e) {
+      showError(e.message);
+    }
+  }, [range, granularity, selectedSources, selectedModels, getTimestamps]);
+
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    loadComparisonTrend();
+  }, [loadComparisonTrend]);
 
   // 自动设置粒度
   useEffect(() => {
@@ -285,6 +340,47 @@ const ChannelAnalytics = () => {
   // 来源名称列表（用于图表）
   const sourceNames = sources.map(s => s.source);
   const sortedSources = [...sources].sort((a, b) => b.call_count - a.call_count);
+
+  // 提取唯一来源和模型列表（用于筛选行）
+  const uniqueSources = useMemo(() => {
+    const set = new Set();
+    comparisonItems.forEach(item => set.add(item.source));
+    return Array.from(set).sort();
+  }, [comparisonItems]);
+
+  const uniqueModels = useMemo(() => {
+    const set = new Set();
+    comparisonItems.forEach(item => set.add(item.model_name));
+    return Array.from(set).sort();
+  }, [comparisonItems]);
+
+  // 级联：根据选中的来源获取可用模型列表
+  const availableModels = useMemo(() => {
+    if (selectedSources.length === 0) return uniqueModels;
+    const set = new Set();
+    comparisonItems.forEach(item => {
+      if (selectedSources.includes(item.source)) {
+        set.add(item.model_name);
+      }
+    });
+    return Array.from(set).sort();
+  }, [comparisonItems, selectedSources, uniqueModels]);
+
+  // 来源变化后，自动过滤掉不在可用列表中的已选模型
+  useEffect(() => {
+    if (selectedModels.length > 0) {
+      const filtered = selectedModels.filter(m => availableModels.includes(m));
+      if (filtered.length !== selectedModels.length) {
+        setSelectedModels(filtered);
+      }
+    }
+  }, [availableModels]);
+
+  // 自动全选来源
+  useEffect(() => {
+    if (comparisonItems.length === 0) return;
+    if (selectedSources.length === 0) setSelectedSources(uniqueSources);
+  }, [comparisonItems, uniqueSources]);
 
   // 统计卡片数据（每个指标独立卡片，加深背景色 + title 彩色图标）
   const statsCards = useMemo(() => [
@@ -373,6 +469,35 @@ const ChannelAnalytics = () => {
       ),
     },
   ];
+
+  // 胶囊筛选按钮组件（支持折叠/展开、全部按钮）
+  const FilterSelect = ({ options, selected, onChange, label }) => {
+    const { t } = useTranslation();
+
+    const handleChange = (value) => {
+      onChange(value || []);
+    };
+
+    return (
+      <div className='flex items-center gap-2'>
+        <Text type="tertiary" size="small" className='flex-shrink-0'>{label}</Text>
+        <Select
+          multiple
+          value={selected}
+          onChange={handleChange}
+          style={{ minWidth: 120, maxWidth: 320 }}
+          placeholder={t('请选择')}
+          maxTagCount={2}
+        >
+          {options.map((opt) => (
+            <Select.Option key={opt} value={opt}>
+              {opt}
+            </Select.Option>
+          ))}
+        </Select>
+      </div>
+    );
+  };
 
   return (
     <div className='h-full px-12'>
@@ -491,7 +616,7 @@ const ChannelAnalytics = () => {
           </Card>
         </div>
 
-        {/* 使用趋势 - 独立卡片，标题右侧 Tabs slash 切换指标 */}
+        {/* 使用趋势 */}
         <Card
           {...CARD_PROPS}
           className='!rounded-2xl !mb-4'
@@ -512,11 +637,28 @@ const ChannelAnalytics = () => {
             </div>
           }
         >
+          {/* 筛选行 */}
+          <div className='px-4 pt-2 pb-1 flex items-center gap-4 flex-wrap'>
+            {uniqueSources.length > 0 && (
+              <FilterSelect
+                options={uniqueSources}
+                selected={selectedSources}
+                onChange={setSelectedSources}
+                label={t('来源')}
+              />
+            )}
+            {availableModels.length > 0 && (
+              <FilterSelect
+                options={availableModels}
+                selected={selectedModels}
+                onChange={setSelectedModels}
+                label={t('模型')}
+              />
+            )}
+          </div>
           <div className='h-72 p-2'>
             <SourceTrendChart
-              data={trendData}
-              sources={sourceNames}
-              range={range}
+              data={comparisonData}
               granularity={granularity}
               metric={metric}
             />

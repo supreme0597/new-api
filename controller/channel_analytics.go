@@ -2,6 +2,7 @@ package controller
 
 import (
 	"strconv"
+	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
@@ -118,6 +119,42 @@ func GetChannelAnalyticsModelTrend(c *gin.Context) {
 	granularity := c.DefaultQuery("granularity", "day")
 
 	points, err := model.GetChannelModelTrend(source, startTimestamp, endTimestamp, granularity)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, points)
+}
+
+// GetChannelAnalyticsModelComparisonItems 获取模型对比选项列表
+func GetChannelAnalyticsModelComparisonItems(c *gin.Context) {
+	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
+	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
+
+	items, err := model.GetChannelModelComparisonItems(startTimestamp, endTimestamp)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, items)
+}
+
+// GetChannelAnalyticsModelComparisonTrend 获取模型对比趋势数据
+func GetChannelAnalyticsModelComparisonTrend(c *gin.Context) {
+	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
+	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
+	granularity := c.DefaultQuery("granularity", "day")
+
+	var sources []string
+	if src := c.Query("sources"); src != "" {
+		sources = strings.Split(src, ",")
+	}
+	var modelNames []string
+	if mn := c.Query("model_names"); mn != "" {
+		modelNames = strings.Split(mn, ",")
+	}
+
+	points, err := model.GetChannelModelComparisonTrend(startTimestamp, endTimestamp, granularity, sources, modelNames)
 	if err != nil {
 		common.ApiError(c, err)
 		return
