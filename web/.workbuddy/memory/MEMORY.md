@@ -28,9 +28,9 @@
 - body 区域：彩色 lucide 图标（size=20, text-xxx-500）+ 数值（text-2xl font-semibold），用 flex items-center gap-3 排列
 
 ## 渠道分析图表颜色
-- 使用蓝绿色系色板（柔和统一）：`['#3b82f6', '#06b6d4', '#14b8a6', '#10b981', '#22c55e', '#84cc16', '#6366f1', '#0ea5e9', '#2dd4bf', '#34d399']`
+- 使用柔和多色系色板（AntV 默认色系）：`['#5b8ff9', '#5ad8a6', '#f6bd16', '#e8684a', '#9270ca', '#6dc8ec', '#ff9d4d', '#f6c3f7', '#a0d8f7', '#96d6b5']`
 - 饼图和趋势图按索引轮询取色，来源对比表格 Tag 用 Semi 的 `color="cyan"`
-- 不再使用 `modelToColor()`，避免红/粉/黄等突兀颜色
+- 不再使用 `modelToColor()`，避免高饱和度颜色
 
 ## 调用次数统计口径差异
 - ChannelAnalytics 的 `total_calls`/`call_count`：按来源(source)维度聚合，支持时间范围筛选，来自 `/api/channel-analytics/*` 接口

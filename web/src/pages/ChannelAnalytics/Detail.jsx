@@ -29,10 +29,10 @@ import { CARD_PROPS, CHART_CONFIG } from '../../constants/dashboard.constants';
 
 const { Title, Text } = Typography;
 
-// 蓝绿色系色板（柔和统一，优先蓝绿）
+// 柔和多色系色板（多样但不突兀，AntV 默认色系）
 const MODEL_COLORS = [
-  '#3b82f6', '#06b6d4', '#14b8a6', '#10b981', '#22c55e',
-  '#84cc16', '#6366f1', '#0ea5e9', '#2dd4bf', '#34d399',
+  '#5b8ff9', '#5ad8a6', '#f6bd16', '#e8684a', '#9270ca',
+  '#6dc8ec', '#ff9d4d', '#f6c3f7', '#a0d8f7', '#96d6b5',
 ];
 
 function formatLargeNumber(num) {
