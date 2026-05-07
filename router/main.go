@@ -1,7 +1,6 @@
 package router
 
 import (
-	"embed"
 	"fmt"
 	"net/http"
 	"os"
