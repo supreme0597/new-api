@@ -426,12 +426,15 @@ func getSourceByChannelID() (map[int]string, error) {
 }
 
 // GetChannelSourceUserRanking 获取指定来源的活跃用户排行
-func GetChannelSourceUserRanking(source string, startTimestamp, endTimestamp int64, limit int, modelName string) ([]ChannelSourceUserRanking, error) {
+func GetChannelSourceUserRanking(source string, startTimestamp, endTimestamp int64, limit int, modelName string, sortBy string) ([]ChannelSourceUserRanking, error) {
 	if limit <= 0 {
 		limit = 10
 	}
 	if limit > 50 {
 		limit = 50
+	}
+	if sortBy != "token_count" && sortBy != "call_count" {
+		sortBy = "token_count"
 	}
 
 	// 获取该来源的渠道ID
@@ -468,7 +471,12 @@ func GetChannelSourceUserRanking(source string, startTimestamp, endTimestamp int
 		tx = tx.Where("logs.created_at <= ?", endTimestamp)
 	}
 
-	if err := tx.Group("logs.user_id, logs.username").Order("call_count DESC").Limit(limit).Find(&rankings).Error; err != nil {
+	orderCol := "token_count"
+	if sortBy == "call_count" {
+		orderCol = "call_count"
+	}
+
+	if err := tx.Group("logs.user_id, logs.username").Order(orderCol + " DESC").Limit(limit).Find(&rankings).Error; err != nil {
 		return nil, err
 	}
 

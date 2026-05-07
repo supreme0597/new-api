@@ -80,8 +80,12 @@ func GetChannelAnalyticsUserRanking(c *gin.Context) {
 	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
 	modelName := c.Query("model_name")
+	sortBy := c.DefaultQuery("sort_by", "token_count")
+	if sortBy != "token_count" && sortBy != "call_count" {
+		sortBy = "token_count"
+	}
 
-	rankings, err := model.GetChannelSourceUserRanking(source, startTimestamp, endTimestamp, limit, modelName)
+	rankings, err := model.GetChannelSourceUserRanking(source, startTimestamp, endTimestamp, limit, modelName, sortBy)
 	if err != nil {
 		common.ApiError(c, err)
 		return

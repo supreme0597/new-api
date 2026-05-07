@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { API } from '../../helpers/api';
@@ -473,25 +473,39 @@ const ChannelAnalytics = () => {
   // 胶囊筛选按钮组件（支持折叠/展开、全部按钮）
   const FilterSelect = ({ options, selected, onChange, label }) => {
     const { t } = useTranslation();
+    const selectRef = useRef(null);
 
     const handleChange = (value) => {
       onChange(value || []);
+      // 多选模式下保持下拉框打开
+      setTimeout(() => {
+        selectRef.current?.open();
+      }, 0);
     };
 
     return (
       <div className='flex items-center gap-2'>
         <Text type="tertiary" size="small" className='flex-shrink-0'>{label}</Text>
         <Select
+          ref={selectRef}
           multiple
+          filter
           value={selected}
           onChange={handleChange}
-          style={{ minWidth: 120, maxWidth: 320 }}
-          placeholder={t('请选择')}
+          style={{ minWidth: 240 }}
           maxTagCount={2}
+          maxTagPlaceholder={(omittedValues) => `+${omittedValues.length}`}
+          placeholder={t('请选择')}
         >
-          {options.map((opt) => (
+          {options.map((opt, i) => (
             <Select.Option key={opt} value={opt}>
-              {opt}
+              <span className='flex items-center gap-1.5'>
+                <span
+                  className='inline-block w-2 h-2 rounded-full flex-shrink-0'
+                  style={{ background: SOURCE_COLORS[i % SOURCE_COLORS.length] }}
+                />
+                <span>{opt}</span>
+              </span>
             </Select.Option>
           ))}
         </Select>

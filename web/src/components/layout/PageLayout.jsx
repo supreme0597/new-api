@@ -214,11 +214,12 @@ const PageLayout = () => {
         >
           <Content
             style={{
-              flex: '1 0 auto',
+              flex: '1 1 auto',
               overflowY: 'visible',
               WebkitOverflowScrolling: 'touch',
               padding: shouldInnerPadding ? (isMobile ? '5px' : '24px') : '0',
               position: 'relative',
+              boxSizing: 'border-box',
             }}
           >
             <ErrorBoundary>

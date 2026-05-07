@@ -229,6 +229,7 @@ const ChannelAnalyticsDetail = () => {
   const [topN, setTopN] = useState(10);
   const [selectedModels, setSelectedModels] = useState([]);
   const [allModels, setAllModels] = useState([]);
+  const [userSortBy, setUserSortBy] = useState('token_count');
 
   const getTimestamps = useCallback((r) => {
     if (r === 'custom' && customRange && customRange[0] && customRange[1]) {
@@ -291,7 +292,7 @@ const ChannelAnalyticsDetail = () => {
     if (!decodedSource) return;
     try {
       const { startTimestamp, endTimestamp } = getTimestamps(range);
-      const params = { start_timestamp: startTimestamp, end_timestamp: endTimestamp, limit: topN };
+      const params = { start_timestamp: startTimestamp, end_timestamp: endTimestamp, limit: topN, sort_by: userSortBy };
       if (selectedModels.length === 1) {
         params.model_name = selectedModels[0];
       }
@@ -300,7 +301,7 @@ const ChannelAnalyticsDetail = () => {
     } catch (e) {
       showError(e.message);
     }
-  }, [decodedSource, range, topN, selectedModels, getTimestamps]);
+  }, [decodedSource, range, topN, selectedModels, userSortBy, getTimestamps]);
 
   useEffect(() => {
     loadData();
@@ -572,14 +573,23 @@ const ChannelAnalyticsDetail = () => {
                   </span>
                 )}
               </div>
-              <div className='flex items-center gap-1'>
-                <Text type="tertiary" size="small">{t('显示')}</Text>
-                <Select size="small" value={topN} onChange={setTopN} style={{ minWidth: 80 }}>
-                  <Select.Option value={5}>Top 5</Select.Option>
-                  <Select.Option value={10}>Top 10</Select.Option>
-                  <Select.Option value={20}>Top 20</Select.Option>
-                  <Select.Option value={50}>Top 50</Select.Option>
-                </Select>
+              <div className='flex items-center gap-3'>
+                <div className='flex items-center gap-1'>
+                  <Text type="tertiary" size="small">{t('排序')}</Text>
+                  <Select size="small" value={userSortBy} onChange={setUserSortBy} style={{ minWidth: 120 }}>
+                    <Select.Option value="token_count">{t('按 Token')}</Select.Option>
+                    <Select.Option value="call_count">{t('按调用次数')}</Select.Option>
+                  </Select>
+                </div>
+                <div className='flex items-center gap-1'>
+                  <Text type="tertiary" size="small">{t('显示')}</Text>
+                  <Select size="small" value={topN} onChange={setTopN} style={{ minWidth: 80 }}>
+                    <Select.Option value={5}>Top 5</Select.Option>
+                    <Select.Option value={10}>Top 10</Select.Option>
+                    <Select.Option value={20}>Top 20</Select.Option>
+                    <Select.Option value={50}>Top 50</Select.Option>
+                  </Select>
+                </div>
               </div>
             </div>
           }

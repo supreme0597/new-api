@@ -3842,6 +3842,8 @@
     "时间范围": "Time Range",
     "刷新数据": "Refresh",
     "排名": "Rank",
-    "操作": "Action"
+    "操作": "Action",
+    "按 Token": "By Token",
+    "按调用次数": "By Call Count"
   }
 }

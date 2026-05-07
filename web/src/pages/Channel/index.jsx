@@ -19,14 +19,10 @@ For commercial licensing, please contact support@quantumnous.com
 
 import React from 'react';
 import ChannelsTable from '../../components/table/channels';
-import { isAdmin } from '../../helpers/utils';
 
 const File = () => {
   return (
-    <div className='mt-[60px] px-2'>
-      <h1 className='text-xl font-semibold mb-3'>
-        {isAdmin() ? '渠道管理' : '我的渠道'}
-      </h1>
+    <div className='px-2 h-full flex flex-col'>
       <ChannelsTable />
     </div>
   );
