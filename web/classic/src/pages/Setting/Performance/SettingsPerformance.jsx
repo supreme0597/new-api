@@ -21,17 +21,18 @@ import React, { useEffect, useState, useRef } from 'react';
 import {
   Banner,
   Button,
-  Card,
   Col,
   Form,
   InputNumber,
   Row,
   Spin,
+  Progress,
   Descriptions,
   Tag,
   Popconfirm,
   RadioGroup,
   Radio,
+  Typography,
 } from '@douyinfe/semi-ui';
 import {
   compareObjects,
@@ -41,6 +42,8 @@ import {
   showWarning,
 } from '../../../helpers';
 import { useTranslation } from 'react-i18next';
+
+const { Text } = Typography;
 
 // 格式化字节大小
 function formatBytes(bytes, decimals = 2) {
@@ -183,11 +186,7 @@ export default function SettingsPerformance(props) {
   }
 
   async function cleanupLogFiles() {
-    if (
-      logCleanupValue == null ||
-      isNaN(logCleanupValue) ||
-      logCleanupValue < 1
-    ) {
+    if (logCleanupValue == null || isNaN(logCleanupValue) || logCleanupValue < 1) {
       showError(t('请输入有效的数值'));
       return;
     }
@@ -254,7 +253,6 @@ export default function SettingsPerformance(props) {
           values={inputs}
           getFormApi={(formAPI) => (refForm.current = formAPI)}
           style={{ marginBottom: 15 }}
-          className='settings-performance-form'
         >
           <Form.Section text={t('磁盘缓存设置（磁盘换内存）')}>
             <Banner
@@ -391,13 +389,12 @@ export default function SettingsPerformance(props) {
                 />
               </Col>
             </Row>
+            <Row>
+              <Button size='default' onClick={onSubmit}>
+                {t('保存性能设置')}
+              </Button>
+            </Row>
           </Form.Section>
-
-          <Row>
-            <Button size='default' onClick={onSubmit}>
-              {t('保存性能设置')}
-            </Button>
-          </Row>
         </Form>
       </Spin>
 
@@ -477,24 +474,24 @@ export default function SettingsPerformance(props) {
                   >
                     &nbsp;
                   </Text>
-                  <Popconfirm
-                    title={t('确认清理日志文件？')}
-                    content={
-                      logCleanupMode === 'by_count'
-                        ? t(
-                            '将只保留最近 {{value}} 个日志文件，其余将被删除。',
-                            { value: logCleanupValue },
-                          )
-                        : t('将删除 {{value}} 天前的日志文件。', {
-                            value: logCleanupValue,
-                          })
-                    }
-                    onConfirm={cleanupLogFiles}
-                  >
-                    <Button type='danger' loading={logCleanupLoading}>
-                      {t('清理日志文件')}
-                    </Button>
-                  </Popconfirm>
+                <Popconfirm
+                  title={t('确认清理日志文件？')}
+                  content={
+                    logCleanupMode === 'by_count'
+                      ? t(
+                          '将只保留最近 {{value}} 个日志文件，其余将被删除。',
+                          { value: logCleanupValue },
+                        )
+                      : t('将删除 {{value}} 天前的日志文件。', {
+                          value: logCleanupValue,
+                        })
+                  }
+                  onConfirm={cleanupLogFiles}
+                >
+                  <Button type='danger' loading={logCleanupLoading}>
+                    {t('清理日志文件')}
+                  </Button>
+                </Popconfirm>
                 </div>
               </Col>
             </Row>

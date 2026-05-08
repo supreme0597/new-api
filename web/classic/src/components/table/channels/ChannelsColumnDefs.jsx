@@ -153,6 +153,13 @@ const renderScope = (record, t) => {
   if (record.children !== undefined) {
     return renderTagType(t);
   }
+  if (record.owner_user_id === -999) {
+    return (
+      <Tag color='orange' shape='circle' type='solid'>
+        {t('测试')}
+      </Tag>
+    );
+  }
   return record.owner_user_id == null ? (
     <Tag color='blue' shape='circle'>
       {t('公共')}
@@ -513,26 +520,6 @@ export const getChannelsColumns = ({
         } else {
           return <>{renderTagType(t)}</>;
         }
-      },
-    },
-    {
-      key: COLUMN_KEYS.TEST_CHANNEL,
-      title: t('测试渠道'),
-      dataIndex: 'is_test_channel',
-      render: (text, record) => {
-        if (record.children !== undefined) {
-          return null;
-        }
-        const isTest = record.is_test_channel === 1;
-        return (
-          <Tag
-            color={isTest ? 'orange' : 'grey'}
-            shape='circle'
-            type={isTest ? 'solid' : 'light'}
-          >
-            {isTest ? t('是') : t('否')}
-          </Tag>
-        );
       },
     },
     {

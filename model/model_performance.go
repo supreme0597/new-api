@@ -30,17 +30,17 @@ func (ModelPerformance) TableName() string {
 var modelPerformanceUpsertMutex sync.Mutex
 
 // GetModelPerformanceList 获取排行榜数据
-func GetModelPerformanceList(source string, page int, pageSize int) ([]*ModelPerformanceItem, int64, error) {
+func GetModelPerformanceList(vendorId int, page int, pageSize int) ([]*ModelPerformanceItem, int64, error) {
 	var total int64
 
 	// 基础查询：只查测试渠道的性能数据
 	query := DB.Model(&ModelPerformance{}).
 		Joins("JOIN channels ON channels.id = model_performances.channel_id").
-		Where("channels.is_test_channel = ?", 1)
+		Where("channels.owner_user_id = ?", TestChannelOwnerUserId)
 
-	// 按渠道来源筛选
-	if source != "" {
-		query = query.Where("channels.source = ?", source)
+	// 按供应商筛选
+	if vendorId > 0 {
+		query = query.Where("channels.vendor_id = ?", vendorId)
 	}
 
 	// 先统计总数
@@ -52,11 +52,11 @@ func GetModelPerformanceList(source string, page int, pageSize int) ([]*ModelPer
 	var results []struct {
 		ModelPerformance
 		ChannelName *string `gorm:"column:name"`
-		Source      *string `gorm:"column:source"`
+		VendorName  *string `gorm:"column:vendor_name"`
 	}
 
 	err := query.
-		Select("model_performances.*, channels.name, channels.source").
+		Select("model_performances.*, channels.name, channels.vendor_name").
 		Find(&results).Error
 
 	if err != nil {
@@ -78,15 +78,15 @@ func GetModelPerformanceList(source string, page int, pageSize int) ([]*ModelPer
 		if r.ChannelName != nil {
 			channelName = *r.ChannelName
 		}
-		source := ""
-		if r.Source != nil {
-			source = *r.Source
+		vendorName := ""
+		if r.VendorName != nil {
+			vendorName = *r.VendorName
 		}
 
 		scoredItems = append(scoredItems, scoredItem{
 			item: &ModelPerformanceItem{
 				Model:       r.Model,
-				Source:      source,
+				VendorName:  vendorName,
 				Tps:         r.Tps,
 				Ttft:        r.Ttft,
 				Score:       score,
@@ -131,7 +131,7 @@ func GetModelPerformanceList(source string, page int, pageSize int) ([]*ModelPer
 type ModelPerformanceItem struct {
 	Rank        int     `json:"rank"`
 	Model       string  `json:"model"`
-	Source      string  `json:"source"`
+	VendorName  string  `json:"vendor_name"`
 	Tps         float64 `json:"tps"`
 	Ttft        int     `json:"ttft"`
 	Score       float64 `json:"score"`

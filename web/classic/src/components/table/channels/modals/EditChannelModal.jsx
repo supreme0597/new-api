@@ -28,10 +28,7 @@ import {
   isAdmin,
 } from '../../../../helpers';
 import { useIsMobile } from '../../../../hooks/common/useIsMobile';
-import {
-  CHANNEL_OPTIONS,
-  MODEL_FETCHABLE_CHANNEL_TYPES,
-} from '../../../../constants';
+import { CHANNEL_OPTIONS, MODEL_FETCHABLE_CHANNEL_TYPES } from '../../../../constants';
 import {
   SideSheet,
   Space,
@@ -72,6 +69,7 @@ import StatusCodeRiskGuardModal from './StatusCodeRiskGuardModal';
 import ChannelKeyDisplay from '../../../common/ui/ChannelKeyDisplay';
 import { useSecureVerification } from '../../../../hooks/common/useSecureVerification';
 import { parseChannelConnectionString } from '../../../../helpers/token';
+import { isRoot } from '../../../../helpers';
 import { createApiCalls } from '../../../../services/secureVerification';
 import {
   collectInvalidStatusCodeEntries,
@@ -220,8 +218,8 @@ const EditChannelModal = (props) => {
     upstream_model_update_last_detected_models: [],
     upstream_model_update_ignored_models: '',
     // 模型性能排行榜相关
-    is_test_channel: 0,
-    source: '',
+    channel_type: 'public',
+    owner_user_id: null,
     sampling_interval_seconds: '',
   };
   const [batch, setBatch] = useState(false);
@@ -826,6 +824,7 @@ const EditChannelModal = (props) => {
     handleInputChange('param_override', '');
   };
 
+  // 获取供应商列表
   const loadChannel = async () => {
     setLoading(true);
     let res = await API.get(`/api/channel/${channelId}`);
@@ -982,6 +981,14 @@ const EditChannelModal = (props) => {
       }
 
       initialBaseUrlRef.current = data.base_url || '';
+      // 根据 owner_user_id 初始化 channel_type
+      if (data.owner_user_id === -999) {
+        data.channel_type = 'test';
+      } else if (data.owner_user_id != null && data.owner_user_id > 0) {
+        data.channel_type = 'private';
+      } else {
+        data.channel_type = 'public';
+      }
       setInputs(data);
       if (formApiRef.current) {
         formApiRef.current.setValues(data);
@@ -1877,7 +1884,16 @@ const EditChannelModal = (props) => {
 
     let res;
     localInputs.auto_ban = localInputs.auto_ban ? 1 : 0;
-    localInputs.is_test_channel = localInputs.is_test_channel ? 1 : 0;
+    // 根据 channel_type 设置 owner_user_id
+    if (localInputs.channel_type === 'test') {
+      localInputs.owner_user_id = -999;
+    } else if (localInputs.channel_type === 'private') {
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      localInputs.owner_user_id = user.id || null;
+    } else {
+      localInputs.owner_user_id = null;
+    }
+    delete localInputs.channel_type;
     // sampling_interval_seconds: 空字符串转为 null，否则转为数字
     if (localInputs.sampling_interval_seconds === '' || localInputs.sampling_interval_seconds === undefined) {
       localInputs.sampling_interval_seconds = null;
@@ -2788,36 +2804,44 @@ const EditChannelModal = (props) => {
                     )}
                   />
 
-                  {/* 模型性能采样设置 - 仅超管可见 */}
+                  {/* 性能采样设置 - 仅超管可见 */}
                   {isAdmin() && (
                     <div className='pt-4 border-t border-gray-100 mt-4'>
                       <Text className='text-sm font-medium text-gray-500 mb-3 block'>
-                        {t('模型性能采样设置')}
+                        {t('性能采样设置')}
                       </Text>
 
-                      <Form.Switch
-                        field='is_test_channel'
-                        label={t('设为测试渠道')}
-                        checkedText={t('开')}
-                        uncheckedText={t('关')}
-                        onChange={(value) =>
-                          handleInputChange('is_test_channel', value ? 1 : 0)
-                        }
-                        extraText={t(
-                          '启用后，该渠道下的所有模型将被定时采样测试',
-                        )}
-                      />
-
-                      <Form.Input
-                        field='source'
-                        label={t('渠道来源')}
-                        placeholder={t('例如：渠道A')}
-                        onChange={(value) =>
-                          handleInputChange('source', value)
-                        }
-                        showClear
-                        extraText={t('用于排行榜筛选')}
-                      />
+                      {isRoot() ? (
+                        <Form.Select
+                          field='channel_type'
+                          label={t('渠道类型')}
+                          optionList={
+                            inputs.channel_type === 'private'
+                              ? [{ label: t('私有渠道'), value: 'private' }]
+                              : [
+                                  { label: t('公共渠道'), value: 'public' },
+                                  { label: t('测试渠道'), value: 'test' },
+                                ]
+                          }
+                          disabled={inputs.channel_type === 'private'}
+                          onChange={(value) => {
+                            if (value === 'public') {
+                              handleInputChange('owner_user_id', null);
+                            } else if (value === 'test') {
+                              handleInputChange('owner_user_id', -999);
+                            }
+                          }}
+                        />
+                      ) : (
+                        <Form.Select
+                          field='channel_type'
+                          label={t('渠道类型')}
+                          optionList={[
+                            { label: t('私有渠道'), value: 'private' },
+                          ]}
+                          disabled
+                        />
+                      )}
 
                       <Form.Input
                         field='sampling_interval_seconds'

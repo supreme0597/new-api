@@ -281,7 +281,6 @@ func migrateDB() error {
 		&CustomOAuthProvider{},
 		&UserOAuthBinding{},
 		&ModelPerformance{},
-		&ChannelSourceMapping{},
 		&SamplingConfig{},
 		&PerfMetric{},
 	)
@@ -297,6 +296,8 @@ func migrateDB() error {
 			return err
 		}
 	}
+	// 迁移：将 is_test_channel=1 的渠道的 owner_user_id 设为 -999
+	DB.Exec("UPDATE channels SET owner_user_id = -999 WHERE is_test_channel = 1 AND (owner_user_id IS NULL OR owner_user_id = 0)")
 	return nil
 }
 
@@ -333,7 +334,6 @@ func migrateDBFast() error {
 		{&CustomOAuthProvider{}, "CustomOAuthProvider"},
 		{&UserOAuthBinding{}, "UserOAuthBinding"},
 		{&ModelPerformance{}, "ModelPerformance"},
-		{&ChannelSourceMapping{}, "ChannelSourceMapping"},
 		{&SamplingConfig{}, "SamplingConfig"},
 		{&PerfMetric{}, "PerfMetric"},
 	}

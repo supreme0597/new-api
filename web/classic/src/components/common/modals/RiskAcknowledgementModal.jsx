@@ -81,9 +81,7 @@ const RiskAcknowledgementModal = React.memo(function RiskAcknowledgementModal({
 
   const allChecked = useMemo(() => {
     if (checklist.length === 0) return true;
-    return (
-      checkedItems.length === checklist.length && checkedItems.every(Boolean)
-    );
+    return checkedItems.length === checklist.length && checkedItems.every(Boolean);
   }, [checkedItems, checklist.length]);
 
   const typedMatched = useMemo(() => {
@@ -136,6 +134,7 @@ const RiskAcknowledgementModal = React.memo(function RiskAcknowledgementModal({
       }
     >
       <div className='flex flex-col gap-4'>
+
         <RiskMarkdownBlock markdownContent={markdownContent} />
 
         {detailItems.length > 0 ? (

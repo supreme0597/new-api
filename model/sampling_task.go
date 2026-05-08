@@ -36,6 +36,15 @@ type LastSamplingResult struct {
 	FailedList  []SamplingRecord `json:"failed_list"`
 }
 
+// SamplingResult 采样结果详情
+type SamplingResult struct {
+	Tps          float64
+	TtftMs       int
+	TotalTokens  int
+	LatencyMs    int64 // 总延迟（请求开始到响应结束）
+	GenerationMs int64 // 生成时间（首字节到响应结束）
+}
+
 // ChannelSamplingStatus 单个渠道的采样状态
 type ChannelSamplingStatus struct {
 	ChannelId    int    `json:"channel_id"`
@@ -163,7 +172,7 @@ func RunSamplingTask() error {
 
 	// 获取所有测试渠道
 	var channels []*Channel
-	if err := DB.Where("is_test_channel = ? AND status = ?", 1, common.ChannelStatusEnabled).Find(&channels).Error; err != nil {
+	if err := DB.Where("owner_user_id = ? AND status = ?", TestChannelOwnerUserId, common.ChannelStatusEnabled).Find(&channels).Error; err != nil {
 		common.SysError(fmt.Sprintf("[Sampling] 获取测试渠道失败: %v", err))
 		return fmt.Errorf("failed to get test channels: %w", err)
 	}
@@ -291,7 +300,7 @@ func RunSamplingTask() error {
 
 				common.SysLog(fmt.Sprintf("[Sampling] [%d/%d] 采样渠道=%s, 模型=%s", currentDone, totalTasks, channelName, modelName))
 
-				tps, ttft, err := sampleModelPerformance(ch, modelName, config)
+				result, err := sampleModelPerformance(ch, modelName, config)
 				if err != nil {
 					failedAtomic.Add(1)
 					chFailed++
@@ -304,9 +313,6 @@ func RunSamplingTask() error {
 					resultMutex.Lock()
 					lastResult.FailedList = append(lastResult.FailedList, record)
 					resultMutex.Unlock()
-
-					// 记录到使用日志
-					RecordSamplingLog(ch.Id, channelName, modelName, 0, 0, 0, false, err.Error())
 
 					if errors.Is(err, ErrSamplingForbidden) {
 						common.SysLog(fmt.Sprintf("[Sampling] 渠道 %s 被限流/禁止访问，跳过该渠道剩余模型", channelName))
@@ -329,30 +335,22 @@ func RunSamplingTask() error {
 					Channel: channelName,
 					Model:   modelName,
 					Success: true,
-					Message: fmt.Sprintf("TPS=%.1f, TTFT=%dms", tps, ttft),
+					Message: fmt.Sprintf("TPS=%.1f, TTFT=%dms", result.Tps, result.TtftMs),
 				}
 				resultMutex.Lock()
 				lastResult.SuccessList = append(lastResult.SuccessList, record)
 				resultMutex.Unlock()
 
-				common.SysLog(fmt.Sprintf("[Sampling] 采样成功: 渠道=%s, 模型=%s, TPS=%.1f, TTFT=%dms", channelName, modelName, tps, ttft))
+				common.SysLog(fmt.Sprintf("[Sampling] 采样成功: 渠道=%s, 模型=%s, TPS=%.1f, TTFT=%dms", channelName, modelName, result.Tps, result.TtftMs))
 
-				// 记录到使用日志
-				RecordSamplingLog(ch.Id, channelName, modelName, tps, ttft, ttft, true,
-					fmt.Sprintf("采样成功 TPS=%.1f TTFT=%dms", tps, ttft))
-
-				if err := UpsertModelPerformance(ch.Id, modelName, tps, ttft); err != nil {
-					common.SysError(fmt.Sprintf("[Sampling] 保存性能数据失败: 渠道=%s, 模型=%s, 错误=%v", channelName, modelName, err))
-					updateSamplingTaskProgress(int(doneAtomic.Load()), int(successAtomic.Load()), int(failedAtomic.Load()), channelName, modelName,
-						fmt.Sprintf("保存数据失败: %s / %s", channelName, modelName))
-					updateChannelSamplingProgress(ch.Id, channelName, chDone, chSuccess, chFailed, chTotal,
-						fmt.Sprintf("保存失败: %s", modelName))
-				} else {
-					updateSamplingTaskProgress(int(doneAtomic.Load()), int(successAtomic.Load()), int(failedAtomic.Load()), channelName, modelName,
-						fmt.Sprintf("完成: %s / %s (TPS=%.1f, TTFT=%dms)", channelName, modelName, tps, ttft))
-					updateChannelSamplingProgress(ch.Id, channelName, chDone, chSuccess, chFailed, chTotal,
-						fmt.Sprintf("完成: %s", modelName))
+				if err := RecordSamplingMetric(modelName, ch.Group, result.LatencyMs, int64(result.TtftMs), int64(result.TotalTokens), result.GenerationMs); err != nil {
+					common.SysError(fmt.Sprintf("[Sampling] 记录性能数据失败: 渠道=%s, 模型=%s, 错误=%v", channelName, modelName, err))
 				}
+
+				updateSamplingTaskProgress(int(doneAtomic.Load()), int(successAtomic.Load()), int(failedAtomic.Load()), channelName, modelName,
+					fmt.Sprintf("完成: %s / %s (TPS=%.1f, TTFT=%dms)", channelName, modelName, result.Tps, result.TtftMs))
+				updateChannelSamplingProgress(ch.Id, channelName, chDone, chSuccess, chFailed, chTotal,
+					fmt.Sprintf("完成: %s", modelName))
 			}
 
 			common.SysLog(fmt.Sprintf("[Sampling] 渠道 %s 采样完成", channelName))
@@ -381,14 +379,14 @@ func getChannelSamplingInterval(channel *Channel) int {
 	return DefaultSamplingIntervalSeconds
 }
 
-// sampleModelPerformance 对单个模型执行采样，返回 TPS 和 TTFT
-func sampleModelPerformance(channel *Channel, modelName string, config *SamplingConfig) (tps float64, ttft int, err error) {
+// sampleModelPerformance 对单个模型执行采样，返回采样结果详情
+func sampleModelPerformance(channel *Channel, modelName string, config *SamplingConfig) (*SamplingResult, error) {
 	logPrefix := fmt.Sprintf("[Sampling][渠道=%s,模型=%s]", channel.Name, modelName)
 
 	baseURL := channel.GetBaseURL()
 	if baseURL == "" {
 		common.SysError(fmt.Sprintf("%s 渠道 %d 没有 base URL", logPrefix, channel.Id))
-		return 0, 0, fmt.Errorf("channel %d has no base URL", channel.Id)
+		return nil, fmt.Errorf("channel %d has no base URL", channel.Id)
 	}
 
 	// 构建请求
@@ -404,14 +402,14 @@ func sampleModelPerformance(channel *Channel, modelName string, config *Sampling
 	req, err := http.NewRequest("POST", url, strings.NewReader(requestBody))
 	if err != nil {
 		common.SysError(fmt.Sprintf("%s 创建请求失败: %v", logPrefix, err))
-		return 0, 0, fmt.Errorf("create request failed: %w", err)
+		return nil, fmt.Errorf("create request failed: %w", err)
 	}
 
 	// 设置请求头
 	keys := channel.GetKeys()
 	if len(keys) == 0 {
 		common.SysError(fmt.Sprintf("%s 渠道 %d 没有密钥", logPrefix, channel.Id))
-		return 0, 0, fmt.Errorf("channel %d has no keys", channel.Id)
+		return nil, fmt.Errorf("channel %d has no keys", channel.Id)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+keys[0])
@@ -427,7 +425,7 @@ func sampleModelPerformance(channel *Channel, modelName string, config *Sampling
 	resp, err := client.Do(req)
 	if err != nil {
 		common.SysError(fmt.Sprintf("%s HTTP 请求失败: %v", logPrefix, err))
-		return 0, 0, fmt.Errorf("request failed: %w", err)
+		return nil, fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -442,23 +440,23 @@ func sampleModelPerformance(channel *Channel, modelName string, config *Sampling
 		if resp.StatusCode == http.StatusTooManyRequests ||
 			resp.StatusCode == http.StatusUnauthorized ||
 			resp.StatusCode == http.StatusForbidden {
-			return 0, 0, fmt.Errorf("%w: status %d, body: %s", ErrSamplingForbidden, resp.StatusCode, string(body))
+			return nil, fmt.Errorf("%w: status %d, body: %s", ErrSamplingForbidden, resp.StatusCode, string(body))
 		}
-		return 0, 0, fmt.Errorf("unexpected status %d: %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("unexpected status %d: %s", resp.StatusCode, string(body))
 	}
 
-	// 计算 TTFT（首次响应时间）
-	ttftMs := int(time.Since(startTime).Milliseconds())
-	common.SysLog(fmt.Sprintf("%s 首字节到达: TTFT=%dms", logPrefix, ttftMs))
-
-	// 读取流式响应并计算 TPS
+	// 读取流式响应，记录首字节时间和总 token 数
+	var firstByteTime time.Time
 	totalTokens := 0
 	buf := make([]byte, 4096)
 	for {
 		n, readErr := resp.Body.Read(buf)
 		if n > 0 {
+			// 记录首字节到达时间（TTFT）
+			if firstByteTime.IsZero() {
+				firstByteTime = time.Now()
+			}
 			// 简单统计 SSE 数据中的 token
-			// 实际中应该解析 SSE 格式，这里简化处理
 			chunk := string(buf[:n])
 			totalTokens += countTokensInChunk(chunk)
 		}
@@ -471,13 +469,33 @@ func sampleModelPerformance(channel *Channel, modelName string, config *Sampling
 		}
 	}
 
-	elapsed := time.Since(startTime).Seconds()
+	endTime := time.Now()
+	latencyMs := endTime.Sub(startTime).Milliseconds()
+
+	var ttftMs int
+	var generationMs int64
+	if !firstByteTime.IsZero() {
+		ttftMs = int(firstByteTime.Sub(startTime).Milliseconds())
+		generationMs = endTime.Sub(firstByteTime).Milliseconds()
+	} else {
+		ttftMs = int(latencyMs)
+		generationMs = latencyMs
+	}
+
+	elapsed := endTime.Sub(startTime).Seconds()
+	var tps float64
 	if elapsed > 0 {
 		tps = float64(totalTokens) / elapsed
 	}
 
-	common.SysLog(fmt.Sprintf("%s 采样完成: elapsed=%.2fs, tokens=%d, TPS=%.1f", logPrefix, elapsed, totalTokens, tps))
-	return tps, ttftMs, nil
+	common.SysLog(fmt.Sprintf("%s 采样完成: elapsed=%.2fs, tokens=%d, TPS=%.1f, TTFT=%dms", logPrefix, elapsed, totalTokens, tps, ttftMs))
+	return &SamplingResult{
+		Tps:          tps,
+		TtftMs:       ttftMs,
+		TotalTokens:  totalTokens,
+		LatencyMs:    latencyMs,
+		GenerationMs: generationMs,
+	}, nil
 }
 
 // countTokensInChunk 简单统计 SSE 响应中的 token 数量

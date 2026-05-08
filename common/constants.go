@@ -139,8 +139,6 @@ var IsMasterNode bool
 // 用于审计日志中标识节点身份，在容器/K8s 部署时比自动探测到的容器内网 IP 更具可读性。
 var NodeName = ""
 
-var ContextPath = "" // URL prefix for all routes, e.g. "/newapi". Set via CONTEXT_PATH env var.
-
 var requestInterval int
 var RequestInterval time.Duration
 

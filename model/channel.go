@@ -55,9 +55,9 @@ type Channel struct {
 
 	OtherSettings string `json:"settings" gorm:"column:settings"` // 其他设置，存储azure版本等不需要检索的信息，详见dto.ChannelOtherSettings
 
-	// 模型性能排行榜相关
-	IsTestChannel           *int    `json:"is_test_channel" gorm:"default:0"`
-	Source                  *string `json:"source" gorm:"type:varchar(64);default:''"`
+	// 性能排行榜相关
+	VendorID                *int    `json:"vendor_id" gorm:"index"`
+	VendorName              *string `json:"vendor_name" gorm:"type:varchar(128);default:''"`
 	SamplingIntervalSeconds *int    `json:"sampling_interval_seconds" gorm:"default:null"`
 
 	// cache info
@@ -67,6 +67,16 @@ type Channel struct {
 
 func (channel *Channel) IsPublicChannel() bool {
 	return channel == nil || channel.OwnerUserId == nil
+}
+
+const TestChannelOwnerUserId = -999
+
+func (channel *Channel) IsTestChannel() bool {
+	return channel != nil && channel.OwnerUserId != nil && *channel.OwnerUserId == TestChannelOwnerUserId
+}
+
+func (channel *Channel) IsPrivateChannel() bool {
+	return channel != nil && channel.OwnerUserId != nil && *channel.OwnerUserId > 0
 }
 
 func (channel *Channel) IsOwnedBy(userId int) bool {
@@ -105,12 +115,12 @@ func ApplyChannelViewScope(query *gorm.DB, userId int, isAdmin bool) *gorm.DB {
 	if isAdmin {
 		return query
 	}
-	return query.Where("owner_user_id IS NULL OR owner_user_id = ?", userId)
+	return query.Where("(owner_user_id IS NULL OR owner_user_id = ?) AND owner_user_id != ?", userId, TestChannelOwnerUserId)
 }
 
 func GetChannelOwnerUserIds() []int {
 	var owners []int
-	DB.Model(&Channel{}).Where("owner_user_id IS NOT NULL").Distinct("owner_user_id").Pluck("owner_user_id", &owners)
+	DB.Model(&Channel{}).Where("owner_user_id IS NOT NULL AND owner_user_id != ?", TestChannelOwnerUserId).Distinct("owner_user_id").Pluck("owner_user_id", &owners)
 	return owners
 }
 
@@ -118,17 +128,7 @@ func ApplyChannelManageScope(query *gorm.DB, userId int, isAdmin bool) *gorm.DB 
 	if isAdmin {
 		return query
 	}
-	return query.Where("owner_user_id = ?", userId)
-}
-
-// ApplyTestChannelScope hides test channels from non-admin users
-// Admins can see all channels including test channels
-func ApplyTestChannelScope(query *gorm.DB, isAdmin bool) *gorm.DB {
-	if isAdmin {
-		return query
-	}
-	// Non-admin users cannot see test channels
-	return query.Where("(is_test_channel IS NULL OR is_test_channel = 0)")
+	return query.Where("owner_user_id = ? AND owner_user_id != ?", userId, TestChannelOwnerUserId)
 }
 
 type ChannelInfo struct {
@@ -413,7 +413,6 @@ func GetAllChannelsForActor(startIdx int, num int, selectAll bool, idSort bool, 
 		order = "id desc"
 	}
 	query := ApplyChannelViewScope(DB.Model(&Channel{}), userId, isAdmin)
-	query = ApplyTestChannelScope(query, isAdmin)
 	switch scope {
 	case "public":
 		query = query.Where("owner_user_id IS NULL")
@@ -499,12 +498,13 @@ func SearchChannelsForActor(keyword string, group string, model string, idSort b
 		order = "id desc"
 	}
 	baseQuery := ApplyChannelViewScope(DB.Model(&Channel{}).Omit("key"), userId, isAdmin)
-	baseQuery = ApplyTestChannelScope(baseQuery, isAdmin)
 	switch scope {
 	case "public":
 		baseQuery = baseQuery.Where("owner_user_id IS NULL")
 	case "private":
-		baseQuery = baseQuery.Where("owner_user_id IS NOT NULL")
+		baseQuery = baseQuery.Where("owner_user_id IS NOT NULL AND owner_user_id != ?", TestChannelOwnerUserId)
+	case "test":
+		baseQuery = baseQuery.Where("owner_user_id = ?", TestChannelOwnerUserId)
 	}
 	var whereClause string
 	var args []interface{}
@@ -548,7 +548,6 @@ func GetChannelById(id int, selectAll bool) (*Channel, error) {
 func GetChannelByIdForActor(id int, selectAll bool, userId int, isAdmin bool) (*Channel, error) {
 	channel := &Channel{Id: id}
 	query := ApplyChannelViewScope(DB, userId, isAdmin)
-	query = ApplyTestChannelScope(query, isAdmin)
 	if !selectAll {
 		query = query.Omit("key")
 	}

@@ -10,12 +10,12 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// GetChannelAnalyticsOverview 获取渠道来源分析概览
+// GetChannelAnalyticsOverview 获取渠道供应商分析概览
 func GetChannelAnalyticsOverview(c *gin.Context) {
 	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
 	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
 
-	overview, err := model.GetChannelSourceOverview(startTimestamp, endTimestamp)
+	overview, err := model.GetChannelVendorOverview(startTimestamp, endTimestamp)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -23,12 +23,12 @@ func GetChannelAnalyticsOverview(c *gin.Context) {
 	common.ApiSuccess(c, overview)
 }
 
-// GetChannelAnalyticsSources 获取各来源统计列表
-func GetChannelAnalyticsSources(c *gin.Context) {
+// GetChannelAnalyticsVendors 获取各供应商统计列表
+func GetChannelAnalyticsVendors(c *gin.Context) {
 	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
 	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
 
-	stats, err := model.GetChannelSourceStats(startTimestamp, endTimestamp)
+	stats, err := model.GetChannelVendorStats(startTimestamp, endTimestamp)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -36,14 +36,18 @@ func GetChannelAnalyticsSources(c *gin.Context) {
 	common.ApiSuccess(c, stats)
 }
 
-// GetChannelAnalyticsTrend 获取各来源使用趋势
+// GetChannelAnalyticsTrend 获取各供应商使用趋势
 func GetChannelAnalyticsTrend(c *gin.Context) {
 	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
 	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
 	granularity := c.DefaultQuery("granularity", "day")
-	source := c.Query("source")
+	vendorIdStr := c.Query("vendor_id")
+	vendorId := 0
+	if vendorIdStr != "" {
+		vendorId, _ = strconv.Atoi(vendorIdStr)
+	}
 
-	points, err := model.GetChannelSourceTrend(startTimestamp, endTimestamp, granularity, source)
+	points, err := model.GetChannelVendorTrend(startTimestamp, endTimestamp, granularity, vendorId)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -51,17 +55,22 @@ func GetChannelAnalyticsTrend(c *gin.Context) {
 	common.ApiSuccess(c, points)
 }
 
-// GetChannelAnalyticsSourceDetail 获取单个来源详情
-func GetChannelAnalyticsSourceDetail(c *gin.Context) {
-	source := c.Param("source")
-	if source == "" {
-		common.ApiErrorMsg(c, "source is required")
+// GetChannelAnalyticsVendorDetail 获取单个供应商详情
+func GetChannelAnalyticsVendorDetail(c *gin.Context) {
+	vendorIdStr := c.Param("vendor_id")
+	if vendorIdStr == "" {
+		common.ApiErrorMsg(c, "vendor_id is required")
+		return
+	}
+	vendorId, err := strconv.Atoi(vendorIdStr)
+	if err != nil || vendorId <= 0 {
+		common.ApiErrorMsg(c, "invalid vendor_id")
 		return
 	}
 	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
 	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
 
-	detail, err := model.GetChannelSourceDetail(source, startTimestamp, endTimestamp)
+	detail, err := model.GetChannelVendorDetail(vendorId, startTimestamp, endTimestamp)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -69,11 +78,16 @@ func GetChannelAnalyticsSourceDetail(c *gin.Context) {
 	common.ApiSuccess(c, detail)
 }
 
-// GetChannelAnalyticsUserRanking 获取来源活跃用户排行
+// GetChannelAnalyticsUserRanking 获取供应商活跃用户排行
 func GetChannelAnalyticsUserRanking(c *gin.Context) {
-	source := c.Param("source")
-	if source == "" {
-		common.ApiErrorMsg(c, "source is required")
+	vendorIdStr := c.Param("vendor_id")
+	if vendorIdStr == "" {
+		common.ApiErrorMsg(c, "vendor_id is required")
+		return
+	}
+	vendorId, err := strconv.Atoi(vendorIdStr)
+	if err != nil || vendorId <= 0 {
+		common.ApiErrorMsg(c, "invalid vendor_id")
 		return
 	}
 	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
@@ -85,7 +99,7 @@ func GetChannelAnalyticsUserRanking(c *gin.Context) {
 		sortBy = "token_count"
 	}
 
-	rankings, err := model.GetChannelSourceUserRanking(source, startTimestamp, endTimestamp, limit, modelName, sortBy)
+	rankings, err := model.GetChannelVendorUserRanking(vendorId, startTimestamp, endTimestamp, limit, modelName, sortBy)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -93,17 +107,22 @@ func GetChannelAnalyticsUserRanking(c *gin.Context) {
 	common.ApiSuccess(c, rankings)
 }
 
-// GetChannelAnalyticsModels 获取来源下各模型统计
+// GetChannelAnalyticsModels 获取供应商下各模型统计
 func GetChannelAnalyticsModels(c *gin.Context) {
-	source := c.Param("source")
-	if source == "" {
-		common.ApiErrorMsg(c, "source is required")
+	vendorIdStr := c.Param("vendor_id")
+	if vendorIdStr == "" {
+		common.ApiErrorMsg(c, "vendor_id is required")
+		return
+	}
+	vendorId, err := strconv.Atoi(vendorIdStr)
+	if err != nil || vendorId <= 0 {
+		common.ApiErrorMsg(c, "invalid vendor_id")
 		return
 	}
 	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
 	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
 
-	stats, err := model.GetChannelModelStats(source, startTimestamp, endTimestamp)
+	stats, err := model.GetChannelModelStats(vendorId, startTimestamp, endTimestamp)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -111,18 +130,23 @@ func GetChannelAnalyticsModels(c *gin.Context) {
 	common.ApiSuccess(c, stats)
 }
 
-// GetChannelAnalyticsModelTrend 获取来源下各模型趋势
+// GetChannelAnalyticsModelTrend 获取供应商下各模型趋势
 func GetChannelAnalyticsModelTrend(c *gin.Context) {
-	source := c.Param("source")
-	if source == "" {
-		common.ApiErrorMsg(c, "source is required")
+	vendorIdStr := c.Param("vendor_id")
+	if vendorIdStr == "" {
+		common.ApiErrorMsg(c, "vendor_id is required")
+		return
+	}
+	vendorId, err := strconv.Atoi(vendorIdStr)
+	if err != nil || vendorId <= 0 {
+		common.ApiErrorMsg(c, "invalid vendor_id")
 		return
 	}
 	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
 	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
 	granularity := c.DefaultQuery("granularity", "day")
 
-	points, err := model.GetChannelModelTrend(source, startTimestamp, endTimestamp, granularity)
+	points, err := model.GetChannelModelTrend(vendorId, startTimestamp, endTimestamp, granularity)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -149,16 +173,16 @@ func GetChannelAnalyticsModelComparisonTrend(c *gin.Context) {
 	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
 	granularity := c.DefaultQuery("granularity", "day")
 
-	var sources []string
-	if src := c.Query("sources"); src != "" {
-		sources = strings.Split(src, ",")
+	var vendorNames []string
+	if vn := c.Query("vendor_names"); vn != "" {
+		vendorNames = strings.Split(vn, ",")
 	}
 	var modelNames []string
 	if mn := c.Query("model_names"); mn != "" {
 		modelNames = strings.Split(mn, ",")
 	}
 
-	points, err := model.GetChannelModelComparisonTrend(startTimestamp, endTimestamp, granularity, sources, modelNames)
+	points, err := model.GetChannelModelComparisonTrend(startTimestamp, endTimestamp, granularity, vendorNames, modelNames)
 	if err != nil {
 		common.ApiError(c, err)
 		return

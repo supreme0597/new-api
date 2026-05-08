@@ -52,7 +52,7 @@ export const useNavigation = (t, docsLink, headerNavModules, isAdminUser) => {
         to: '/pricing',
       },
       {
-        text: t('模型排行'),
+        text: t('性能排行榜'),
         itemKey: 'modelPerformance',
         to: '/model-performance',
       },

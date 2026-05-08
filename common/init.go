@@ -109,15 +109,6 @@ func InitEnv() {
 	GeminiSafetySetting = GetEnvOrDefaultString("GEMINI_SAFETY_SETTING", "BLOCK_NONE")
 	CohereSafetySetting = GetEnvOrDefaultString("COHERE_SAFETY_SETTING", "NONE")
 
-	// Initialize context path
-	ContextPath = os.Getenv("CONTEXT_PATH")
-	if ContextPath != "" {
-		if !strings.HasPrefix(ContextPath, "/") {
-			ContextPath = "/" + ContextPath
-		}
-		ContextPath = strings.TrimSuffix(ContextPath, "/")
-	}
-
 	// Initialize rate limit variables
 	GlobalApiRateLimitEnable = GetEnvOrDefaultBool("GLOBAL_API_RATE_LIMIT_ENABLE", true)
 	GlobalApiRateLimitNum = GetEnvOrDefault("GLOBAL_API_RATE_LIMIT", 180)

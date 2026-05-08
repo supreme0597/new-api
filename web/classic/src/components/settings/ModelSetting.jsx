@@ -59,11 +59,6 @@ const ModelSetting = () => {
     if (success) {
       let newInputs = {};
       data.forEach((item) => {
-        // 防御性处理：避免 null/undefined 导致子组件 Form 渲染出错
-        let value = item.value;
-        if (value === null || value === undefined) {
-          value = '';
-        }
         if (
           item.key === 'gemini.safety_settings' ||
           item.key === 'gemini.version_settings' ||
@@ -73,9 +68,9 @@ const ModelSetting = () => {
           item.key === 'global.thinking_model_blacklist' ||
           item.key === 'global.chat_completions_to_responses_policy'
         ) {
-          if (value !== '') {
+          if (item.value !== '') {
             try {
-              value = JSON.stringify(JSON.parse(value), null, 2);
+              item.value = JSON.stringify(JSON.parse(item.value), null, 2);
             } catch (e) {
               // Keep raw value so user can fix it, and avoid crashing the page.
               console.error(`Invalid JSON for option ${item.key}:`, e);
@@ -84,9 +79,9 @@ const ModelSetting = () => {
         }
         // Keep boolean config keys ending with enabled/Enabled so UI parses correctly.
         if (item.key.endsWith('Enabled') || item.key.endsWith('enabled')) {
-          newInputs[item.key] = toBoolean(value);
+          newInputs[item.key] = toBoolean(item.value);
         } else {
-          newInputs[item.key] = value;
+          newInputs[item.key] = item.value;
         }
       });
 

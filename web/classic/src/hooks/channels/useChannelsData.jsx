@@ -78,9 +78,6 @@ export const useChannelsData = () => {
   const [scopeFilter, setScopeFilter] = useState(
     localStorage.getItem('channel-scope-filter') || 'all',
   );
-  const [isTestChannelFilter, setIsTestChannelFilter] = useState(
-    localStorage.getItem('channel-is-test-channel-filter') || 'all',
-  );
 
   // Type tabs states
   const [activeTypeKey, setActiveTypeKey] = useState('all');
@@ -135,7 +132,6 @@ export const useChannelsData = () => {
     searchGroup: '',
     searchModel: '',
     searchOwner: '',
-    searchIsTestChannel: null,
   };
 
   // Column keys
@@ -145,7 +141,6 @@ export const useChannelsData = () => {
     GROUP: 'group',
     SCOPE: 'scope',
     TYPE: 'type',
-    TEST_CHANNEL: 'test_channel',
     STATUS: 'status',
     RESPONSE_TIME: 'response_time',
     BALANCE: 'balance',
@@ -187,7 +182,6 @@ export const useChannelsData = () => {
       [COLUMN_KEYS.GROUP]: true,
       [COLUMN_KEYS.SCOPE]: true,
       [COLUMN_KEYS.TYPE]: true,
-      [COLUMN_KEYS.TEST_CHANNEL]: true,
       [COLUMN_KEYS.STATUS]: true,
       [COLUMN_KEYS.RESPONSE_TIME]: true,
       [COLUMN_KEYS.BALANCE]: true,
@@ -326,7 +320,6 @@ export const useChannelsData = () => {
       searchKeyword: formValues.searchKeyword || '',
       searchGroup: formValues.searchGroup || '',
       searchModel: formValues.searchModel || '',
-      searchIsTestChannel: formValues.searchIsTestChannel,
     };
   };
 
@@ -340,22 +333,18 @@ export const useChannelsData = () => {
     statusF,
     scopeF,
     ownerF,
-    isTestChannelF,
   ) => {
     if (statusF === undefined) statusF = statusFilter;
     if (scopeF === undefined) scopeF = scopeFilter;
-    if (isTestChannelF === undefined) isTestChannelF = isTestChannelFilter;
 
-    const { searchKeyword, searchGroup, searchModel, searchOwner, searchIsTestChannel } =
+    const { searchKeyword, searchGroup, searchModel, searchOwner } =
       getFormValues();
     const effectiveOwner = ownerF !== undefined ? ownerF : searchOwner;
-    const effectiveIsTestChannel = isTestChannelF !== undefined ? isTestChannelF : searchIsTestChannel;
     if (
       searchKeyword !== '' ||
       searchGroup !== '' ||
       searchModel !== '' ||
-      effectiveOwner ||
-      effectiveIsTestChannel
+      effectiveOwner
     ) {
       setLoading(true);
       await searchChannels(
@@ -367,7 +356,6 @@ export const useChannelsData = () => {
         pageSize,
         idSort,
         ownerF,
-        isTestChannelF,
       );
       setLoading(false);
       return;
@@ -379,9 +367,8 @@ export const useChannelsData = () => {
     const statusParam = statusF !== 'all' ? `&status=${statusF}` : '';
     const scopeParam = scopeF !== 'all' ? `&scope=${scopeF}` : '';
     const ownerParam = effectiveOwner ? `&owner=${effectiveOwner}` : '';
-    const isTestChannelParam = effectiveIsTestChannel ? `&is_test_channel=${effectiveIsTestChannel}` : '';
     const res = await API.get(
-      `/api/channel/?p=${page}&page_size=${pageSize}&id_sort=${idSort}&tag_mode=${enableTagMode}${typeParam}${statusParam}${scopeParam}${ownerParam}${isTestChannelParam}`,
+      `/api/channel/?p=${page}&page_size=${pageSize}&id_sort=${idSort}&tag_mode=${enableTagMode}${typeParam}${statusParam}${scopeParam}${ownerParam}`,
     );
 
     if (res === undefined || reqId !== requestCounter.current) {
@@ -416,21 +403,18 @@ export const useChannelsData = () => {
     pageSz = pageSize,
     sortFlag = idSort,
     ownerF,
-    isTestChannelF,
   ) => {
-    const { searchKeyword, searchGroup, searchModel, searchOwner, searchIsTestChannel } =
+    const { searchKeyword, searchGroup, searchModel, searchOwner } =
       getFormValues();
     // Use explicit ownerF if provided, otherwise fall back to form value
     const effectiveOwner = ownerF !== undefined ? ownerF : searchOwner;
-    const effectiveIsTestChannel = isTestChannelF !== undefined ? isTestChannelF : searchIsTestChannel;
     setSearching(true);
     try {
       if (
         searchKeyword === '' &&
         searchGroup === '' &&
         searchModel === '' &&
-        !effectiveOwner &&
-        !effectiveIsTestChannel
+        !effectiveOwner
       ) {
         await loadChannels(
           page,
@@ -441,7 +425,6 @@ export const useChannelsData = () => {
           statusF,
           scopeF,
           undefined,
-          effectiveIsTestChannel,
         );
         return;
       }
@@ -450,9 +433,8 @@ export const useChannelsData = () => {
       const statusParam = statusF !== 'all' ? `&status=${statusF}` : '';
       const scopeParam = scopeF !== 'all' ? `&scope=${scopeF}` : '';
       const ownerParam = effectiveOwner ? `&owner=${effectiveOwner}` : '';
-      const isTestChannelParam = effectiveIsTestChannel ? `&is_test_channel=${effectiveIsTestChannel}` : '';
       const res = await API.get(
-        `/api/channel/search?keyword=${searchKeyword}&group=${searchGroup}&model=${searchModel}&id_sort=${sortFlag}&tag_mode=${enableTagMode}&p=${page}&page_size=${pageSz}${typeParam}${statusParam}${scopeParam}${ownerParam}${isTestChannelParam}`,
+        `/api/channel/search?keyword=${searchKeyword}&group=${searchGroup}&model=${searchModel}&id_sort=${sortFlag}&tag_mode=${enableTagMode}&p=${page}&page_size=${pageSz}${typeParam}${statusParam}${scopeParam}${ownerParam}`,
       );
       const { success, message, data } = res.data;
       if (success) {
@@ -475,14 +457,13 @@ export const useChannelsData = () => {
 
   // Refresh
   const refresh = async (page = activePage) => {
-    const { searchKeyword, searchGroup, searchModel, searchOwner, searchIsTestChannel } =
+    const { searchKeyword, searchGroup, searchModel, searchOwner } =
       getFormValues();
     if (
       searchKeyword === '' &&
       searchGroup === '' &&
       searchModel === '' &&
-      !searchOwner &&
-      !searchIsTestChannel
+      !searchOwner
     ) {
       await loadChannels(page, pageSize, idSort, enableTagMode);
     } else {
@@ -1234,8 +1215,6 @@ export const useChannelsData = () => {
     enableBatchDelete,
     statusFilter,
     scopeFilter,
-    isTestChannelFilter,
-    setIsTestChannelFilter,
     compactMode,
     globalPassThroughEnabled,
 

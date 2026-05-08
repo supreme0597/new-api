@@ -22,7 +22,7 @@ import SubscriptionsPage from '../../components/table/subscriptions';
 
 const Subscription = () => {
   return (
-    <div className='px-2 h-full flex flex-col'>
+    <div className='mt-[60px] px-2'>
       <SubscriptionsPage />
     </div>
   );

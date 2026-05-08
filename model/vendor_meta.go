@@ -69,6 +69,27 @@ func GetAllVendors(offset int, limit int) ([]*Vendor, error) {
 	return vendors, err
 }
 
+// GetVendorByName 根据名称获取供应商
+func GetVendorByName(name string) (*Vendor, error) {
+	var v Vendor
+	err := DB.Where("name = ?", name).First(&v).Error
+	if err != nil {
+		return nil, err
+	}
+	return &v, nil
+}
+
+// GetDistinctVendorNames 获取所有启用供应商列表（id + name）
+func GetDistinctVendorNames() ([]Vendor, error) {
+	var vendors []Vendor
+	err := DB.Model(&Vendor{}).
+		Where("status = ?", 1).
+		Order("name ASC").
+		Select("id, name").
+		Find(&vendors).Error
+	return vendors, err
+}
+
 // SearchVendors 按关键字搜索供应商
 func SearchVendors(keyword string, offset int, limit int) ([]*Vendor, int64, error) {
 	db := DB.Model(&Vendor{})

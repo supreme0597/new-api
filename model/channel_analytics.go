@@ -8,36 +8,36 @@ import (
 	"gorm.io/gorm"
 )
 
-// ChannelSourceOverview 渠道来源概览统计
-type ChannelSourceOverview struct {
-	SourceCount       int `json:"source_count"`
+// ChannelVendorOverview 渠道供应商概览统计
+type ChannelVendorOverview struct {
+	VendorCount       int `json:"vendor_count"`
 	TotalCalls        int `json:"total_calls"`
 	TotalTokens       int `json:"total_tokens"`
 	ActiveUsers       int `json:"active_users"`
-	UntaggedTokens    int `json:"untagged_tokens"`     // 无来源渠道的 Token
+	NoVendorTokens    int `json:"no_vendor_tokens"`    // 无供应商渠道的 Token
 	TestChannelTokens int `json:"test_channel_tokens"` // 测试渠道的 Token
 	AllTokens         int `json:"all_tokens"`          // 全部消费日志的 Token（不区分渠道）
 }
 
-// ChannelSourceStat 按来源分组的统计
-type ChannelSourceStat struct {
-	Source      string `json:"source"`
+// ChannelVendorStat 按供应商分组的统计
+type ChannelVendorStat struct {
+	VendorName  string `json:"vendor_name"`
 	ModelCount  int    `json:"model_count"`
 	ActiveUsers int    `json:"active_users"`
 	CallCount   int    `json:"call_count"`
 	TokenCount  int    `json:"token_count"`
 }
 
-// ChannelSourceTrendPoint 趋势数据点
-type ChannelSourceTrendPoint struct {
+// ChannelVendorTrendPoint 趋势数据点
+type ChannelVendorTrendPoint struct {
 	Time       string `json:"time"`
-	Source     string `json:"source"`
+	VendorName string `json:"vendor_name"`
 	CallCount  int    `json:"call_count"`
 	TokenCount int    `json:"token_count"`
 }
 
-// ChannelSourceUserRanking 用户排行
-type ChannelSourceUserRanking struct {
+// ChannelVendorUserRanking 用户排行
+type ChannelVendorUserRanking struct {
 	UserId     int    `json:"user_id"`
 	Username   string `json:"username"`
 	CallCount  int    `json:"call_count"`
@@ -62,7 +62,7 @@ type ChannelModelTrendPoint struct {
 
 // ChannelModelComparisonItem 模型对比选项（用于选择器）
 type ChannelModelComparisonItem struct {
-	Source     string `json:"source"`
+	VendorName string `json:"vendor_name"`
 	ModelName  string `json:"model_name"`
 	CallCount  int    `json:"call_count"`
 	TokenCount int    `json:"token_count"`
@@ -71,20 +71,30 @@ type ChannelModelComparisonItem struct {
 // ChannelModelComparisonPoint 模型对比趋势数据点
 type ChannelModelComparisonPoint struct {
 	Time       string `json:"time"`
-	Source     string `json:"source"`
+	VendorName string `json:"vendor_name"`
 	ModelName  string `json:"model_name"`
 	CallCount  int    `json:"call_count"`
 	TokenCount int    `json:"token_count"`
 }
 
-// getChannelIDsBySource 获取指定来源的渠道ID列表（兼容 LOG_DB 与 DB 分离的场景）
-func getChannelIDsBySource(source string) ([]int, error) {
+// nonTestChannelCondition 返回排除测试渠道的条件
+func nonTestChannelCondition() string {
+	return "(owner_user_id IS NULL OR owner_user_id != -999)"
+}
+
+// testChannelCondition 返回筛选测试渠道的条件
+func testChannelCondition() string {
+	return "owner_user_id = -999"
+}
+
+// getChannelIDsByVendor 获取指定供应商的渠道ID列表（兼容 LOG_DB 与 DB 分离的场景）
+func getChannelIDsByVendor(vendorId int) ([]int, error) {
 	var channelIDs []int
 	tx := DB.Model(&Channel{}).
-		Where("source IS NOT NULL AND source != ''").
-		Where("is_test_channel = ?", commonFalseVal)
-	if source != "" {
-		tx = tx.Where("source = ?", source)
+		Where("vendor_id IS NOT NULL AND vendor_id > 0").
+		Where(nonTestChannelCondition())
+	if vendorId > 0 {
+		tx = tx.Where("vendor_id = ?", vendorId)
 	}
 	if err := tx.Pluck("id", &channelIDs).Error; err != nil {
 		return nil, err
@@ -92,27 +102,27 @@ func getChannelIDsBySource(source string) ([]int, error) {
 	return channelIDs, nil
 }
 
-// getAllSourceChannelIDs 获取所有来源的渠道ID映射（来源 → 渠道ID列表）
-func getAllSourceChannelIDs() (map[string][]int, error) {
-	type sourceChannels struct {
-		Source string `json:"source"`
-		ID     int    `json:"id"`
+// getAllVendorChannelIDs 获取所有供应商的渠道ID映射（vendorId → 渠道ID列表）
+func getAllVendorChannelIDs() (map[int][]int, error) {
+	type vendorChannels struct {
+		VendorID int `json:"vendor_id"`
+		ID       int `json:"id"`
 	}
-	var results []sourceChannels
+	var results []vendorChannels
 	err := DB.Model(&Channel{}).
-		Select("source, id").
-		Where("source IS NOT NULL AND source != ''").
-		Where("is_test_channel = ?", commonFalseVal).
+		Select("vendor_id, id").
+		Where("vendor_id IS NOT NULL AND vendor_id > 0").
+		Where(nonTestChannelCondition()).
 		Find(&results).Error
 	if err != nil {
 		return nil, err
 	}
 
-	sourceMap := make(map[string][]int)
+	vendorMap := make(map[int][]int)
 	for _, r := range results {
-		sourceMap[r.Source] = append(sourceMap[r.Source], r.ID)
+		vendorMap[r.VendorID] = append(vendorMap[r.VendorID], r.ID)
 	}
-	return sourceMap, nil
+	return vendorMap, nil
 }
 
 // buildChannelIDFilter 构建渠道ID过滤条件（当 channelIDs 不为空时添加 IN 条件）
@@ -124,28 +134,28 @@ func buildChannelIDFilter(tx *gorm.DB, channelIDs []int) *gorm.DB {
 	return tx.Where("1 = 0")
 }
 
-// GetChannelSourceOverview 获取渠道来源概览
-func GetChannelSourceOverview(startTimestamp, endTimestamp int64) (*ChannelSourceOverview, error) {
-	overview := &ChannelSourceOverview{}
+// GetChannelVendorOverview 获取渠道供应商概览
+func GetChannelVendorOverview(startTimestamp, endTimestamp int64) (*ChannelVendorOverview, error) {
+	overview := &ChannelVendorOverview{}
 
-	// 来源总数：有 source 值的不同来源数（排除测试渠道）
-	var distinctSources []string
+	// 供应商总数：有 vendor_id 值的不同供应商数（排除测试渠道）
+	var distinctVendorIDs []int
 	if err := DB.Model(&Channel{}).
-		Where("source IS NOT NULL AND source != ''").
-		Where("is_test_channel = ?", commonFalseVal).
-		Distinct("source").
-		Pluck("source", &distinctSources).Error; err != nil {
+		Where("vendor_id IS NOT NULL AND vendor_id > 0").
+		Where(nonTestChannelCondition()).
+		Distinct("vendor_id").
+		Pluck("vendor_id", &distinctVendorIDs).Error; err != nil {
 		return nil, err
 	}
-	overview.SourceCount = len(distinctSources)
+	overview.VendorCount = len(distinctVendorIDs)
 
-	// 获取所有有来源的渠道ID
-	sourceMap, err := getAllSourceChannelIDs()
+	// 获取所有有供应商的渠道ID
+	vendorMap, err := getAllVendorChannelIDs()
 	if err != nil {
 		return nil, err
 	}
 	var allChannelIDs []int
-	for _, ids := range sourceMap {
+	for _, ids := range vendorMap {
 		allChannelIDs = append(allChannelIDs, ids...)
 	}
 
@@ -180,35 +190,35 @@ func GetChannelSourceOverview(startTimestamp, endTimestamp int64) (*ChannelSourc
 	overview.TotalTokens = result.TotalTokens
 	overview.ActiveUsers = result.ActiveUsers
 
-	// 辅助排查：计算无来源渠道、测试渠道、全部渠道的 Token 消耗
-	// 1. 无来源渠道（非测试）
-	var noSourceChannelIDs []int
+	// 辅助排查：计算无供应商渠道、测试渠道、全部渠道的 Token 消耗
+	// 1. 无供应商渠道（非测试）
+	var noVendorChannelIDs []int
 	if err := DB.Model(&Channel{}).
-		Where("source IS NULL OR source = ''").
-		Where("is_test_channel = ?", commonFalseVal).
-		Pluck("id", &noSourceChannelIDs).Error; err != nil {
+		Where("vendor_id IS NULL OR vendor_id = 0").
+		Where(nonTestChannelCondition()).
+		Pluck("id", &noVendorChannelIDs).Error; err != nil {
 		return nil, err
 	}
-	if len(noSourceChannelIDs) > 0 {
-		var untaggedRes overviewResult
-		txUntagged := LOG_DB.Table("logs").
+	if len(noVendorChannelIDs) > 0 {
+		var noVendorRes overviewResult
+		txNoVendor := LOG_DB.Table("logs").
 			Select("COUNT(*) as total_calls, COALESCE(SUM(logs.prompt_tokens + logs.completion_tokens), 0) as total_tokens, COUNT(DISTINCT logs.user_id) as active_users").
 			Where("logs.type = ?", LogTypeConsume).
-			Where("logs.channel_id IN ?", noSourceChannelIDs)
+			Where("logs.channel_id IN ?", noVendorChannelIDs)
 		if startTimestamp != 0 {
-			txUntagged = txUntagged.Where("logs.created_at >= ?", startTimestamp)
+			txNoVendor = txNoVendor.Where("logs.created_at >= ?", startTimestamp)
 		}
 		if endTimestamp != 0 {
-			txUntagged = txUntagged.Where("logs.created_at <= ?", endTimestamp)
+			txNoVendor = txNoVendor.Where("logs.created_at <= ?", endTimestamp)
 		}
-		txUntagged.Scan(&untaggedRes)
-		overview.UntaggedTokens = untaggedRes.TotalTokens
+		txNoVendor.Scan(&noVendorRes)
+		overview.NoVendorTokens = noVendorRes.TotalTokens
 	}
 
 	// 2. 测试渠道
 	var testChannelIDs []int
 	if err := DB.Model(&Channel{}).
-		Where("is_test_channel = ?", commonTrueVal).
+		Where(testChannelCondition()).
 		Pluck("id", &testChannelIDs).Error; err != nil {
 		return nil, err
 	}
@@ -245,23 +255,34 @@ func GetChannelSourceOverview(startTimestamp, endTimestamp int64) (*ChannelSourc
 	return overview, nil
 }
 
-// GetChannelSourceStats 获取各来源的详细统计
-func GetChannelSourceStats(startTimestamp, endTimestamp int64) ([]ChannelSourceStat, error) {
-	// 获取所有来源的渠道ID映射
-	sourceMap, err := getAllSourceChannelIDs()
+// GetChannelVendorStats 获取各供应商的详细统计
+func GetChannelVendorStats(startTimestamp, endTimestamp int64) ([]ChannelVendorStat, error) {
+	// 获取所有供应商的渠道ID映射
+	vendorMap, err := getAllVendorChannelIDs()
 	if err != nil {
 		return nil, err
 	}
 
-	if len(sourceMap) == 0 {
-		return []ChannelSourceStat{}, nil
+	if len(vendorMap) == 0 {
+		return []ChannelVendorStat{}, nil
 	}
 
-	// 按来源分别查询统计数据
-	stats := make([]ChannelSourceStat, 0, len(sourceMap))
-	for source, channelIDs := range sourceMap {
+	// 构建 vendorId → vendorName 映射
+	vendorNameByID, err := getVendorNameByVendorID()
+	if err != nil {
+		return nil, err
+	}
+
+	// 按供应商分别查询统计数据
+	stats := make([]ChannelVendorStat, 0, len(vendorMap))
+	for vendorId, channelIDs := range vendorMap {
 		if len(channelIDs) == 0 {
 			continue
+		}
+
+		vendorName := ""
+		if name, ok := vendorNameByID[vendorId]; ok {
+			vendorName = name
 		}
 
 		// 模型数
@@ -281,12 +302,12 @@ func GetChannelSourceStats(startTimestamp, endTimestamp int64) ([]ChannelSourceS
 		}
 
 		// 调用统计
-		type sourceLogStat struct {
+		type vendorLogStat struct {
 			CallCount   int `json:"call_count"`
 			TokenCount  int `json:"token_count"`
 			ActiveUsers int `json:"active_users"`
 		}
-		var logStat sourceLogStat
+		var logStat vendorLogStat
 		tx := LOG_DB.Table("logs").
 			Select("COUNT(*) as call_count, COALESCE(SUM(logs.prompt_tokens + logs.completion_tokens), 0) as token_count, COUNT(DISTINCT logs.user_id) as active_users").
 			Where("logs.type = ?", LogTypeConsume).
@@ -301,8 +322,8 @@ func GetChannelSourceStats(startTimestamp, endTimestamp int64) ([]ChannelSourceS
 			return nil, err
 		}
 
-		stats = append(stats, ChannelSourceStat{
-			Source:      source,
+		stats = append(stats, ChannelVendorStat{
+			VendorName:  vendorName,
 			ModelCount:  int(modelCount),
 			ActiveUsers: logStat.ActiveUsers,
 			CallCount:   logStat.CallCount,
@@ -313,23 +334,23 @@ func GetChannelSourceStats(startTimestamp, endTimestamp int64) ([]ChannelSourceS
 	return stats, nil
 }
 
-// GetChannelSourceTrend 获取各来源的趋势数据
-func GetChannelSourceTrend(startTimestamp, endTimestamp int64, granularity string, source string) ([]ChannelSourceTrendPoint, error) {
+// GetChannelVendorTrend 获取各供应商的趋势数据
+func GetChannelVendorTrend(startTimestamp, endTimestamp int64, granularity string, vendorId int) ([]ChannelVendorTrendPoint, error) {
 	// 构建时间分组表达式（跨数据库兼容）
 	timeExpr := getTimeBucketExpr(granularity)
 
 	// 获取渠道ID
 	var channelIDs []int
 	var err error
-	if source != "" {
-		channelIDs, err = getChannelIDsBySource(source)
+	if vendorId > 0 {
+		channelIDs, err = getChannelIDsByVendor(vendorId)
 	} else {
-		// 所有来源
-		sourceMap, mapErr := getAllSourceChannelIDs()
+		// 所有供应商
+		vendorMap, mapErr := getAllVendorChannelIDs()
 		if mapErr != nil {
 			return nil, mapErr
 		}
-		for _, ids := range sourceMap {
+		for _, ids := range vendorMap {
 			channelIDs = append(channelIDs, ids...)
 		}
 	}
@@ -337,11 +358,11 @@ func GetChannelSourceTrend(startTimestamp, endTimestamp int64, granularity strin
 		return nil, err
 	}
 	if len(channelIDs) == 0 {
-		return []ChannelSourceTrendPoint{}, nil
+		return []ChannelVendorTrendPoint{}, nil
 	}
 
-	// 需要来源信息，构建 channel_id → source 映射
-	sourceByID, err := getSourceByChannelID()
+	// 需要供应商信息，构建 channel_id → vendorName 映射
+	vendorNameByID, err := getVendorNameByChannelID()
 	if err != nil {
 		return nil, err
 	}
@@ -369,32 +390,32 @@ func GetChannelSourceTrend(startTimestamp, endTimestamp int64, granularity strin
 		return nil, err
 	}
 
-	// 按 time_bucket + source 聚合
+	// 按 time_bucket + vendorName 聚合
 	type trendKey struct {
-		Time   string
-		Source string
+		Time       string
+		VendorName string
 	}
-	trendMap := make(map[trendKey]*ChannelSourceTrendPoint)
+	trendMap := make(map[trendKey]*ChannelVendorTrendPoint)
 	for _, rp := range rawPoints {
-		src, ok := sourceByID[rp.ChannelID]
+		vn, ok := vendorNameByID[rp.ChannelID]
 		if !ok {
 			continue
 		}
-		key := trendKey{Time: rp.TimeBucket, Source: src}
+		key := trendKey{Time: rp.TimeBucket, VendorName: vn}
 		if existing, ok := trendMap[key]; ok {
 			existing.CallCount += rp.CallCount
 			existing.TokenCount += rp.TokenCount
 		} else {
-			trendMap[key] = &ChannelSourceTrendPoint{
+			trendMap[key] = &ChannelVendorTrendPoint{
 				Time:       rp.TimeBucket,
-				Source:     src,
+				VendorName: vn,
 				CallCount:  rp.CallCount,
 				TokenCount: rp.TokenCount,
 			}
 		}
 	}
 
-	points := make([]ChannelSourceTrendPoint, 0, len(trendMap))
+	points := make([]ChannelVendorTrendPoint, 0, len(trendMap))
 	for _, p := range trendMap {
 		points = append(points, *p)
 	}
@@ -402,31 +423,56 @@ func GetChannelSourceTrend(startTimestamp, endTimestamp int64, granularity strin
 	return points, nil
 }
 
-// getSourceByChannelID 获取 channel_id → source 的映射
-func getSourceByChannelID() (map[int]string, error) {
-	type channelSource struct {
-		ID     int    `json:"id"`
-		Source string `json:"source"`
+// getVendorNameByChannelID 获取 channel_id → vendorName 的映射
+func getVendorNameByChannelID() (map[int]string, error) {
+	type channelVendor struct {
+		ID         int    `json:"id"`
+		VendorName string `json:"vendor_name"`
 	}
-	var results []channelSource
+	var results []channelVendor
 	err := DB.Model(&Channel{}).
-		Select("id, source").
-		Where("source IS NOT NULL AND source != ''").
-		Where("is_test_channel = ?", commonFalseVal).
+		Select("id, vendor_name").
+		Where("vendor_id IS NOT NULL AND vendor_id > 0").
+		Where(nonTestChannelCondition()).
+		Where("vendor_name IS NOT NULL AND vendor_name != ''").
 		Find(&results).Error
 	if err != nil {
 		return nil, err
 	}
 
-	sourceByID := make(map[int]string, len(results))
+	vendorNameByID := make(map[int]string, len(results))
 	for _, r := range results {
-		sourceByID[r.ID] = r.Source
+		vendorNameByID[r.ID] = r.VendorName
 	}
-	return sourceByID, nil
+	return vendorNameByID, nil
 }
 
-// GetChannelSourceUserRanking 获取指定来源的活跃用户排行
-func GetChannelSourceUserRanking(source string, startTimestamp, endTimestamp int64, limit int, modelName string, sortBy string) ([]ChannelSourceUserRanking, error) {
+// getVendorNameByVendorID 获取 vendorId → vendorName 的映射
+func getVendorNameByVendorID() (map[int]string, error) {
+	type vendorInfo struct {
+		VendorID   int    `json:"vendor_id"`
+		VendorName string `json:"vendor_name"`
+	}
+	var results []vendorInfo
+	err := DB.Model(&Channel{}).
+		Select("DISTINCT vendor_id, vendor_name").
+		Where("vendor_id IS NOT NULL AND vendor_id > 0").
+		Where(nonTestChannelCondition()).
+		Where("vendor_name IS NOT NULL AND vendor_name != ''").
+		Find(&results).Error
+	if err != nil {
+		return nil, err
+	}
+
+	nameByID := make(map[int]string, len(results))
+	for _, r := range results {
+		nameByID[r.VendorID] = r.VendorName
+	}
+	return nameByID, nil
+}
+
+// GetChannelVendorUserRanking 获取指定供应商的活跃用户排行
+func GetChannelVendorUserRanking(vendorId int, startTimestamp, endTimestamp int64, limit int, modelName string, sortBy string) ([]ChannelVendorUserRanking, error) {
 	if limit <= 0 {
 		limit = 10
 	}
@@ -437,13 +483,13 @@ func GetChannelSourceUserRanking(source string, startTimestamp, endTimestamp int
 		sortBy = "token_count"
 	}
 
-	// 获取该来源的渠道ID
-	channelIDs, err := getChannelIDsBySource(source)
+	// 获取该供应商的渠道ID
+	channelIDs, err := getChannelIDsByVendor(vendorId)
 	if err != nil {
 		return nil, err
 	}
 	if len(channelIDs) == 0 {
-		return []ChannelSourceUserRanking{}, nil
+		return []ChannelVendorUserRanking{}, nil
 	}
 
 	type rawRanking struct {
@@ -480,9 +526,9 @@ func GetChannelSourceUserRanking(source string, startTimestamp, endTimestamp int
 		return nil, err
 	}
 
-	result := make([]ChannelSourceUserRanking, 0, len(rankings))
+	result := make([]ChannelVendorUserRanking, 0, len(rankings))
 	for _, r := range rankings {
-		result = append(result, ChannelSourceUserRanking{
+		result = append(result, ChannelVendorUserRanking{
 			UserId:     r.UserId,
 			Username:   r.Username,
 			CallCount:  r.CallCount,
@@ -493,18 +539,29 @@ func GetChannelSourceUserRanking(source string, startTimestamp, endTimestamp int
 	return result, nil
 }
 
-// GetChannelSourceDetail 获取单个来源的详情统计
-func GetChannelSourceDetail(source string, startTimestamp, endTimestamp int64) (*ChannelSourceStat, error) {
-	// 获取该来源的渠道ID
-	channelIDs, err := getChannelIDsBySource(source)
+// GetChannelVendorDetail 获取单个供应商的详情统计
+func GetChannelVendorDetail(vendorId int, startTimestamp, endTimestamp int64) (*ChannelVendorStat, error) {
+	// 获取该供应商的渠道ID
+	channelIDs, err := getChannelIDsByVendor(vendorId)
 	if err != nil {
 		return nil, err
 	}
-	if len(channelIDs) == 0 {
-		return &ChannelSourceStat{Source: source}, nil
+
+	// 获取供应商名称
+	vendorNameByID, err := getVendorNameByVendorID()
+	if err != nil {
+		return nil, err
+	}
+	vendorName := ""
+	if name, ok := vendorNameByID[vendorId]; ok {
+		vendorName = name
 	}
 
-	// 模型数：该来源下实际调用过的不同模型数量
+	if len(channelIDs) == 0 {
+		return &ChannelVendorStat{VendorName: vendorName}, nil
+	}
+
+	// 模型数：该供应商下实际调用过的不同模型数量
 	var modelCount int64
 	txModel := LOG_DB.Table("logs").
 		Select("COUNT(DISTINCT logs.model_name)").
@@ -543,8 +600,8 @@ func GetChannelSourceDetail(source string, startTimestamp, endTimestamp int64) (
 		return nil, err
 	}
 
-	return &ChannelSourceStat{
-		Source:      source,
+	return &ChannelVendorStat{
+		VendorName:  vendorName,
 		ModelCount:  int(modelCount),
 		ActiveUsers: result.ActiveUsers,
 		CallCount:   result.CallCount,
@@ -552,10 +609,10 @@ func GetChannelSourceDetail(source string, startTimestamp, endTimestamp int64) (
 	}, nil
 }
 
-// GetChannelModelStats 获取指定来源下各模型的统计
-func GetChannelModelStats(source string, startTimestamp, endTimestamp int64) ([]ChannelModelStat, error) {
-	// 获取该来源的渠道ID
-	channelIDs, err := getChannelIDsBySource(source)
+// GetChannelModelStats 获取指定供应商下各模型的统计
+func GetChannelModelStats(vendorId int, startTimestamp, endTimestamp int64) ([]ChannelModelStat, error) {
+	// 获取该供应商的渠道ID
+	channelIDs, err := getChannelIDsByVendor(vendorId)
 	if err != nil {
 		return nil, err
 	}
@@ -600,12 +657,12 @@ func GetChannelModelStats(source string, startTimestamp, endTimestamp int64) ([]
 	return result, nil
 }
 
-// GetChannelModelTrend 获取指定来源下各模型的趋势数据
-func GetChannelModelTrend(source string, startTimestamp, endTimestamp int64, granularity string) ([]ChannelModelTrendPoint, error) {
+// GetChannelModelTrend 获取指定供应商下各模型的趋势数据
+func GetChannelModelTrend(vendorId int, startTimestamp, endTimestamp int64, granularity string) ([]ChannelModelTrendPoint, error) {
 	timeExpr := getTimeBucketExpr(granularity)
 
-	// 获取该来源的渠道ID
-	channelIDs, err := getChannelIDsBySource(source)
+	// 获取该供应商的渠道ID
+	channelIDs, err := getChannelIDsByVendor(vendorId)
 	if err != nil {
 		return nil, err
 	}
@@ -650,23 +707,23 @@ func GetChannelModelTrend(source string, startTimestamp, endTimestamp int64, gra
 	return result, nil
 }
 
-// GetChannelModelComparisonItems 获取所有来源+模型组合列表（用于选择器）
+// GetChannelModelComparisonItems 获取所有供应商+模型组合列表（用于选择器）
 func GetChannelModelComparisonItems(startTimestamp, endTimestamp int64) ([]ChannelModelComparisonItem, error) {
-	// 获取所有有来源的渠道ID
-	sourceMap, err := getAllSourceChannelIDs()
+	// 获取所有有供应商的渠道ID
+	vendorMap, err := getAllVendorChannelIDs()
 	if err != nil {
 		return nil, err
 	}
 	var allChannelIDs []int
-	for _, ids := range sourceMap {
+	for _, ids := range vendorMap {
 		allChannelIDs = append(allChannelIDs, ids...)
 	}
 	if len(allChannelIDs) == 0 {
 		return []ChannelModelComparisonItem{}, nil
 	}
 
-	// 需要来源信息
-	sourceByID, err := getSourceByChannelID()
+	// 需要供应商信息
+	vendorNameByID, err := getVendorNameByChannelID()
 	if err != nil {
 		return nil, err
 	}
@@ -696,24 +753,24 @@ func GetChannelModelComparisonItems(startTimestamp, endTimestamp int64) ([]Chann
 		return nil, err
 	}
 
-	// 按 source + model_name 聚合
+	// 按 vendorName + model_name 聚合
 	type itemKey struct {
-		Source    string
-		ModelName string
+		VendorName string
+		ModelName  string
 	}
 	itemMap := make(map[itemKey]*ChannelModelComparisonItem)
 	for _, ri := range rawItems {
-		src, ok := sourceByID[ri.ChannelID]
+		vn, ok := vendorNameByID[ri.ChannelID]
 		if !ok {
 			continue
 		}
-		key := itemKey{Source: src, ModelName: ri.ModelName}
+		key := itemKey{VendorName: vn, ModelName: ri.ModelName}
 		if existing, ok := itemMap[key]; ok {
 			existing.CallCount += ri.CallCount
 			existing.TokenCount += ri.TokenCount
 		} else {
 			itemMap[key] = &ChannelModelComparisonItem{
-				Source:     src,
+				VendorName: vn,
 				ModelName:  ri.ModelName,
 				CallCount:  ri.CallCount,
 				TokenCount: ri.TokenCount,
@@ -735,34 +792,44 @@ func GetChannelModelComparisonItems(startTimestamp, endTimestamp int64) ([]Chann
 }
 
 // GetChannelModelComparisonTrend 获取模型对比趋势数据
-func GetChannelModelComparisonTrend(startTimestamp, endTimestamp int64, granularity string, sources []string, modelNames []string) ([]ChannelModelComparisonPoint, error) {
+func GetChannelModelComparisonTrend(startTimestamp, endTimestamp int64, granularity string, vendorNames []string, modelNames []string) ([]ChannelModelComparisonPoint, error) {
 	timeExpr := getTimeBucketExpr(granularity)
 
-	// 获取所有有来源的渠道ID
-	sourceMap, err := getAllSourceChannelIDs()
+	// 获取所有有供应商的渠道ID
+	vendorMap, err := getAllVendorChannelIDs()
 	if err != nil {
 		return nil, err
 	}
 	var allChannelIDs []int
-	for _, ids := range sourceMap {
+	for _, ids := range vendorMap {
 		allChannelIDs = append(allChannelIDs, ids...)
 	}
 	if len(allChannelIDs) == 0 {
 		return []ChannelModelComparisonPoint{}, nil
 	}
 
-	// 需要来源信息
-	sourceByID, err := getSourceByChannelID()
+	// 需要供应商信息
+	vendorNameByID, err := getVendorNameByChannelID()
 	if err != nil {
 		return nil, err
 	}
 
-	// 如果指定了来源，过滤 channelIDs
+	// 如果指定了供应商，过滤 channelIDs
 	var filteredChannelIDs []int
-	if len(sources) > 0 {
-		for _, src := range sources {
-			if ids, ok := sourceMap[src]; ok {
-				filteredChannelIDs = append(filteredChannelIDs, ids...)
+	if len(vendorNames) > 0 {
+		vendorNameSet := make(map[string]bool, len(vendorNames))
+		for _, vn := range vendorNames {
+			vendorNameSet[vn] = true
+		}
+		for _, ri := range vendorNameByID {
+			if vendorNameSet[ri] {
+				// 找到所有属于此 vendorName 的 channel
+			}
+		}
+		// 通过 vendorNameByID 找到匹配的 channelIDs
+		for chID, vn := range vendorNameByID {
+			if vendorNameSet[vn] {
+				filteredChannelIDs = append(filteredChannelIDs, chID)
 			}
 		}
 	} else {
@@ -801,26 +868,26 @@ func GetChannelModelComparisonTrend(startTimestamp, endTimestamp int64, granular
 		return nil, err
 	}
 
-	// 按 time_bucket + source + model_name 聚合
+	// 按 time_bucket + vendorName + model_name 聚合
 	type pointKey struct {
-		Time      string
-		Source    string
-		ModelName string
+		Time       string
+		VendorName string
+		ModelName  string
 	}
 	pointMap := make(map[pointKey]*ChannelModelComparisonPoint)
 	for _, rp := range rawPoints {
-		src, ok := sourceByID[rp.ChannelID]
+		vn, ok := vendorNameByID[rp.ChannelID]
 		if !ok {
 			continue
 		}
-		key := pointKey{Time: rp.TimeBucket, Source: src, ModelName: rp.ModelName}
+		key := pointKey{Time: rp.TimeBucket, VendorName: vn, ModelName: rp.ModelName}
 		if existing, ok := pointMap[key]; ok {
 			existing.CallCount += rp.CallCount
 			existing.TokenCount += rp.TokenCount
 		} else {
 			pointMap[key] = &ChannelModelComparisonPoint{
 				Time:       rp.TimeBucket,
-				Source:     src,
+				VendorName: vn,
 				ModelName:  rp.ModelName,
 				CallCount:  rp.CallCount,
 				TokenCount: rp.TokenCount,

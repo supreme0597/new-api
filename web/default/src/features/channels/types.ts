@@ -52,6 +52,10 @@ export const channelSchema = z.object({
     multi_key_polling_index: 0,
     multi_key_mode: 'random',
   }),
+  vendor_id: z.number().nullish(),
+  vendor_name: z.string().nullish(),
+  owner_user_id: z.number().nullish(),
+  owner_username: z.string().nullish(),
   settings: z.string().default('{}'), // other_settings JSON
 })
 
@@ -214,6 +218,9 @@ export interface GetChannelsParams {
   tag_mode?: boolean
   sort_by?: ChannelSortBy
   sort_order?: ChannelSortOrder
+  scope?: string // 'public', 'private', 'test'
+  vendor_id?: number
+  owner?: number
 }
 
 export interface SearchChannelsParams {
@@ -228,6 +235,9 @@ export interface SearchChannelsParams {
   sort_order?: ChannelSortOrder
   p?: number
   page_size?: number
+  scope?: string // 'public', 'private', 'test'
+  vendor_id?: number
+  owner?: number
 }
 
 export interface ChannelTestParams {

@@ -11,7 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func SetApiRouter(router gin.IRouter) {
+func SetApiRouter(router *gin.Engine) {
 	apiRouter := router.Group("/api")
 	apiRouter.Use(middleware.RouteTag("api"))
 	apiRouter.Use(gzip.Gzip(gzip.DefaultCompression))
@@ -266,13 +266,14 @@ func SetApiRouter(router gin.IRouter) {
 			channelRoute.POST("/upstream_updates/detect_all", middleware.AdminAuth(), controller.DetectAllChannelUpstreamModelUpdates)
 		}
 
-		// 模型性能排行榜（公开接口）
+		// 性能排行榜（公开接口）
 		modelPerformanceRoute := apiRouter.Group("/model-performance")
 		{
 			modelPerformanceRoute.GET("/list", controller.GetModelPerformanceList)
-			modelPerformanceRoute.GET("/sources", controller.GetModelPerformanceSources)
+			modelPerformanceRoute.GET("/vendors", controller.GetModelPerformanceVendors)
+			modelPerformanceRoute.GET("/sources", controller.GetModelPerformanceVendors)
 		}
-		// 模型性能采样管理（仅管理员）
+		// 性能采样管理（仅管理员）
 		modelPerformanceAdminRoute := apiRouter.Group("/model-performance")
 		modelPerformanceAdminRoute.Use(middleware.AdminAuth())
 		{
@@ -281,29 +282,19 @@ func SetApiRouter(router gin.IRouter) {
 			modelPerformanceAdminRoute.POST("/stop", controller.StopSamplingTask)
 		}
 
-		// 渠道来源分析（仅管理员）
+		// 渠道供应商分析（仅管理员）
 		channelAnalyticsRoute := apiRouter.Group("/channel-analytics")
 		channelAnalyticsRoute.Use(middleware.AdminAuth())
 		{
 			channelAnalyticsRoute.GET("/overview", controller.GetChannelAnalyticsOverview)
-			channelAnalyticsRoute.GET("/sources", controller.GetChannelAnalyticsSources)
+			channelAnalyticsRoute.GET("/vendors", controller.GetChannelAnalyticsVendors)
 			channelAnalyticsRoute.GET("/trend", controller.GetChannelAnalyticsTrend)
-			channelAnalyticsRoute.GET("/source/:source", controller.GetChannelAnalyticsSourceDetail)
-			channelAnalyticsRoute.GET("/source/:source/users", controller.GetChannelAnalyticsUserRanking)
-			channelAnalyticsRoute.GET("/source/:source/models", controller.GetChannelAnalyticsModels)
-			channelAnalyticsRoute.GET("/source/:source/model-trend", controller.GetChannelAnalyticsModelTrend)
+			channelAnalyticsRoute.GET("/vendor/:vendor_id", controller.GetChannelAnalyticsVendorDetail)
+			channelAnalyticsRoute.GET("/vendor/:vendor_id/users", controller.GetChannelAnalyticsUserRanking)
+			channelAnalyticsRoute.GET("/vendor/:vendor_id/models", controller.GetChannelAnalyticsModels)
+			channelAnalyticsRoute.GET("/vendor/:vendor_id/model-trend", controller.GetChannelAnalyticsModelTrend)
 			channelAnalyticsRoute.GET("/model-comparison/items", controller.GetChannelAnalyticsModelComparisonItems)
 			channelAnalyticsRoute.GET("/model-comparison/trend", controller.GetChannelAnalyticsModelComparisonTrend)
-		}
-
-		// 渠道来源映射管理（仅超级管理员）
-		channelSourceMappingRoute := apiRouter.Group("/channel-source-mapping")
-		channelSourceMappingRoute.Use(middleware.RootAuth())
-		{
-			channelSourceMappingRoute.GET("/", controller.GetChannelSourceMappings)
-			channelSourceMappingRoute.POST("/", controller.AddChannelSourceMapping)
-			channelSourceMappingRoute.PUT("/:id", controller.UpdateChannelSourceMapping)
-			channelSourceMappingRoute.DELETE("/:id", controller.DeleteChannelSourceMapping)
 		}
 
 		tokenRoute := apiRouter.Group("/token")

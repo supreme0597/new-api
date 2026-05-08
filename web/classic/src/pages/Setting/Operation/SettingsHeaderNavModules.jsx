@@ -183,8 +183,8 @@ export default function SettingsHeaderNavModules(props) {
     },
     {
       key: 'modelPerformance',
-      title: t('模型排行'),
-      description: t('模型性能排行榜'),
+      title: t('性能排行榜'),
+      description: t('性能排行榜'),
     },
     {
       key: 'docs',

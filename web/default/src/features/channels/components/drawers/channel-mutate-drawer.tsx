@@ -34,6 +34,7 @@ import {
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
+import { useAuthStore } from '@/stores/auth-store'
 import { getLobeIcon } from '@/lib/lobe-icon'
 import { cn } from '@/lib/utils'
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
@@ -95,6 +96,7 @@ import {
   getChannelKey,
   getGroups,
   getPrefillGroups,
+  getVendors,
   refreshCodexCredential,
   updateChannel,
 } from '../../api'
@@ -126,6 +128,7 @@ import {
   hasModelConfigChanged,
   findMissingModelsInMapping,
   validateModelMappingJson,
+  resolveOwnerUserId,
 } from '../../lib'
 import {
   collectInvalidStatusCodeEntries,
@@ -281,6 +284,8 @@ export function ChannelMutateDrawer({
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const { setOpen } = useChannels()
+  const currentUser = useAuthStore((s) => s.auth.user)
+  const isSuperAdmin = (currentUser?.role ?? 0) >= 100
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [customModel, setCustomModel] = useState('')
   const [isFetchingModels, setIsFetchingModels] = useState(false)
@@ -336,6 +341,12 @@ export function ChannelMutateDrawer({
     queryFn: () => getPrefillGroups('model'),
   })
 
+  // Fetch vendors for vendor selector
+  const { data: vendorsData } = useQuery({
+    queryKey: ['vendors'],
+    queryFn: getVendors,
+  })
+
   const { copyToClipboard } = useCopyToClipboard()
 
   const {
@@ -382,6 +393,8 @@ export function ChannelMutateDrawer({
     'upstream_model_update_check_enabled'
   )
   const currentSettings = form.watch('settings')
+  const currentChannelType = form.watch('channel_type')
+  const currentVendorId = form.watch('vendor_id')
   const {
     unlocked: doubaoApiEditUnlocked,
     handleClick: handleApiConfigSecretClick,
@@ -437,6 +450,15 @@ export function ChannelMutateDrawer({
       label: group,
     }))
   }, [groupsData, currentGroups])
+
+  // Transform vendors to select options
+  const vendorOptions = useMemo(() => {
+    if (!vendorsData?.data?.items) return []
+    return vendorsData.data.items.map((vendor) => ({
+      value: String(vendor.id),
+      label: vendor.name,
+    }))
+  }, [vendorsData])
 
   // Parse current models as array
   const currentModelsArray = useMemo(
@@ -597,7 +619,10 @@ export function ChannelMutateDrawer({
       initialStatusCodeMappingRef.current =
         channelData.data.status_code_mapping || ''
     } else if (!isEditing) {
-      form.reset(CHANNEL_FORM_DEFAULT_VALUES)
+      form.reset({
+        ...CHANNEL_FORM_DEFAULT_VALUES,
+        channel_type: isSuperAdmin ? 'public' : 'private',
+      })
       setAdvancedSettingsOpen(false)
       initialModelsRef.current = []
       initialModelMappingRef.current = ''
@@ -1014,7 +1039,10 @@ export function ChannelMutateDrawer({
       try {
         if (isEditing && currentRow) {
           // Update existing channel
+          const currentUserId = useAuthStore.getState().auth.user?.id
           const payload = transformFormDataToUpdatePayload(data, currentRow.id)
+          // Override owner_user_id with resolved value using current user ID
+          payload.owner_user_id = resolveOwnerUserId(data.channel_type, currentUserId)
           const payloadWithKeyMode =
             isMultiKeyChannel && data.key_mode
               ? {
@@ -1033,7 +1061,11 @@ export function ChannelMutateDrawer({
           }
         } else {
           // Create new channel(s)
+          const currentUserId = useAuthStore.getState().auth.user?.id
+          const channelType = isSuperAdmin ? data.channel_type : 'private'
           const payload = transformFormDataToCreatePayload(data)
+          // Override owner_user_id with resolved value using current user ID
+          payload.channel.owner_user_id = resolveOwnerUserId(channelType, currentUserId)
           const response = await createChannel(payload)
           if (response.success) {
             toast.success(t(SUCCESS_MESSAGES.CREATED))
@@ -1063,7 +1095,10 @@ export function ChannelMutateDrawer({
     (v: boolean) => {
       onOpenChange(v)
       if (!v) {
-        form.reset(CHANNEL_FORM_DEFAULT_VALUES)
+        form.reset({
+          ...CHANNEL_FORM_DEFAULT_VALUES,
+          channel_type: isSuperAdmin ? 'public' : 'private',
+        })
         setAdvancedSettingsOpen(false)
       }
     },
@@ -1187,6 +1222,94 @@ export function ChannelMutateDrawer({
                     </FormItem>
                   )}
                 />
+
+                <div className='grid gap-4 sm:grid-cols-2'>
+                  {isSuperAdmin ? (
+                    <FormField
+                      control={form.control}
+                      name='channel_type'
+                      render={({ field }) => {
+                        // Editing: private channels are read-only; public/test can toggle between each other
+                        // Creating: public/test selectable (super admin creates public by default)
+                        const isPrivateReadonly = isEditing && field.value === 'private'
+                        const editOptions =
+                          isEditing && !isPrivateReadonly
+                            ? [
+                                { value: 'public', label: t('Public Channel') },
+                                { value: 'test', label: t('Test Channel') },
+                              ]
+                            : isPrivateReadonly
+                              ? [{ value: 'private', label: t('Private Channel') }]
+                              : [
+                                  { value: 'public', label: t('Public Channel') },
+                                  { value: 'test', label: t('Test Channel') },
+                                ]
+                        return (
+                          <FormItem>
+                            <FormLabel>{t('Channel Type')}</FormLabel>
+                            {isPrivateReadonly ? (
+                              <FormControl>
+                                <Input
+                                  value={t('Private Channel')}
+                                  disabled
+                                  className='bg-muted'
+                                />
+                              </FormControl>
+                            ) : (
+                              <Select
+                                items={editOptions}
+                                onValueChange={field.onChange}
+                                value={field.value || 'public'}
+                              >
+                                <FormControl>
+                                  <SelectTrigger>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent alignItemWithTrigger={false}>
+                                  {editOptions.map((opt) => (
+                                    <SelectItem key={opt.value} value={opt.value}>
+                                      {opt.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            )}
+                            <FormDescription>
+                              {isPrivateReadonly
+                                ? t('Private channels cannot be changed to other types')
+                                : t(
+                                    'Public: shared by all users; Test: for testing purposes'
+                                  )}
+                            </FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )
+                      }}
+                    />
+                  ) : (
+                    <FormField
+                      control={form.control}
+                      name='channel_type'
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>{t('Channel Type')}</FormLabel>
+                          <FormControl>
+                            <Input
+                              value={t('Private Channel')}
+                              disabled
+                              className='bg-muted'
+                            />
+                          </FormControl>
+                          <FormDescription>
+                            {t('Channels you create are private by default')}
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
+                </div>
 
                 {currentType === 1 && (
                   <FormField

@@ -178,7 +178,7 @@ func main() {
 	// Initialize session store
 	store := cookie.NewStore([]byte(common.SessionSecret))
 	store.Options(sessions.Options{
-		Path:     common.ContextPath + "/",
+		Path:     "/",
 		MaxAge:   2592000, // 30 days
 		HttpOnly: true,
 		Secure:   false,
@@ -186,7 +186,6 @@ func main() {
 	})
 	server.Use(sessions.Sessions("session", store))
 
-	InjectContextPath()
 	InjectUmamiAnalytics()
 	InjectGoogleAnalytics()
 
@@ -256,18 +255,6 @@ func InjectGoogleAnalytics() {
 	classicIndexPage = bytes.ReplaceAll(classicIndexPage, placeholder, analyticsInject)
 }
 
-func InjectContextPath() {
-	if common.ContextPath != "" {
-		script := fmt.Sprintf(`<script>window.__CONTEXT_PATH__="%s";</script>`, common.ContextPath)
-		indexPage = bytes.ReplaceAll(indexPage, []byte("<head>"), []byte("<head>"+script))
-		// Rewrite absolute paths in HTML to include context path prefix
-		// e.g. "/assets/xxx" -> "/newapi/assets/xxx", "/logo.png" -> "/newapi/logo.png"
-		indexPage = bytes.ReplaceAll(indexPage, []byte(`="/assets/`), []byte(`="`+common.ContextPath+`/assets/`))
-		indexPage = bytes.ReplaceAll(indexPage, []byte(`='/assets/`), []byte(`='`+common.ContextPath+`/assets/`))
-		indexPage = bytes.ReplaceAll(indexPage, []byte(`="/logo.png"`), []byte(`="`+common.ContextPath+`/logo.png"`))
-	}
-}
-
 func InitResources() error {
 	// Initialize resources here if needed
 	// This is a placeholder function for future resource initialization
@@ -301,9 +288,6 @@ func InitResources() error {
 
 	// Initialize options, should after model.InitDB()
 	model.InitOptionMap()
-
-	// 启动定时采样调度器
-	model.StartSamplingScheduler()
 
 	// 清理旧的磁盘缓存文件
 	common.CleanupOldCacheFiles()

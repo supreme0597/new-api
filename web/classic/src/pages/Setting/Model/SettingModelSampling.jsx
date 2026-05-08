@@ -238,7 +238,7 @@ export default function SettingModelSampling(props) {
           <Banner
             type='info'
             description={t(
-              '配置模型性能采样时使用的 Prompt 和 Max Tokens。系统将使用此配置对测试渠道下的所有模型执行采样。',
+              '配置性能采样时使用的 Prompt 和 Max Tokens。系统将使用此配置对测试渠道下的所有模型执行采样。',
             )}
             style={{ marginBottom: 16 }}
           />
@@ -247,7 +247,7 @@ export default function SettingModelSampling(props) {
               <Form.TextArea
                 field={'SamplingPrompt'}
                 label={t('采样 Prompt')}
-                extraText={t('用于模型性能采样的 Prompt 内容')}
+                extraText={t('用于性能采样的 Prompt 内容')}
                 rows={4}
                 onChange={(value) =>
                   setInputs((prev) => ({ ...prev, SamplingPrompt: value }))

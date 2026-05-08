@@ -3,6 +3,39 @@ import { CHANNEL_STATUS, MODEL_FETCHABLE_TYPES } from '../constants'
 import type { Channel } from '../types'
 
 // ============================================================================
+// Helper Functions
+// ============================================================================
+
+/**
+ * Derive channel type from owner_user_id.
+ * - null/undefined => public
+ * - -999 => test
+ * - any other number => private
+ */
+function deriveChannelType(
+  ownerUserId: number | null | undefined
+): 'public' | 'private' | 'test' {
+  if (ownerUserId == null) return 'public'
+  if (ownerUserId === -999) return 'test'
+  return 'private'
+}
+
+/**
+ * Resolve owner_user_id from channel type selection.
+ * - public => null
+ * - test => -999
+ * - private => requires current user ID (handled in drawer component)
+ */
+export function resolveOwnerUserId(
+  channelType: 'public' | 'private' | 'test' | undefined,
+  currentUserId?: number
+): number | null {
+  if (channelType === 'test') return -999
+  if (channelType === 'private') return currentUserId ?? null
+  return null
+}
+
+// ============================================================================
 // Form Validation Schema
 // ============================================================================
 
@@ -56,6 +89,11 @@ export const channelFormSchema = z.object({
   allow_inference_geo: z.boolean().optional(), // OpenAI/Anthropic: inference geography
   allow_speed: z.boolean().optional(), // Anthropic: speed mode control
   claude_beta_query: z.boolean().optional(), // Anthropic: beta query passthrough
+  // Vendor
+  vendor_id: z.number().nullable().optional(),
+  // Channel type (public/private/test) — mapped to owner_user_id
+  // null = public, currentUser.id = private, -999 = test
+  channel_type: z.enum(['public', 'private', 'test']).optional(),
   // Upstream model update settings (stored in settings JSON)
   upstream_model_update_check_enabled: z.boolean().optional(),
   upstream_model_update_auto_sync_enabled: z.boolean().optional(),
@@ -117,6 +155,10 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   upstream_model_update_check_enabled: false,
   upstream_model_update_auto_sync_enabled: false,
   upstream_model_update_ignored_models: '',
+  // Vendor
+  vendor_id: null,
+  // Channel type
+  channel_type: 'public',
 }
 
 // ============================================================================
@@ -244,6 +286,10 @@ export function transformChannelToFormDefaults(
     upstream_model_update_check_enabled: upstreamModelUpdateCheckEnabled,
     upstream_model_update_auto_sync_enabled: upstreamModelUpdateAutoSyncEnabled,
     upstream_model_update_ignored_models: upstreamModelUpdateIgnoredModels,
+    // Vendor
+    vendor_id: channel.vendor_id ?? null,
+    // Channel type (derived from owner_user_id)
+    channel_type: deriveChannelType(channel.owner_user_id),
   }
 }
 
@@ -404,6 +450,8 @@ export function transformFormDataToCreatePayload(formData: ChannelFormValues): {
     header_override: formData.header_override || null,
     settings: buildSettingsJSON(formData),
     other: formData.other || '',
+    vendor_id: formData.vendor_id ?? null,
+    owner_user_id: resolveOwnerUserId(formData.channel_type),
   }
 
   // Clean up empty strings to null for optional fields
@@ -452,6 +500,8 @@ export function transformFormDataToUpdatePayload(
     header_override: formData.header_override || null,
     settings: buildSettingsJSON(formData),
     other: formData.other || '',
+    vendor_id: formData.vendor_id ?? null,
+    owner_user_id: resolveOwnerUserId(formData.channel_type),
   }
 
   // Only include key if it was changed (not empty)

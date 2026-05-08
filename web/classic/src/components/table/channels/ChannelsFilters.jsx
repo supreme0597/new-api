@@ -183,33 +183,6 @@ const ChannelsFilters = ({
               />
             </div>
           )}
-          {isAdmin() && (
-            <div className='w-full md:w-32'>
-              <Form.Select
-                size='small'
-                field='searchIsTestChannel'
-                placeholder={t('渠道类型')}
-                optionList={[
-                  { label: t('全部渠道'), value: null },
-                  { label: t('测试渠道'), value: '1' },
-                  { label: t('普通渠道'), value: '0' },
-                ]}
-                className='w-full'
-                showClear
-                pure
-                onChange={() => {
-                  setTimeout(() => {
-                    searchChannels(
-                      enableTagMode,
-                      undefined,
-                      undefined,
-                      scopeFilter,
-                    );
-                  }, 0);
-                }}
-              />
-            </div>
-          )}
           <Button
             size='small'
             type='tertiary'

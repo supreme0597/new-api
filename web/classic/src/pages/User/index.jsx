@@ -22,7 +22,7 @@ import UsersTable from '../../components/table/users';
 
 const User = () => {
   return (
-    <div className='px-2 h-full flex flex-col'>
+    <div className='mt-[60px] px-2'>
       <UsersTable />
     </div>
   );

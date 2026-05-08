@@ -35,7 +35,6 @@ import (
 	"github.com/tidwall/gjson"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 )
 
 type testResult struct {
@@ -58,7 +57,7 @@ func normalizeChannelTestEndpoint(channel *model.Channel, modelName, endpointTyp
 	return normalized
 }
 
-func testChannel(channel *model.Channel, testModel string, endpointType string, isStream bool, userId int) testResult {
+func testChannel(channel *model.Channel, testModel string, endpointType string, isStream bool) testResult {
 	tik := time.Now()
 	var unsupportedTestChannelTypes = []int{
 		constant.ChannelTypeMidjourney,
@@ -144,7 +143,7 @@ func testChannel(channel *model.Channel, testModel string, endpointType string, 
 		Header: make(http.Header),
 	}
 
-	cache, err := model.GetUserCache(userId)
+	cache, err := model.GetUserCache(1)
 	if err != nil {
 		return testResult{
 			localErr:    err,
@@ -281,14 +280,7 @@ func testChannel(channel *model.Channel, testModel string, endpointType string, 
 	//logInfo.ApiKey = ""
 	common.SysLog(fmt.Sprintf("testing channel %d with model %s , info %+v ", channel.Id, testModel, info.ToString()))
 
-	meta := request.GetTokenCountMeta()
-	tokens, err := service.EstimateRequestToken(c, meta, info)
-	if err != nil {
-		common.SysError(fmt.Sprintf("testing channel %d estimate token error: %v", channel.Id, err))
-	}
-	info.SetEstimatePromptTokens(tokens)
-
-	priceData, err := helper.ModelPriceHelper(c, info, tokens, meta)
+	priceData, err := helper.ModelPriceHelper(c, info, 0, request.GetTokenCountMeta())
 	if err != nil {
 		return testResult{
 			context:     c,
@@ -491,9 +483,8 @@ func testChannel(channel *model.Channel, testModel string, endpointType string, 
 	tok := time.Now()
 	milliseconds := tok.Sub(tik).Milliseconds()
 	consumedTime := float64(milliseconds) / 1000.0
-	other := service.GenerateTextOtherInfo(c, info, priceData.ModelRatio, priceData.GroupRatioInfo.GroupRatio, priceData.CompletionRatio,
-		usage.PromptTokensDetails.CachedTokens, priceData.CacheRatio, priceData.ModelPrice, priceData.GroupRatioInfo.GroupSpecialRatio)
-	model.RecordConsumeLog(c, userId, model.RecordConsumeLogParams{
+	other := buildTestLogOther(c, info, priceData, usage, tieredResult)
+	model.RecordConsumeLog(c, 1, model.RecordConsumeLogParams{
 		ChannelId:        channel.Id,
 		PromptTokens:     usage.PromptTokens,
 		CompletionTokens: usage.CompletionTokens,
@@ -835,12 +826,6 @@ func TestChannel(c *gin.Context) {
 			return
 		}
 	}
-	userId := c.GetInt("id")
-	isAdmin := c.GetInt("role") >= common.RoleAdminUser
-	if !model.CanActorViewChannel(channel, userId, isAdmin) {
-		common.ApiError(c, gorm.ErrRecordNotFound)
-		return
-	}
 	//defer func() {
 	//	if channel.ChannelInfo.IsMultiKey {
 	//		go func() { _ = channel.SaveChannelInfo() }()
@@ -850,7 +835,7 @@ func TestChannel(c *gin.Context) {
 	endpointType := c.Query("endpoint_type")
 	isStream, _ := strconv.ParseBool(c.Query("stream"))
 	tik := time.Now()
-	result := testChannel(channel, testModel, endpointType, isStream, userId)
+	result := testChannel(channel, testModel, endpointType, isStream)
 	if result.localErr != nil {
 		resp := gin.H{
 			"success": false,
@@ -917,7 +902,7 @@ func testAllChannels(notify bool) error {
 			}
 			isChannelEnabled := channel.Status == common.ChannelStatusEnabled
 			tik := time.Now()
-			result := testChannel(channel, "", "", false, 1)
+			result := testChannel(channel, "", "", shouldUseStreamForAutomaticChannelTest(channel))
 			tok := time.Now()
 			milliseconds := tok.Sub(tik).Milliseconds()
 

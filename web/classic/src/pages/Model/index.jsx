@@ -21,7 +21,7 @@ import ModelsTable from '../../components/table/models';
 
 const ModelPage = () => {
   return (
-    <div className='px-2 h-full flex flex-col'>
+    <div className='mt-[60px] px-2'>
       <ModelsTable />
     </div>
   );

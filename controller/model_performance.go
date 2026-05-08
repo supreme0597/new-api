@@ -4,15 +4,18 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/gin-gonic/gin"
 )
 
-// GetModelPerformanceList 获取模型性能排行榜
+// GetModelPerformanceList 获取性能排行榜
 func GetModelPerformanceList(c *gin.Context) {
-	source := c.Query("source")
+	vendorId, _ := strconv.Atoi(c.DefaultQuery("vendor_id", "0"))
+	source := c.DefaultQuery("source", "")
+	hours, _ := strconv.Atoi(c.DefaultQuery("hours", "24"))
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
 
@@ -22,8 +25,22 @@ func GetModelPerformanceList(c *gin.Context) {
 	if pageSize < 1 || pageSize > 100 {
 		pageSize = 20
 	}
+	if hours < 1 {
+		hours = 24
+	}
 
-	items, total, err := model.GetModelPerformanceList(source, page, pageSize)
+	// 如果传了 source（供应商名称），查询对应 vendorId
+	if source != "" && vendorId == 0 {
+		if v, err := model.GetVendorByName(source); err == nil {
+			vendorId = v.Id
+		}
+	}
+
+	// 计算时间范围
+	endTs := time.Now().Unix()
+	startTs := endTs - int64(hours)*3600
+
+	items, err := model.GetLeaderboardData(startTs, endTs, vendorId)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"success": false,
@@ -32,8 +49,19 @@ func GetModelPerformanceList(c *gin.Context) {
 		return
 	}
 
-	// 获取最后采样时间
-	lastSamplingTime := model.GetLastSamplingTime()
+	total := int64(len(items))
+
+	// 分页
+	offset := (page - 1) * pageSize
+	if offset > len(items) {
+		offset = len(items)
+	}
+	endIdx := offset + pageSize
+	if endIdx > len(items) {
+		endIdx = len(items)
+	}
+
+	pagedItems := items[offset:endIdx]
 
 	// 获取基准配置（供前端动态计算颜色阈值）
 	tpsBenchmark, ttftBenchmark := model.GetBenchmarkSettings()
@@ -41,20 +69,19 @@ func GetModelPerformanceList(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"data": gin.H{
-			"list":             items,
-			"total":            total,
-			"page":             page,
-			"pageSize":         pageSize,
-			"lastSamplingTime": lastSamplingTime,
-			"tpsBenchmark":     tpsBenchmark,
-			"ttftBenchmark":    ttftBenchmark,
+			"list":          pagedItems,
+			"total":         total,
+			"page":          page,
+			"pageSize":      pageSize,
+			"tpsBenchmark":  tpsBenchmark,
+			"ttftBenchmark": ttftBenchmark,
 		},
 	})
 }
 
-// GetModelPerformanceSources 获取渠道来源列表
-func GetModelPerformanceSources(c *gin.Context) {
-	sources, err := model.GetDistinctSources()
+// GetModelPerformanceVendors 获取供应商列表
+func GetModelPerformanceVendors(c *gin.Context) {
+	vendors, err := model.GetDistinctVendorNames()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"success": false,
@@ -65,7 +92,7 @@ func GetModelPerformanceSources(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
-		"data":    sources,
+		"data":    vendors,
 	})
 }
 
@@ -105,114 +132,5 @@ func StopSamplingTask(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "已发送停止请求",
-	})
-}
-
-// GetChannelSourceMappings 获取渠道来源映射列表
-func GetChannelSourceMappings(c *gin.Context) {
-	mappings, err := model.GetChannelSourceMappings()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"data":    mappings,
-	})
-}
-
-// AddChannelSourceMapping 创建渠道来源映射
-func AddChannelSourceMapping(c *gin.Context) {
-	var mapping model.ChannelSourceMapping
-	if err := c.ShouldBindJSON(&mapping); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
-		return
-	}
-
-	if mapping.SourceName == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"message": "来源名称不能为空",
-		})
-		return
-	}
-
-	if err := model.CreateChannelSourceMapping(&mapping); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"data":    mapping,
-	})
-}
-
-// UpdateChannelSourceMapping 更新渠道来源映射
-func UpdateChannelSourceMapping(c *gin.Context) {
-	id, _ := strconv.Atoi(c.Param("id"))
-	if id == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"message": "无效的ID",
-		})
-		return
-	}
-
-	var mapping model.ChannelSourceMapping
-	if err := c.ShouldBindJSON(&mapping); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
-		return
-	}
-
-	mapping.Id = id
-	if err := model.UpdateChannelSourceMapping(&mapping); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"data":    mapping,
-	})
-}
-
-// DeleteChannelSourceMapping 删除渠道来源映射
-func DeleteChannelSourceMapping(c *gin.Context) {
-	id, _ := strconv.Atoi(c.Param("id"))
-	if id == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"message": "无效的ID",
-		})
-		return
-	}
-
-	if err := model.DeleteChannelSourceMapping(id); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
 	})
 }

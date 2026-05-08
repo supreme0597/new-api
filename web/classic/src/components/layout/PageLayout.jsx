@@ -69,9 +69,6 @@ const PageLayout = () => {
     !location.pathname.startsWith('/console/chat') &&
     location.pathname !== '/console/playground';
 
-  // 计算顶部偏移量，避开固定定位的 Header
-  const headerHeight = '64px';
-
   const isConsoleRoute = location.pathname.startsWith('/console');
   const showSider = isConsoleRoute && (!isMobile || drawerOpen);
 
@@ -206,7 +203,6 @@ const PageLayout = () => {
               : showSider
                 ? 'var(--sidebar-current-width)'
                 : '0',
-            marginTop: headerHeight,
             flex: '1 1 auto',
             display: 'flex',
             flexDirection: 'column',
@@ -214,12 +210,11 @@ const PageLayout = () => {
         >
           <Content
             style={{
-              flex: '1 1 auto',
-              overflowY: 'visible',
+              flex: '1 0 auto',
+              overflowY: isMobile ? 'visible' : 'hidden',
               WebkitOverflowScrolling: 'touch',
               padding: shouldInnerPadding ? (isMobile ? '5px' : '24px') : '0',
               position: 'relative',
-              boxSizing: 'border-box',
             }}
           >
             <ErrorBoundary>

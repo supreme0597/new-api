@@ -22,7 +22,7 @@ import TokensTable from '../../components/table/tokens';
 
 const Token = () => {
   return (
-    <div className='px-2 h-full flex flex-col'>
+    <div className='mt-[60px] px-2'>
       <TokensTable />
     </div>
   );

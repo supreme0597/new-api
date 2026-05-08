@@ -22,7 +22,7 @@ import RedemptionsTable from '../../components/table/redemptions';
 
 const Redemption = () => {
   return (
-    <div className='px-2 h-full flex flex-col'>
+    <div className='mt-[60px] px-2'>
       <RedemptionsTable />
     </div>
   );

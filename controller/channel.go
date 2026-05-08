@@ -88,6 +88,8 @@ func parseScopeFilter(c *gin.Context) string {
 		return "public"
 	case "private":
 		return "private"
+	case "test":
+		return "test"
 	default:
 		return ""
 	}
@@ -118,6 +120,7 @@ func sanitizeChannelPayloadForActor(c *gin.Context, channel *model.Channel) {
 func GetAllChannels(c *gin.Context) {
 	pageInfo := common.GetPageQuery(c)
 	channelData := make([]*model.Channel, 0)
+	var total int64
 	idSort, _ := strconv.ParseBool(c.Query("id_sort"))
 	sortOptions := model.NewChannelSortOptions(c.Query("sort_by"), c.Query("sort_order"), idSort)
 	enableTagMode, _ := strconv.ParseBool(c.Query("tag_mode"))
@@ -142,17 +145,6 @@ func GetAllChannels(c *gin.Context) {
 			ownerFilter = o
 		}
 	}
-	// test channel filter: -1 all, 1 test channel only, 0 non-test channel only
-	isTestChannelStr := c.Query("is_test_channel")
-	isTestChannelFilter := -1
-	if isTestChannelStr != "" {
-		if v, err := strconv.Atoi(isTestChannelStr); err == nil {
-			isTestChannelFilter = v
-		}
-	}
-
-	var total int64
-
 	if enableTagMode {
 		tags, err := model.GetPaginatedTags(pageInfo.GetStartIdx(), pageInfo.GetPageSize())
 		if err != nil {
@@ -179,7 +171,11 @@ func GetAllChannels(c *gin.Context) {
 						continue
 					}
 				case "private":
-					if ch.IsPublicChannel() {
+					if !ch.IsPrivateChannel() {
+						continue
+					}
+				case "test":
+					if !ch.IsTestChannel() {
 						continue
 					}
 				}
@@ -195,15 +191,6 @@ func GetAllChannels(c *gin.Context) {
 				if ownerFilter > 0 && (ch.OwnerUserId == nil || *ch.OwnerUserId != ownerFilter) {
 					continue
 				}
-				if isTestChannelFilter >= 0 {
-					isTest := ch.IsTestChannel != nil && *ch.IsTestChannel == 1
-					if isTestChannelFilter == 1 && !isTest {
-						continue
-					}
-					if isTestChannelFilter == 0 && isTest {
-						continue
-					}
-				}
 				filtered = append(filtered, ch)
 			}
 			channelData = append(channelData, filtered...)
@@ -216,7 +203,9 @@ func GetAllChannels(c *gin.Context) {
 		case "public":
 			baseQuery = baseQuery.Where("owner_user_id IS NULL")
 		case "private":
-			baseQuery = baseQuery.Where("owner_user_id IS NOT NULL")
+			baseQuery = baseQuery.Where("owner_user_id IS NOT NULL AND owner_user_id != ?", model.TestChannelOwnerUserId)
+		case "test":
+			baseQuery = baseQuery.Where("owner_user_id = ?", model.TestChannelOwnerUserId)
 		}
 		if typeFilter >= 0 {
 			baseQuery = baseQuery.Where("type = ?", typeFilter)
@@ -228,13 +217,6 @@ func GetAllChannels(c *gin.Context) {
 			baseQuery = baseQuery.Where("status = ?", common.ChannelStatusEnabled)
 		} else if statusFilter == 0 {
 			baseQuery = baseQuery.Where("status != ?", common.ChannelStatusEnabled)
-		}
-		if isTestChannelFilter >= 0 {
-			if isTestChannelFilter == 1 {
-				baseQuery = baseQuery.Where("is_test_channel = 1")
-			} else {
-				baseQuery = baseQuery.Where("is_test_channel IS NULL OR is_test_channel = 0")
-			}
 		}
 
 		baseQuery.Count(&total)
@@ -260,7 +242,9 @@ func GetAllChannels(c *gin.Context) {
 	case "public":
 		countQuery = countQuery.Where("owner_user_id IS NULL")
 	case "private":
-		countQuery = countQuery.Where("owner_user_id IS NOT NULL")
+		countQuery = countQuery.Where("owner_user_id IS NOT NULL AND owner_user_id != ?", model.TestChannelOwnerUserId)
+	case "test":
+		countQuery = countQuery.Where("owner_user_id = ?", model.TestChannelOwnerUserId)
 	}
 	switch statusFilter {
 	case common.ChannelStatusEnabled:
@@ -370,14 +354,6 @@ func SearchChannels(c *gin.Context) {
 	idSort, _ := strconv.ParseBool(c.Query("id_sort"))
 	sortOptions := model.NewChannelSortOptions(c.Query("sort_by"), c.Query("sort_order"), idSort)
 	enableTagMode, _ := strconv.ParseBool(c.Query("tag_mode"))
-	// test channel filter: -1 all, 1 test channel only, 0 non-test channel only
-	isTestChannelStr := c.Query("is_test_channel")
-	isTestChannelFilter := -1
-	if isTestChannelStr != "" {
-		if v, err := strconv.Atoi(isTestChannelStr); err == nil {
-			isTestChannelFilter = v
-		}
-	}
 	channelData := make([]*model.Channel, 0)
 	if enableTagMode {
 		tags, err := model.SearchTags(keyword, group, modelKeyword, idSort)
@@ -402,16 +378,11 @@ func SearchChannels(c *gin.Context) {
 								continue
 							}
 						case "private":
-							if ch.IsPublicChannel() {
+							if !ch.IsPrivateChannel() {
 								continue
 							}
-						}
-						if isTestChannelFilter >= 0 {
-							isTest := ch.IsTestChannel != nil && *ch.IsTestChannel == 1
-							if isTestChannelFilter == 1 && !isTest {
-								continue
-							}
-							if isTestChannelFilter == 0 && isTest {
+						case "test":
+							if !ch.IsTestChannel() {
 								continue
 							}
 						}
@@ -439,21 +410,6 @@ func SearchChannels(c *gin.Context) {
 				continue
 			}
 			if statusFilter == 0 && ch.Status == common.ChannelStatusEnabled {
-				continue
-			}
-			filtered = append(filtered, ch)
-		}
-		channelData = filtered
-	}
-
-	if isTestChannelFilter >= 0 {
-		filtered := make([]*model.Channel, 0, len(channelData))
-		for _, ch := range channelData {
-			isTest := ch.IsTestChannel != nil && *ch.IsTestChannel == 1
-			if isTestChannelFilter == 1 && !isTest {
-				continue
-			}
-			if isTestChannelFilter == 0 && isTest {
 				continue
 			}
 			filtered = append(filtered, ch)
