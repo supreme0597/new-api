@@ -5,20 +5,24 @@ import { ChannelsPrimaryButtons } from './components/channels-primary-buttons'
 import { ChannelsProvider } from './components/channels-provider'
 import { ChannelsTable } from './components/channels-table'
 
-export function Channels() {
+export function Channels({ myChannelsOnly }: { myChannelsOnly?: boolean } = {}) {
   const { t } = useTranslation()
   return (
     <ChannelsProvider>
       <SectionPageLayout>
-        <SectionPageLayout.Title>{t('Channels')}</SectionPageLayout.Title>
+        <SectionPageLayout.Title>
+          {myChannelsOnly ? t('My Channels') : t('Channels')}
+        </SectionPageLayout.Title>
         <SectionPageLayout.Description>
-          {t('Manage API channels and provider configurations')}
+          {myChannelsOnly
+            ? t('This view shows public channels and your private channels.')
+            : t('Manage API channels and provider configurations')}
         </SectionPageLayout.Description>
         <SectionPageLayout.Actions>
-          <ChannelsPrimaryButtons />
+          <ChannelsPrimaryButtons myChannelsOnly={myChannelsOnly} />
         </SectionPageLayout.Actions>
         <SectionPageLayout.Content>
-          <ChannelsTable />
+          <ChannelsTable myChannelsOnly={myChannelsOnly} />
         </SectionPageLayout.Content>
       </SectionPageLayout>
 

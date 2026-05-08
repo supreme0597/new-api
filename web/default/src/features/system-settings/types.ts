@@ -152,6 +152,13 @@ export type ModelSettings = {
   'channel_affinity_setting.rules': string
   'model_deployment.ionet.api_key': string
   'model_deployment.ionet.enabled': boolean
+  TpsBenchmark: number
+  TtftBenchmark: number
+  SamplingPrompt: string
+  SamplingMaxTokens: number
+  SamplingIntervalMinutes: number
+  SamplingStartTime: string
+  SamplingEndTime: string
 }
 
 export type BillingSettings = {

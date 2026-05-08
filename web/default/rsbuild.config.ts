@@ -58,6 +58,12 @@ export default defineConfig(({ envMode }) => {
     resolve: {
       alias: {
         '@': path.resolve(__dirname, './src'),
+        // React 19 内置了 useSyncExternalStore，不再需要 shim polyfill。
+        // 仅将主入口和 shim 入口重定向到 react（它们只导出 useSyncExternalStore），
+        // with-selector 子模块包含 useSyncExternalStoreWithSelector，React 19 未内置，
+        // 需要保留原始包的导出。
+        'use-sync-external-store$': 'react',
+        'use-sync-external-store/shim$': 'react',
       },
     },
     html: {

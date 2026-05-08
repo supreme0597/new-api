@@ -27,7 +27,7 @@ import {
   Select,
 } from '@douyinfe/semi-ui';
 import CompactModeToggle from '../../common/ui/CompactModeToggle';
-import { isAdmin } from '../../../helpers';
+import { isAdmin, isRoot } from '../../../helpers';
 
 const ChannelsActions = ({
   enableBatchDelete,
@@ -330,6 +330,7 @@ const ChannelsActions = ({
               <Select.Option value='all'>{t('全部')}</Select.Option>
               <Select.Option value='public'>{t('公共')}</Select.Option>
               <Select.Option value='private'>{t('私有')}</Select.Option>
+              {isRoot() && <Select.Option value='test'>{t('测试')}</Select.Option>}
             </Select>
           </div>
 

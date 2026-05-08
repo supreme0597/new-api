@@ -1026,6 +1026,80 @@ export function useChannelsColumns(): ColumnDef<Channel>[] {
       enableSorting: false,
     },
 
+    // Scope column (public/private/test)
+    {
+      id: 'scope',
+      accessorFn: (row) => {
+        if (row.owner_user_id == null) return 'public'
+        if (row.owner_user_id === -999) return 'test'
+        return 'private'
+      },
+      meta: { label: t('Channel Type'), mobileHidden: true },
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title={t('Channel Type')} />
+      ),
+      cell: ({ row }) => {
+        const ownerUserId = row.original.owner_user_id
+        const ownerUsername = row.original.owner_username
+        if (ownerUserId === -999) {
+          return (
+            <StatusBadge variant='warning' showDot>
+              {t('Test')}
+            </StatusBadge>
+          )
+        }
+        if (ownerUserId != null && ownerUserId > 0) {
+          return (
+            <StatusBadge variant='info' showDot>
+              {t('Private')}
+              {ownerUsername && (
+                <span className='text-muted-foreground ml-1 text-xs'>
+                  ({ownerUsername})
+                </span>
+              )}
+            </StatusBadge>
+          )
+        }
+        return (
+          <StatusBadge variant='success' showDot>
+            {t('Public')}
+          </StatusBadge>
+        )
+      },
+      size: 120,
+      enableSorting: false,
+      filterFn: (row, _id, value) => {
+        if (!value || value.length === 0 || value.includes('all')) return true
+        const ownerUserId = row.original.owner_user_id
+        let scopeValue: string
+        if (ownerUserId == null) scopeValue = 'public'
+        else if (ownerUserId === -999) scopeValue = 'test'
+        else scopeValue = 'private'
+        return value.includes(scopeValue)
+      },
+    },
+
+    // Owner column
+    {
+      accessorKey: 'owner_username',
+      meta: { label: t('Owner'), mobileHidden: true },
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title={t('Owner')} />
+      ),
+      cell: ({ row }) => {
+        const ownerUsername = row.original.owner_username
+        if (!ownerUsername) return <span className='text-muted-foreground text-xs'>-</span>
+        return <span className='text-sm'>{ownerUsername}</span>
+      },
+      size: 100,
+      enableSorting: false,
+      filterFn: (row, _id, value) => {
+        if (!value || value.length === 0 || value.includes('all')) return true
+        const ownerUserId = row.original.owner_user_id
+        return value.includes(String(ownerUserId))
+      },
+    },
+
     // Actions column
     {
       id: 'actions',

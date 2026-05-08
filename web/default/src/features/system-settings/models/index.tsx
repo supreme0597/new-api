@@ -50,6 +50,13 @@ const defaultModelSettings: ModelSettings = {
   'channel_affinity_setting.rules': '[]',
   'model_deployment.ionet.api_key': '',
   'model_deployment.ionet.enabled': false,
+  TpsBenchmark: 100,
+  TtftBenchmark: 1000,
+  SamplingPrompt: '',
+  SamplingMaxTokens: 2048,
+  SamplingIntervalMinutes: 30,
+  SamplingStartTime: '00:00',
+  SamplingEndTime: '23:59',
 }
 
 export function ModelSettings() {

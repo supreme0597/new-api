@@ -6,6 +6,7 @@ import { ClaudeSettingsCard } from './claude-settings-card'
 import { GeminiSettingsCard } from './gemini-settings-card'
 import { GlobalSettingsCard } from './global-settings-card'
 import { GrokSettingsCard } from './grok-settings-card'
+import { SamplingSection } from './sampling-section'
 
 function formatJsonForEditor(value: string, fallback: string) {
   const raw = (value ?? '').toString().trim()
@@ -136,6 +137,24 @@ const MODELS_SECTIONS = [
         defaultValues={{
           enabled: settings['model_deployment.ionet.enabled'],
           apiKey: settings['model_deployment.ionet.api_key'],
+        }}
+      />
+    ),
+  },
+  {
+    id: 'sampling',
+    titleKey: 'Sampling Settings',
+    descriptionKey: 'Configure performance sampling benchmarks, prompts, and scheduled sampling',
+    build: (settings: ModelSettings) => (
+      <SamplingSection
+        defaultValues={{
+          TpsBenchmark: settings.TpsBenchmark,
+          TtftBenchmark: settings.TtftBenchmark,
+          SamplingPrompt: settings.SamplingPrompt,
+          SamplingMaxTokens: settings.SamplingMaxTokens,
+          SamplingIntervalMinutes: settings.SamplingIntervalMinutes,
+          SamplingStartTime: settings.SamplingStartTime,
+          SamplingEndTime: settings.SamplingEndTime,
         }}
       />
     ),

@@ -33,9 +33,11 @@ import {
   handleUpdateAllBalances,
 } from '../lib'
 import { useChannels } from './channels-provider'
+import { useAuthStore } from '@/stores/auth-store'
 
-export function ChannelsPrimaryButtons() {
+export function ChannelsPrimaryButtons({ myChannelsOnly }: { myChannelsOnly?: boolean } = {}) {
   const { t } = useTranslation()
+  const isAdmin = (useAuthStore((s) => s.auth.user?.role) ?? 0) >= 10
   const {
     setOpen,
     enableTagMode,
@@ -88,7 +90,9 @@ export function ChannelsPrimaryButtons() {
         {/* Create Channel */}
         <Button onClick={() => setOpen('create-channel')} size='sm'>
           <Plus className='h-4 w-4' />
-          <span className='max-sm:hidden'>{t('Create Channel')}</span>
+          <span className='max-sm:hidden'>
+            {myChannelsOnly ? t('Add My Channel') : t('Create Channel')}
+          </span>
           <span className='sm:hidden'>{t('Create')}</span>
         </Button>
 
@@ -119,80 +123,84 @@ export function ChannelsPrimaryButtons() {
 
             <DropdownMenuSeparator className='sm:hidden' />
 
-            <DropdownMenuItem
-              onClick={() => {
-                handleTestAllChannels(queryClient)
-              }}
-            >
-              {t('Test All Channels')}
-              <DropdownMenuShortcut>
-                <TestTube className='h-4 w-4' />
-              </DropdownMenuShortcut>
-            </DropdownMenuItem>
+            {isAdmin && (
+              <>
+                <DropdownMenuItem
+                  onClick={() => {
+                    handleTestAllChannels(queryClient)
+                  }}
+                >
+                  {t('Test All Channels')}
+                  <DropdownMenuShortcut>
+                    <TestTube className='h-4 w-4' />
+                  </DropdownMenuShortcut>
+                </DropdownMenuItem>
 
-            <DropdownMenuItem
-              onClick={() => {
-                handleUpdateAllBalances(queryClient)
-              }}
-            >
-              {t('Update All Balances')}
-              <DropdownMenuShortcut>
-                <DollarSign className='h-4 w-4' />
-              </DropdownMenuShortcut>
-            </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => {
+                    handleUpdateAllBalances(queryClient)
+                  }}
+                >
+                  {t('Update All Balances')}
+                  <DropdownMenuShortcut>
+                    <DollarSign className='h-4 w-4' />
+                  </DropdownMenuShortcut>
+                </DropdownMenuItem>
 
-            <DropdownMenuSeparator />
+                <DropdownMenuSeparator />
 
-            <DropdownMenuItem
-              onClick={() => upstream.detectAllUpdates()}
-              disabled={upstream.detectAllLoading}
-            >
-              {t('Detect All Upstream Updates')}
-              <DropdownMenuShortcut>
-                <RefreshCw className='h-4 w-4' />
-              </DropdownMenuShortcut>
-            </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => upstream.detectAllUpdates()}
+                  disabled={upstream.detectAllLoading}
+                >
+                  {t('Detect All Upstream Updates')}
+                  <DropdownMenuShortcut>
+                    <RefreshCw className='h-4 w-4' />
+                  </DropdownMenuShortcut>
+                </DropdownMenuItem>
 
-            <DropdownMenuItem
-              onClick={() => upstream.applyAllUpdates()}
-              disabled={upstream.applyAllLoading}
-            >
-              {t('Apply All Upstream Updates')}
-              <DropdownMenuShortcut>
-                <ArrowUpFromLine className='h-4 w-4' />
-              </DropdownMenuShortcut>
-            </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => upstream.applyAllUpdates()}
+                  disabled={upstream.applyAllLoading}
+                >
+                  {t('Apply All Upstream Updates')}
+                  <DropdownMenuShortcut>
+                    <ArrowUpFromLine className='h-4 w-4' />
+                  </DropdownMenuShortcut>
+                </DropdownMenuItem>
 
-            <DropdownMenuSeparator />
+                <DropdownMenuSeparator />
 
-            <DropdownMenuItem
-              onClick={() => {
-                handleFixAbilities(queryClient, (_result) => {
-                  // eslint-disable-next-line no-console
-                  console.log('Fix abilities result:', _result)
-                })
-              }}
-            >
-              {t('Fix Abilities')}
-              <DropdownMenuShortcut>
-                <Settings2 className='h-4 w-4' />
-              </DropdownMenuShortcut>
-            </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => {
+                    handleFixAbilities(queryClient, (_result) => {
+                      // eslint-disable-next-line no-console
+                      console.log('Fix abilities result:', _result)
+                    })
+                  }}
+                >
+                  {t('Fix Abilities')}
+                  <DropdownMenuShortcut>
+                    <Settings2 className='h-4 w-4' />
+                  </DropdownMenuShortcut>
+                </DropdownMenuItem>
 
-            <DropdownMenuSeparator />
+                <DropdownMenuSeparator />
 
-            <DropdownMenuItem
-              onSelect={(e) => {
-                e.preventDefault()
-                setShowDeleteDialog(true)
-              }}
-              className='text-destructive focus:text-destructive'
-            >
-              {t('Delete All Disabled')}
-              <DropdownMenuShortcut>
-                <Trash2 className='h-4 w-4' />
-              </DropdownMenuShortcut>
-            </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={(e) => {
+                    e.preventDefault()
+                    setShowDeleteDialog(true)
+                  }}
+                  className='text-destructive focus:text-destructive'
+                >
+                  {t('Delete All Disabled')}
+                  <DropdownMenuShortcut>
+                    <Trash2 className='h-4 w-4' />
+                  </DropdownMenuShortcut>
+                </DropdownMenuItem>
+              </>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

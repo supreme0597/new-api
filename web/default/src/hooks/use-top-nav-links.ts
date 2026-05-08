@@ -16,6 +16,7 @@ const DEFAULT_HEADER_NAV_MODULES = {
   console: true,
   pricing: { enabled: true, requireAuth: false },
   rankings: { enabled: true, requireAuth: false },
+  performance_leaderboard: { enabled: true, requireAuth: false },
   docs: true,
   about: true,
 }
@@ -66,6 +67,10 @@ function parseHeaderNavModules(
       rankings: parseAccessModule(
         parsed.rankings,
         DEFAULT_HEADER_NAV_MODULES.rankings
+      ),
+      performance_leaderboard: parseAccessModule(
+        parsed.performance_leaderboard,
+        DEFAULT_HEADER_NAV_MODULES.performance_leaderboard
       ),
     }
   } catch {
@@ -124,6 +129,13 @@ export function useTopNavLinks(): TopNavLink[] {
   if (rankings && typeof rankings === 'object' && rankings.enabled) {
     const disabled = rankings.requireAuth && !isAuthed
     links.push({ title: t('Rankings'), href: '/rankings', disabled })
+  }
+
+  // Performance Leaderboard
+  const perfLeaderboard = modules?.performance_leaderboard
+  if (perfLeaderboard && typeof perfLeaderboard === 'object' && perfLeaderboard.enabled) {
+    const disabled = perfLeaderboard.requireAuth && !isAuthed
+    links.push({ title: t('Performance Leaderboard'), href: '/performance-leaderboard', disabled })
   }
 
   // Docs (supports external links)

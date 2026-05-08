@@ -1,0 +1,417 @@
+import { useState } from 'react'
+import { useNavigate, useSearch } from '@tanstack/react-router'
+import { useTranslation } from 'react-i18next'
+import { Trophy, Clock, Zap, CheckCircle, BarChart3 } from 'lucide-react'
+import { PublicLayout } from '@/components/layout'
+import { PageTransition } from '@/components/page-transition'
+import { Skeleton } from '@/components/ui/skeleton'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Button } from '@/components/ui/button'
+import { useLeaderboard, useLeaderboardVendors } from './hooks/use-leaderboard'
+import type { LeaderboardTimeRange, LeaderboardItem } from './types'
+
+const TIME_RANGES: { value: LeaderboardTimeRange; labelKey: string }[] = [
+  { value: 24, labelKey: '24h' },
+  { value: 168, labelKey: '7d' },
+  { value: 720, labelKey: '30d' },
+]
+
+const PAGE_SIZE = 20
+
+export function PerformanceLeaderboard() {
+  const { t } = useTranslation()
+  const search = useSearch({ from: '/performance-leaderboard/' })
+  const navigate = useNavigate()
+
+  const vendorId = search.vendor_id ? Number(search.vendor_id) : undefined
+  const hours = (search.hours as LeaderboardTimeRange) || 24
+  const page = search.page || 1
+
+  const leaderboardQuery = useLeaderboard({
+    vendorId,
+    hours,
+    page,
+    pageSize: PAGE_SIZE,
+  })
+  const vendorsQuery = useLeaderboardVendors()
+
+  const data = leaderboardQuery.data?.data
+  const vendors = vendorsQuery.data?.data || []
+
+  const handleVendorChange = (value: string) => {
+    navigate({
+      to: '/performance-leaderboard',
+      search: (prev: Record<string, unknown>) => ({
+        ...prev,
+        vendor_id: value === '__all__' ? undefined : Number(value),
+        page: 1,
+      }),
+    })
+  }
+
+  const handleTimeRangeChange = (value: LeaderboardTimeRange) => {
+    navigate({
+      to: '/performance-leaderboard',
+      search: (prev: Record<string, unknown>) => ({
+        ...prev,
+        hours: value,
+        page: 1,
+      }),
+    })
+  }
+
+  const handlePageChange = (newPage: number) => {
+    navigate({
+      to: '/performance-leaderboard',
+      search: (prev: Record<string, unknown>) => ({
+        ...prev,
+        page: newPage,
+      }),
+    })
+  }
+
+  const totalPages = data ? Math.ceil(data.total / PAGE_SIZE) : 0
+
+  return (
+    <PublicLayout showMainContainer={false}>
+      <div className='relative'>
+        <div
+          aria-hidden
+          className='pointer-events-none absolute inset-x-0 top-0 h-[400px] opacity-15 dark:opacity-[0.08]'
+          style={{
+            background: [
+              'radial-gradient(ellipse 60% 50% at 30% 20%, oklch(0.72 0.16 160 / 70%) 0%, transparent 70%)',
+              'radial-gradient(ellipse 50% 40% at 70% 15%, oklch(0.65 0.14 280 / 50%) 0%, transparent 70%)',
+            ].join(', '),
+            maskImage:
+              'linear-gradient(to bottom, black 40%, transparent 100%)',
+            WebkitMaskImage:
+              'linear-gradient(to bottom, black 40%, transparent 100%)',
+          }}
+        />
+        <PageTransition className='relative mx-auto w-full max-w-[1280px] space-y-8 px-3 pt-16 pb-10 sm:px-6 sm:pt-20 sm:pb-12 xl:px-8'>
+          {/* Header */}
+          <section className='space-y-5'>
+            <div className='space-y-2'>
+              <p className='text-muted-foreground text-xs font-medium tracking-widest uppercase'>
+                {t('Leaderboards')}
+              </p>
+              <h1 className='text-[clamp(1.75rem,4vw,2.5rem)] leading-[1.15] font-bold tracking-tight'>
+                {t('Performance Leaderboard')}
+              </h1>
+              <p className='text-muted-foreground/80 max-w-2xl text-sm'>
+                {t(
+                  'Real-time model performance rankings based on TPS, TTFT, and success rate from live traffic sampling.'
+                )}
+              </p>
+            </div>
+
+            {/* Filters */}
+            <div className='flex flex-wrap items-center gap-3'>
+              <Select
+                items={[
+                  { value: '__all__', label: t('All Vendors') },
+                  ...vendors.map((v: { id: number; name: string }) => ({
+                    value: String(v.id),
+                    label: v.name,
+                  })),
+                ]}
+                onValueChange={handleVendorChange}
+                value={vendorId ? String(vendorId) : '__all__'}
+              >
+                <SelectTrigger className='w-[180px]'>
+                  <SelectValue placeholder={t('All Vendors')} />
+                </SelectTrigger>
+                <SelectContent alignItemWithTrigger={false}>
+                  <SelectItem value='__all__'>{t('All Vendors')}</SelectItem>
+                  <SelectGroup>
+                    {vendors.map((v: { id: number; name: string }) => (
+                      <SelectItem key={v.id} value={String(v.id)}>
+                        {v.name}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+
+              <div className='border-border/60 flex items-center border-b'>
+                {TIME_RANGES.map((tr) => {
+                  const isActive = hours === tr.value
+                  return (
+                    <button
+                      key={tr.value}
+                      type='button'
+                      onClick={() => handleTimeRangeChange(tr.value)}
+                      className={`relative -mb-px rounded-sm px-3 py-2 text-sm font-medium transition-colors ${
+                        isActive
+                          ? 'text-foreground'
+                          : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      {t(tr.labelKey)}
+                      <span
+                        aria-hidden
+                        className={`bg-foreground absolute inset-x-3 -bottom-px h-[2px] rounded-full transition-opacity ${
+                          isActive ? 'opacity-100' : 'opacity-0'
+                        }`}
+                      />
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          </section>
+
+          {/* Content */}
+          {leaderboardQuery.isLoading ? (
+            <LeaderboardLoading />
+          ) : !data ? (
+            <LeaderboardError
+              message={
+                leaderboardQuery.error instanceof Error
+                  ? leaderboardQuery.error.message
+                  : t('Unable to load leaderboard data')
+              }
+            />
+          ) : (
+            <>
+              <LeaderboardTable items={data.list} tpsBenchmark={data.tpsBenchmark} ttftBenchmark={data.ttftBenchmark} />
+              {totalPages > 1 && (
+                <Pagination
+                  page={page}
+                  totalPages={totalPages}
+                  onPageChange={handlePageChange}
+                />
+              )}
+            </>
+          )}
+        </PageTransition>
+      </div>
+    </PublicLayout>
+  )
+}
+
+function LeaderboardTable({
+  items,
+  tpsBenchmark,
+  ttftBenchmark,
+}: {
+  items: LeaderboardItem[]
+  tpsBenchmark: number
+  ttftBenchmark: number
+}) {
+  const { t } = useTranslation()
+
+  if (items.length === 0) {
+    return (
+      <div className='bg-card rounded-xl border border-dashed px-6 py-12 text-center'>
+        <h2 className='text-foreground text-base font-semibold'>
+          {t('No data available')}
+        </h2>
+        <p className='text-muted-foreground mx-auto mt-2 max-w-md text-sm'>
+          {t('No performance data found for the selected filters.')}
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <div className='bg-card overflow-hidden rounded-xl border'>
+      <div className='overflow-x-auto'>
+        <table className='w-full text-sm'>
+          <thead>
+            <tr className='border-b bg-muted/30'>
+              <th className='px-4 py-3 text-left font-medium'>
+                {t('Rank')}
+              </th>
+              <th className='px-4 py-3 text-left font-medium'>
+                {t('Model')}
+              </th>
+              <th className='px-4 py-3 text-left font-medium'>
+                {t('Vendor')}
+              </th>
+              <th className='px-4 py-3 text-right font-medium'>
+                <div className='flex items-center justify-end gap-1'>
+                  <Zap className='h-3.5 w-3.5' />
+                  {t('Avg TPS')}
+                </div>
+              </th>
+              <th className='px-4 py-3 text-right font-medium'>
+                <div className='flex items-center justify-end gap-1'>
+                  <Clock className='h-3.5 w-3.5' />
+                  {t('Avg TTFT')}
+                </div>
+              </th>
+              <th className='px-4 py-3 text-right font-medium'>
+                <div className='flex items-center justify-end gap-1'>
+                  <CheckCircle className='h-3.5 w-3.5' />
+                  {t('Success Rate')}
+                </div>
+              </th>
+              <th className='px-4 py-3 text-right font-medium'>
+                <div className='flex items-center justify-end gap-1'>
+                  <BarChart3 className='h-3.5 w-3.5' />
+                  {t('Score')}
+                </div>
+              </th>
+              <th className='px-4 py-3 text-right font-medium'>
+                {t('Samples')}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((item) => (
+              <tr
+                key={`${item.model_name}-${item.vendor_name}`}
+                className='border-b last:border-0 hover:bg-muted/20 transition-colors'
+              >
+                <td className='px-4 py-3'>
+                  <RankBadge rank={item.rank} />
+                </td>
+                <td className='px-4 py-3 font-medium'>{item.model_name}</td>
+                <td className='text-muted-foreground px-4 py-3'>
+                  {item.vendor_name}
+                </td>
+                <td className='px-4 py-3 text-right font-mono'>
+                  <MetricValue
+                    value={item.avg_tps}
+                    benchmark={tpsBenchmark}
+                    higherIsBetter
+                    format={(v) => v.toFixed(1)}
+                  />
+                </td>
+                <td className='px-4 py-3 text-right font-mono'>
+                  <MetricValue
+                    value={item.avg_ttft_ms}
+                    benchmark={ttftBenchmark}
+                    higherIsBetter={false}
+                    format={(v) => `${v.toFixed(0)}ms`}
+                  />
+                </td>
+                <td className='px-4 py-3 text-right font-mono'>
+                  {(item.success_rate * 100).toFixed(1)}%
+                </td>
+                <td className='px-4 py-3 text-right font-mono font-semibold'>
+                  {item.score.toFixed(2)}
+                </td>
+                <td className='text-muted-foreground px-4 py-3 text-right'>
+                  {item.sample_count.toLocaleString()}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+function RankBadge({ rank }: { rank: number }) {
+  if (rank === 1) {
+    return (
+      <span className='inline-flex items-center gap-1 font-semibold text-amber-500'>
+        <Trophy className='h-4 w-4' />1
+      </span>
+    )
+  }
+  if (rank === 2) {
+    return (
+      <span className='inline-flex items-center gap-1 font-semibold text-gray-400'>
+        <Trophy className='h-4 w-4' />2
+      </span>
+    )
+  }
+  if (rank === 3) {
+    return (
+      <span className='inline-flex items-center gap-1 font-semibold text-amber-700'>
+        <Trophy className='h-4 w-4' />3
+      </span>
+    )
+  }
+  return <span className='text-muted-foreground font-mono'>{rank}</span>
+}
+
+function MetricValue({
+  value,
+  benchmark,
+  higherIsBetter,
+  format,
+}: {
+  value: number
+  benchmark: number
+  higherIsBetter: boolean
+  format: (v: number) => string
+}) {
+  if (!benchmark) return <span>{format(value)}</span>
+  const isGood = higherIsBetter ? value >= benchmark : value <= benchmark
+  return (
+    <span className={isGood ? 'text-emerald-600 dark:text-emerald-400' : ''}>
+      {format(value)}
+    </span>
+  )
+}
+
+function Pagination({
+  page,
+  totalPages,
+  onPageChange,
+}: {
+  page: number
+  totalPages: number
+  onPageChange: (page: number) => void
+}) {
+  const { t } = useTranslation()
+
+  return (
+    <div className='flex items-center justify-center gap-2'>
+      <Button
+        variant='outline'
+        size='sm'
+        disabled={page <= 1}
+        onClick={() => onPageChange(page - 1)}
+      >
+        {t('Previous')}
+      </Button>
+      <span className='text-muted-foreground text-sm'>
+        {page} / {totalPages}
+      </span>
+      <Button
+        variant='outline'
+        size='sm'
+        disabled={page >= totalPages}
+        onClick={() => onPageChange(page + 1)}
+      >
+        {t('Next')}
+      </Button>
+    </div>
+  )
+}
+
+function LeaderboardLoading() {
+  return (
+    <div className='space-y-4'>
+      <Skeleton className='h-[400px] w-full rounded-xl' />
+    </div>
+  )
+}
+
+function LeaderboardError(props: { message: string }) {
+  const { t } = useTranslation()
+  return (
+    <div className='bg-card rounded-xl border border-dashed px-6 py-12 text-center'>
+      <h2 className='text-foreground text-base font-semibold'>
+        {t('Unable to load leaderboard')}
+      </h2>
+      <p className='text-muted-foreground mx-auto mt-2 max-w-md text-sm'>
+        {props.message}
+      </p>
+    </div>
+  )
+}

@@ -15,13 +15,18 @@ import {
   CreditCard,
   ListTodo,
   Settings,
+  Server,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { useAuthStore } from '@/stores/auth-store'
+import { ROLE } from '@/lib/roles'
 import { WORKSPACE_IDS } from '@/components/layout/lib/workspace-registry'
 import { type SidebarData } from '@/components/layout/types'
 
 export function useSidebarData(): SidebarData {
   const { t } = useTranslation()
+  const userRole = useAuthStore((state) => state.auth.user?.role)
+  const isAdmin = userRole != null && userRole >= ROLE.ADMIN
 
   return {
     workspaces: [
@@ -91,6 +96,15 @@ export function useSidebarData(): SidebarData {
             url: '/wallet',
             icon: Wallet,
           },
+          ...(!isAdmin
+            ? [
+                {
+                  title: t('My Channels'),
+                  url: '/my-channels',
+                  icon: Server,
+                },
+              ]
+            : []),
           {
             title: t('Profile'),
             url: '/profile',
