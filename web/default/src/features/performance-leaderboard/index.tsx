@@ -1,10 +1,16 @@
 import { useState } from 'react'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
-import { Trophy, Clock, Zap, CheckCircle, BarChart3 } from 'lucide-react'
+import { Trophy, Clock, Zap, CheckCircle, BarChart3, HelpCircle } from 'lucide-react'
 import { PublicLayout } from '@/components/layout'
 import { PageTransition } from '@/components/page-transition'
 import { Skeleton } from '@/components/ui/skeleton'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import {
   Select,
   SelectContent,
@@ -16,6 +22,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { useLeaderboard, useLeaderboardVendors } from './hooks/use-leaderboard'
 import type { LeaderboardTimeRange, LeaderboardItem } from './types'
+import { ScoreLegend, MetricTooltip } from './metrics-legend'
 
 const TIME_RANGES: { value: LeaderboardTimeRange; labelKey: string }[] = [
   { value: 24, labelKey: '24h' },
@@ -213,19 +220,23 @@ function LeaderboardTable({
     return (
       <div className='bg-card rounded-xl border border-dashed px-6 py-12 text-center'>
         <h2 className='text-foreground text-base font-semibold'>
-          {t('No data available')}
+          {t('No Data Available')}
         </h2>
-        <p className='text-muted-foreground mx-auto mt-2 max-w-md text-sm'>
-          {t('No performance data found for the selected filters.')}
+        <p className='text-muted-foreground mt-1 text-sm'>
+          {t('No performance data available. Configure test channels and refresh samples first.')}
         </p>
       </div>
     )
   }
 
   return (
-    <div className='bg-card overflow-hidden rounded-xl border'>
-      <div className='overflow-x-auto'>
-        <table className='w-full text-sm'>
+    <div className='space-y-3'>
+      <div className='flex items-center justify-end'>
+        <ScoreLegend />
+      </div>
+      <div className='bg-card overflow-hidden rounded-xl border'>
+        <div className='overflow-x-auto'>
+          <table className='w-full text-sm'>
           <thead>
             <tr className='border-b bg-muted/30'>
               <th className='px-4 py-3 text-left font-medium'>
@@ -239,26 +250,34 @@ function LeaderboardTable({
               </th>
               <th className='px-4 py-3 text-right font-medium'>
                 <div className='flex items-center justify-end gap-1'>
-                  <Zap className='h-3.5 w-3.5' />
-                  {t('Avg TPS')}
+                  <MetricTooltip metric='tps'>
+                    <Zap className='h-3.5 w-3.5' />
+                    <span>{t('Avg TPS')}</span>
+                  </MetricTooltip>
                 </div>
               </th>
               <th className='px-4 py-3 text-right font-medium'>
                 <div className='flex items-center justify-end gap-1'>
-                  <Clock className='h-3.5 w-3.5' />
-                  {t('Avg TTFT')}
+                  <MetricTooltip metric='ttft'>
+                    <Clock className='h-3.5 w-3.5' />
+                    <span>{t('Avg TTFT')}</span>
+                  </MetricTooltip>
                 </div>
               </th>
               <th className='px-4 py-3 text-right font-medium'>
                 <div className='flex items-center justify-end gap-1'>
-                  <CheckCircle className='h-3.5 w-3.5' />
-                  {t('Success Rate')}
+                  <MetricTooltip metric='success_rate'>
+                    <CheckCircle className='h-3.5 w-3.5' />
+                    <span>{t('Success Rate')}</span>
+                  </MetricTooltip>
                 </div>
               </th>
               <th className='px-4 py-3 text-right font-medium'>
                 <div className='flex items-center justify-end gap-1'>
-                  <BarChart3 className='h-3.5 w-3.5' />
-                  {t('Score')}
+                  <MetricTooltip metric='score'>
+                    <BarChart3 className='h-3.5 w-3.5' />
+                    <span>{t('Score')}</span>
+                  </MetricTooltip>
                 </div>
               </th>
               <th className='px-4 py-3 text-right font-medium'>
@@ -298,8 +317,14 @@ function LeaderboardTable({
                 <td className='px-4 py-3 text-right font-mono'>
                   {(item.success_rate * 100).toFixed(1)}%
                 </td>
-                <td className='px-4 py-3 text-right font-mono font-semibold'>
-                  {item.score.toFixed(2)}
+                <td className='px-4 py-3 text-right font-mono'>
+                  <MetricValue
+                    value={item.score}
+                    benchmark={60}
+                    higherIsBetter
+                    isScore
+                    format={(v) => v.toFixed(2)}
+                  />
                 </td>
                 <td className='text-muted-foreground px-4 py-3 text-right'>
                   {item.sample_count.toLocaleString()}
@@ -309,6 +334,7 @@ function LeaderboardTable({
           </tbody>
         </table>
       </div>
+      </div>
     </div>
   )
 }
@@ -316,43 +342,69 @@ function LeaderboardTable({
 function RankBadge({ rank }: { rank: number }) {
   if (rank === 1) {
     return (
-      <span className='inline-flex items-center gap-1 font-semibold text-amber-500'>
-        <Trophy className='h-4 w-4' />1
+      <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-amber-100 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400 font-bold text-sm">
+        1
       </span>
     )
   }
   if (rank === 2) {
     return (
-      <span className='inline-flex items-center gap-1 font-semibold text-gray-400'>
-        <Trophy className='h-4 w-4' />2
+      <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300 font-bold text-sm">
+        2
       </span>
     )
   }
   if (rank === 3) {
     return (
-      <span className='inline-flex items-center gap-1 font-semibold text-amber-700'>
-        <Trophy className='h-4 w-4' />3
+      <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-amber-50 text-amber-700 dark:bg-amber-900/10 dark:text-amber-600 font-bold text-sm">
+        3
       </span>
     )
   }
-  return <span className='text-muted-foreground font-mono'>{rank}</span>
+  return <span className="text-muted-foreground font-mono">{rank}</span>
 }
 
 function MetricValue({
   value,
   benchmark,
   higherIsBetter,
+  isScore,
   format,
 }: {
   value: number
   benchmark: number
   higherIsBetter: boolean
+  isScore?: boolean
   format: (v: number) => string
 }) {
   if (!benchmark) return <span>{format(value)}</span>
-  const isGood = higherIsBetter ? value >= benchmark : value <= benchmark
+  
+  const getColorClass = () => {
+    if (isScore) {
+      // Score: specific thresholds (80/60/40)
+      if (value >= 80) return 'text-emerald-600 dark:text-emerald-400'
+      if (value >= 60) return 'text-blue-600 dark:text-blue-400'
+      if (value >= 40) return 'text-orange-600 dark:text-orange-400'
+      return 'text-red-600 dark:text-red-400'
+    }
+    
+    if (higherIsBetter) {
+      // TPS: higher is better
+      if (value >= benchmark) return 'text-emerald-600 dark:text-emerald-400'
+      if (value >= benchmark * 0.7) return 'text-blue-600 dark:text-blue-400'
+      if (value >= benchmark * 0.4) return 'text-orange-600 dark:text-orange-400'
+      return 'text-red-600 dark:text-red-400'
+    } else {
+      // TTFT: lower is better
+      if (value <= benchmark) return 'text-emerald-600 dark:text-emerald-400'
+      if (value <= benchmark * 1.5) return 'text-blue-600 dark:text-blue-400'
+      if (value <= benchmark * 3) return 'text-orange-600 dark:text-orange-400'
+      return 'text-red-600 dark:text-red-400'
+    }
+  }
+  
   return (
-    <span className={isGood ? 'text-emerald-600 dark:text-emerald-400' : ''}>
+    <span className={`font-semibold ${getColorClass()}`}>
       {format(value)}
     </span>
   )
