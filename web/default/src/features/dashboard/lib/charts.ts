@@ -712,12 +712,15 @@ const USER_COLOR_FALLBACKS = [
   '#5D7092',
 ]
 
+export type UserChartMetric = 'quota' | 'token_used' | 'count'
+
 export function processUserChartData(
   data: QuotaDataItem[],
   timeGranularity: TimeGranularity = 'day',
   t?: TFunction,
   limit = 10,
-  themeKey?: string
+  themeKey?: string,
+  metric: UserChartMetric = 'quota'
 ): ProcessedUserChartData {
   const tt: TFunction = t ?? ((x) => x)
   const { config } = getCurrencyDisplay()
@@ -731,7 +734,25 @@ export function processUserChartData(
         )
       : USER_COLOR_FALLBACKS
 
-  const formatVal = (raw: number) => renderQuotaCompat(raw, 2)
+  const formatVal =
+    metric === 'count'
+      ? (raw: number) => raw.toLocaleString()
+      : metric === 'token_used'
+        ? (raw: number) => raw.toLocaleString()
+        : (raw: number) => renderQuotaCompat(raw, 2)
+
+  const metricLabel =
+    metric === 'count'
+      ? tt('Request Count')
+      : metric === 'token_used'
+        ? tt('Token Usage')
+        : tt('Consumption')
+
+  const getMetricValue = (item: QuotaDataItem): number => {
+    if (metric === 'token_used') return Number(item.token_used) || 0
+    if (metric === 'count') return Number(item.count) || 0
+    return Number(item.quota) || 0
+  }
 
   const emptyResult: ProcessedUserChartData = {
     spec_user_rank: {
@@ -743,7 +764,7 @@ export function processUserChartData(
       direction: 'horizontal',
       title: {
         visible: true,
-        text: tt('User Consumption Ranking'),
+        text: `${tt('User')} ${metricLabel} ${tt('Ranking')}`,
         subtext: tt('No data available'),
       },
       legends: { visible: false },
@@ -758,7 +779,7 @@ export function processUserChartData(
       seriesField: 'User',
       title: {
         visible: true,
-        text: tt('User Consumption Trend'),
+        text: `${tt('User')} ${metricLabel} ${tt('Trend')}`,
         subtext: tt('No data available'),
       },
       legends: { visible: true, selectMode: 'single' },
@@ -770,24 +791,27 @@ export function processUserChartData(
 
   if (!data || data.length === 0) return emptyResult
 
-  const userQuotaTotal = new Map<string, number>()
+  const userMetricTotal = new Map<string, number>()
   data.forEach((item) => {
     const username = item.username || 'unknown'
-    const prev = userQuotaTotal.get(username) || 0
-    userQuotaTotal.set(username, prev + (Number(item.quota) || 0))
+    const prev = userMetricTotal.get(username) || 0
+    userMetricTotal.set(username, prev + getMetricValue(item))
   })
 
-  const sorted = Array.from(userQuotaTotal.entries()).sort(
+  const sorted = Array.from(userMetricTotal.entries()).sort(
     (a, b) => b[1] - a[1]
   )
   const topUsers = sorted.slice(0, limit).map(([u]) => u)
   const topUserSet = new Set(topUsers)
-  const totalQuota = sorted.slice(0, limit).reduce((s, [, q]) => s + q, 0)
+  const totalMetric = sorted.slice(0, limit).reduce((s, [, q]) => s + q, 0)
 
-  const rankValues = sorted.slice(0, limit).map(([username, quota]) => ({
+  const rankValues = sorted.slice(0, limit).map(([username, value]) => ({
     User: username,
-    rawQuota: quota,
-    Usage: Number((quota / quotaPerUnit).toFixed(4)),
+    rawQuota: value,
+    Usage:
+      metric === 'quota'
+        ? Number((value / quotaPerUnit).toFixed(4))
+        : value,
   }))
 
   const userColorMap = topUsers.reduce<Record<string, string>>(
@@ -809,7 +833,7 @@ export function processUserChartData(
     if (!topUserSet.has(user)) return
     if (!timeUserMap.has(timeKey)) timeUserMap.set(timeKey, new Map())
     const map = timeUserMap.get(timeKey)!
-    map.set(user, (map.get(user) || 0) + (Number(item.quota) || 0))
+    map.set(user, (map.get(user) || 0) + getMetricValue(item))
   })
 
   const sortedTimePoints = Array.from(allTimePoints).sort()
@@ -843,7 +867,7 @@ export function processUserChartData(
       title: {
         visible: true,
         text: tt('User Consumption Ranking'),
-        subtext: `${tt('Total:')} ${formatVal(totalQuota)}`,
+        subtext: `${tt('Total:')} ${formatVal(totalMetric)}`,
       },
       legends: { visible: false },
       bar: {
@@ -899,7 +923,7 @@ export function processUserChartData(
       title: {
         visible: true,
         text: tt('User Consumption Trend'),
-        subtext: `${tt('Total:')} ${formatVal(totalQuota)}`,
+        subtext: `${tt('Total:')} ${formatVal(totalMetric)}`,
       },
       legends: { visible: true, selectMode: 'single' },
       axes: [

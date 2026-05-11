@@ -1,8 +1,13 @@
+import { useState } from 'react'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 import { Skeleton } from '@/components/ui/skeleton'
 import { PublicLayout } from '@/components/layout'
 import { PageTransition } from '@/components/page-transition'
+import { useAuthStore } from '@/stores/auth-store'
+import { ROLE } from '@/lib/roles'
+import { UserCharts } from '@/features/dashboard/components/users/user-charts'
+import type { UserChartMetric } from '@/features/dashboard/lib'
 import {
   MarketShareSection,
   ModelsSection,
@@ -14,10 +19,23 @@ import type { RankingPeriod } from './types'
 
 const VALID_PERIODS: RankingPeriod[] = ['today', 'week', 'month', 'year', 'all']
 
+const PERIOD_TO_DAYS: Record<RankingPeriod, number> = {
+  today: 1,
+  week: 7,
+  month: 30,
+  year: 365,
+  all: 365,
+}
+
 export function Rankings() {
   const { t } = useTranslation()
   const search = useSearch({ from: '/rankings/' })
   const navigate = useNavigate()
+
+  const { auth } = useAuthStore()
+  const isAdmin = (auth.user?.role ?? 0) >= ROLE.ADMIN
+
+  const [userMetric, setUserMetric] = useState<UserChartMetric>('token_used')
 
   const period: RankingPeriod = VALID_PERIODS.includes(
     search.period as RankingPeriod
@@ -33,6 +51,11 @@ export function Rankings() {
       to: '/rankings',
       search: (prev) => ({ ...prev, period: next }),
     })
+  }
+
+  if (!isAdmin) {
+    navigate({ to: '/' })
+    return null
   }
 
   return (
@@ -84,6 +107,35 @@ export function Rankings() {
                 movers={snapshot.top_movers}
                 droppers={snapshot.top_droppers}
               />
+
+              <div className='space-y-4'>
+                <div className='flex items-center gap-2'>
+                  <h2 className='text-lg font-semibold'>
+                    {t('User Statistics')}
+                  </h2>
+                  <div className='flex rounded-lg border p-0.5'>
+                    {(
+                      ['token_used', 'count'] as UserChartMetric[]
+                    ).map((m) => (
+                      <button
+                        key={m}
+                        type='button'
+                        onClick={() => setUserMetric(m)}
+                        className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+                          userMetric === m
+                            ? 'bg-primary text-primary-foreground'
+                            : 'text-muted-foreground hover:text-foreground'
+                        }`}
+                      >
+                        {m === 'token_used'
+                          ? t('Token Usage')
+                          : t('Request Count')}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <UserCharts metric={userMetric} defaultDays={PERIOD_TO_DAYS[period]} hideTimeRangePresets />
+              </div>
             </>
           )}
         </PageTransition>

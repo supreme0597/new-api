@@ -14,6 +14,10 @@ export {
   openExternalSpeedTest,
   getDefaultPingStatus,
 } from './api-info'
-export { processChartData, processUserChartData } from './charts'
+export {
+  processChartData,
+  processUserChartData,
+  type UserChartMetric,
+} from './charts'
 export { safeDivide, calculateDashboardStats } from './stats'
 export { getPreviewText } from './text'

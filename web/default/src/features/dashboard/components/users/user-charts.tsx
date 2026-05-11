@@ -18,6 +18,7 @@ import {
   getSavedGranularity,
   saveGranularity,
   processUserChartData,
+  type UserChartMetric,
 } from '@/features/dashboard/lib'
 import type { ProcessedUserChartData } from '@/features/dashboard/types'
 
@@ -44,7 +45,7 @@ const USER_CHARTS: {
 
 const TOP_USER_LIMIT_OPTIONS = [5, 10, 20, 50]
 
-export function UserCharts() {
+export function UserCharts({ metric = 'quota', defaultDays, hideTimeRangePresets = false }: { metric?: UserChartMetric; defaultDays?: number; hideTimeRangePresets?: boolean }) {
   const { t } = useTranslation()
   const { resolvedTheme } = useTheme()
   const { customization } = useThemeCustomization()
@@ -120,7 +121,8 @@ export function UserCharts() {
         timeGranularity,
         t,
         topUserLimit,
-        customization.preset
+        customization.preset,
+        metric
       ),
     [
       userData,
@@ -129,28 +131,31 @@ export function UserCharts() {
       t,
       topUserLimit,
       customization.preset,
+      metric,
     ]
   )
 
   return (
     <div className='space-y-3'>
       <div className='flex items-center gap-1.5 overflow-x-auto pb-1 sm:gap-2'>
-        <div className='flex shrink-0 items-center gap-1.5 rounded-lg border p-0.5'>
-          {TIME_RANGE_PRESETS.map((preset) => (
-            <button
-              key={preset.days}
-              type='button'
-              onClick={() => handleRangeChange(preset.days)}
-              className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-                selectedRange === preset.days
-                  ? 'bg-primary text-primary-foreground shadow-sm'
-                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-              }`}
-            >
-              {t(preset.label)}
-            </button>
-          ))}
-        </div>
+        {!hideTimeRangePresets && (
+          <div className='flex shrink-0 items-center gap-1.5 rounded-lg border p-0.5'>
+            {TIME_RANGE_PRESETS.map((preset) => (
+              <button
+                key={preset.days}
+                type='button'
+                onClick={() => handleRangeChange(preset.days)}
+                className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                  selectedRange === preset.days
+                    ? 'bg-primary text-primary-foreground shadow-sm'
+                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                }`}
+              >
+                {t(preset.label)}
+              </button>
+            ))}
+          </div>
+        )}
 
         <div className='flex shrink-0 items-center gap-1.5 rounded-lg border p-0.5'>
           {TIME_GRANULARITY_OPTIONS.map((opt) => (
