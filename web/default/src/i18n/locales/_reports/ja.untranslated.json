@@ -180,5 +180,7 @@
   "Xunfei": "Xunfei",
   "No performance data found for the selected filters.": "No performance data found for the selected filters.",
   "Real-time model performance rankings based on TPS, TTFT, and success rate from live traffic sampling.": "Real-time model performance rankings based on TPS, TTFT, and success rate from live traffic sampling.",
-  "Unable to load leaderboard": "Unable to load leaderboard"
+  "Unable to load leaderboard": "Unable to load leaderboard",
+  "Alipay": "Alipay",
+  "WeChat Pay": "WeChat Pay"
 }
