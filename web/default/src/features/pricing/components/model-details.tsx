@@ -886,12 +886,14 @@ export interface ModelDetailsContentProps {
   usdExchangeRate: number
   tokenUnit: TokenUnit
   showRechargePrice?: boolean
+  defaultTab?: 'overview' | 'performance' | 'api'
 }
 
 export function ModelDetailsContent(props: ModelDetailsContentProps) {
   const { t } = useTranslation()
   const showRechargePrice = props.showRechargePrice ?? false
   const metadata = useMemo(() => inferModelMetadata(props.model), [props.model])
+  const defaultTab = props.defaultTab ?? 'overview'
 
   const isDynamic =
     props.model.billing_mode === 'tiered_expr' &&
@@ -901,7 +903,7 @@ export function ModelDetailsContent(props: ModelDetailsContentProps) {
     <div className='@container/details space-y-4'>
       <ModelHeader model={props.model} />
 
-      <Tabs defaultValue='overview' className='gap-4'>
+      <Tabs defaultValue={defaultTab} className='gap-4'>
         <TabsList className='bg-muted/60 h-auto w-full justify-start gap-1 overflow-x-auto rounded-lg p-1'>
           {TAB_VALUES.map((value) => {
             const Icon = TAB_META[value].icon
@@ -1096,6 +1098,7 @@ export function ModelDetails() {
           usdExchangeRate={usdExchangeRate ?? 1}
           tokenUnit={tokenUnit}
           showRechargePrice={search.rechargePrice ?? false}
+          defaultTab={search.tab}
           endpointMap={
             (endpointMap as Record<
               string,

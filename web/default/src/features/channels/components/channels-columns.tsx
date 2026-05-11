@@ -1040,7 +1040,6 @@ export function useChannelsColumns(): ColumnDef<Channel>[] {
       ),
       cell: ({ row }) => {
         const ownerUserId = row.original.owner_user_id
-        const ownerUsername = row.original.owner_username
         if (ownerUserId === -999) {
           return (
             <StatusBadge variant='warning' showDot>
@@ -1052,11 +1051,6 @@ export function useChannelsColumns(): ColumnDef<Channel>[] {
           return (
             <StatusBadge variant='info' showDot>
               {t('Private')}
-              {ownerUsername && (
-                <span className='text-muted-foreground ml-1 text-xs'>
-                  ({ownerUsername})
-                </span>
-              )}
             </StatusBadge>
           )
         }

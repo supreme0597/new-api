@@ -91,13 +91,12 @@ export const channelFormSchema = z.object({
   claude_beta_query: z.boolean().optional(), // Anthropic: beta query passthrough
   // Vendor
   vendor_id: z.number().nullable().optional(),
-  // Channel type (public/private/test) — mapped to owner_user_id
-  // null = public, currentUser.id = private, -999 = test
-  channel_type: z.enum(['public', 'private', 'test']).optional(),
   // Upstream model update settings (stored in settings JSON)
   upstream_model_update_check_enabled: z.boolean().optional(),
   upstream_model_update_auto_sync_enabled: z.boolean().optional(),
   upstream_model_update_ignored_models: z.string().optional(),
+  // Channel ownership type (public/private/test) - used for UI, converted to owner_user_id on submit
+  channelType: z.enum(['public', 'private', 'test']).optional(),
 })
 
 export type ChannelFormValues = z.infer<typeof channelFormSchema>
@@ -157,8 +156,8 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   upstream_model_update_ignored_models: '',
   // Vendor
   vendor_id: null,
-  // Channel type
-  channel_type: 'public',
+  // Channel ownership type
+  channelType: 'public',
 }
 
 // ============================================================================
@@ -288,8 +287,8 @@ export function transformChannelToFormDefaults(
     upstream_model_update_ignored_models: upstreamModelUpdateIgnoredModels,
     // Vendor
     vendor_id: channel.vendor_id ?? null,
-    // Channel type (derived from owner_user_id)
-    channel_type: deriveChannelType(channel.owner_user_id),
+    // Channel ownership type (derived from owner_user_id)
+    channelType: deriveChannelType(channel.owner_user_id),
   }
 }
 
@@ -451,7 +450,7 @@ export function transformFormDataToCreatePayload(formData: ChannelFormValues): {
     settings: buildSettingsJSON(formData),
     other: formData.other || '',
     vendor_id: formData.vendor_id ?? null,
-    owner_user_id: resolveOwnerUserId(formData.channel_type),
+    owner_user_id: null, // Will be set by the drawer component based on user role
   }
 
   // Clean up empty strings to null for optional fields
@@ -501,7 +500,7 @@ export function transformFormDataToUpdatePayload(
     settings: buildSettingsJSON(formData),
     other: formData.other || '',
     vendor_id: formData.vendor_id ?? null,
-    owner_user_id: resolveOwnerUserId(formData.channel_type),
+    owner_user_id: null, // Will be set by the drawer component based on user role
   }
 
   // Only include key if it was changed (not empty)

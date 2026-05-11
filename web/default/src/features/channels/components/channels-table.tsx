@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { useSearch, useNavigate } from '@tanstack/react-router'
+import { getRouteApi } from '@tanstack/react-router'
 import {
   getCoreRowModel,
   useReactTable,
@@ -57,11 +57,16 @@ function isDisabledChannelRow(channel: Channel) {
   )
 }
 
-export function ChannelsTable({ myChannelsOnly }: { myChannelsOnly?: boolean } = {}) {
+export function ChannelsTable({ myChannelsOnly, routeId }: { myChannelsOnly?: boolean; routeId: string } = {}) {
   const { t } = useTranslation()
   const { enableTagMode, idSort } = useChannels()
   const isMobile = useMediaQuery('(max-width: 640px)')
   const currentUser = useAuthStore((s) => s.auth.user)
+
+  // 使用当前路由的 search 和 navigate
+  const route = getRouteApi(routeId)
+  const search = route.useSearch()
+  const navigate = route.useNavigate()
 
   // Table state
   const [sorting, setSorting] = useState<SortingState>([])
@@ -82,8 +87,8 @@ export function ChannelsTable({ myChannelsOnly }: { myChannelsOnly?: boolean } =
     onPaginationChange,
     ensurePageInRange,
   } = useTableUrlState({
-    search: useSearch(),
-    navigate: useNavigate(),
+    search,
+    navigate,
     pagination: {
       defaultPage: 1,
       defaultPageSize: isMobile ? 10 : DEFAULT_PAGE_SIZE,
@@ -204,11 +209,9 @@ export function ChannelsTable({ myChannelsOnly }: { myChannelsOnly?: boolean } =
           ? Number(typeFilter[0])
           : undefined,
       scope:
-        myChannelsOnly
-          ? undefined
-          : scopeFilter.length > 0 && !scopeFilter.includes('all')
-            ? scopeFilter[0]
-            : undefined,
+        scopeFilter.length > 0 && !scopeFilter.includes('all')
+          ? scopeFilter[0]
+          : undefined,
       owner:
         ownerFilter.length > 0 && !ownerFilter.includes('all')
           ? Number(ownerFilter[0])
@@ -374,12 +377,12 @@ export function ChannelsTable({ myChannelsOnly }: { myChannelsOnly?: boolean } =
 
   const scopeFilterOptions = useMemo(() => {
     const options = [
-      { label: t('All Channel Types'), value: 'all' },
-      { label: t('Public Channel'), value: 'public' },
-      { label: t('Private Channel'), value: 'private' },
+      { label: t('All'), value: 'all' },
+      { label: t('Public'), value: 'public' },
+      { label: t('Private'), value: 'private' },
     ]
     if (isSuperAdmin) {
-      options.push({ label: t('Test Channel'), value: 'test' })
+      options.push({ label: t('Test'), value: 'test' })
     }
     return options
   }, [isSuperAdmin, t])
@@ -422,9 +425,9 @@ export function ChannelsTable({ myChannelsOnly }: { myChannelsOnly?: boolean } =
           columnId: 'scope',
           title: t('Channel Type'),
           options: [
-            { label: t('All Channel Types'), value: 'all' },
-            { label: t('Public Channel'), value: 'public' },
-            { label: t('Private Channel'), value: 'private' },
+            { label: t('All'), value: 'all' },
+            { label: t('Public'), value: 'public' },
+            { label: t('Private'), value: 'private' },
           ],
           singleSelect: true,
         },

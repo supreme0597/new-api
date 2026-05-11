@@ -84,6 +84,19 @@ export type AuthSettings = {
   'passkey.allow_insecure_origin': boolean
   'passkey.user_verification': 'required' | 'preferred' | 'discouraged'
   'passkey.attachment_preference': '' | 'platform' | 'cross-platform'
+  'ldap.enabled': boolean
+  'ldap.url': string
+  'ldap.user': string
+  'ldap.password': string
+  'ldap.type': string
+  'ldap.sc': string
+  'ldap.ldaps': boolean
+  'ldap.skip_tls': boolean
+  'ldap.map': string
+  'ldap.test_user': string
+  'ldap.test_pass': string
+  'ldap.allowed_groups': string
+  'ldap.group_attribute': string
 }
 
 export type ContentSettings = {

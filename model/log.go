@@ -253,15 +253,19 @@ func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams)
 }
 
 type RecordTaskBillingLogParams struct {
-	UserId    int
-	LogType   int
-	Content   string
-	ChannelId int
-	ModelName string
-	Quota     int
-	TokenId   int
-	Group     string
-	Other     map[string]interface{}
+	UserId           int
+	LogType          int
+	Content          string
+	ChannelId        int
+	ModelName        string
+	Quota            int
+	TokenId          int
+	Group            string
+	Other            map[string]interface{}
+	PromptTokens     int
+	CompletionTokens int
+	UseTimeSeconds   int
+	IsStream         bool
 }
 
 func RecordTaskBillingLog(params RecordTaskBillingLogParams) {
@@ -269,25 +273,35 @@ func RecordTaskBillingLog(params RecordTaskBillingLogParams) {
 		return
 	}
 	username, _ := GetUsernameById(params.UserId, false)
+	// 虚拟用户ID -999 表示性能采样任务
+	if params.UserId == TestChannelOwnerUserId {
+		username = "system"
+	}
 	tokenName := ""
-	if params.TokenId > 0 {
+	if params.TokenId == -1 {
+		tokenName = "模型测试"
+	} else if params.TokenId > 0 {
 		if token, err := GetTokenById(params.TokenId); err == nil {
 			tokenName = token.Name
 		}
 	}
 	log := &Log{
-		UserId:    params.UserId,
-		Username:  username,
-		CreatedAt: common.GetTimestamp(),
-		Type:      params.LogType,
-		Content:   params.Content,
-		TokenName: tokenName,
-		ModelName: params.ModelName,
-		Quota:     params.Quota,
-		ChannelId: params.ChannelId,
-		TokenId:   params.TokenId,
-		Group:     params.Group,
-		Other:     common.MapToJsonStr(params.Other),
+		UserId:           params.UserId,
+		Username:         username,
+		CreatedAt:        common.GetTimestamp(),
+		Type:             params.LogType,
+		Content:          params.Content,
+		TokenName:        tokenName,
+		ModelName:        params.ModelName,
+		Quota:            params.Quota,
+		ChannelId:        params.ChannelId,
+		TokenId:          params.TokenId,
+		Group:            params.Group,
+		PromptTokens:     params.PromptTokens,
+		CompletionTokens: params.CompletionTokens,
+		UseTime:          params.UseTimeSeconds,
+		IsStream:         params.IsStream,
+		Other:            common.MapToJsonStr(params.Other),
 	}
 	err := LOG_DB.Create(log).Error
 	if err != nil {

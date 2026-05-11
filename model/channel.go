@@ -115,7 +115,9 @@ func ApplyChannelViewScope(query *gorm.DB, userId int, isAdmin bool) *gorm.DB {
 	if isAdmin {
 		return query
 	}
-	return query.Where("(owner_user_id IS NULL OR owner_user_id = ?) AND owner_user_id != ?", userId, TestChannelOwnerUserId)
+	// userId is always a positive integer, never equals TestChannelOwnerUserId (-999),
+	// so the OR condition naturally excludes test channels without needing an extra filter.
+	return query.Where("owner_user_id IS NULL OR owner_user_id = ?", userId)
 }
 
 func GetChannelOwnerUserIds() []int {

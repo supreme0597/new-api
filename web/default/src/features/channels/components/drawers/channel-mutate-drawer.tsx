@@ -393,7 +393,6 @@ export function ChannelMutateDrawer({
     'upstream_model_update_check_enabled'
   )
   const currentSettings = form.watch('settings')
-  const currentChannelType = form.watch('channel_type')
   const currentVendorId = form.watch('vendor_id')
   const {
     unlocked: doubaoApiEditUnlocked,
@@ -621,7 +620,6 @@ export function ChannelMutateDrawer({
     } else if (!isEditing) {
       form.reset({
         ...CHANNEL_FORM_DEFAULT_VALUES,
-        channel_type: isSuperAdmin ? 'public' : 'private',
       })
       setAdvancedSettingsOpen(false)
       initialModelsRef.current = []
@@ -1041,8 +1039,13 @@ export function ChannelMutateDrawer({
           // Update existing channel
           const currentUserId = useAuthStore.getState().auth.user?.id
           const payload = transformFormDataToUpdatePayload(data, currentRow.id)
-          // Override owner_user_id with resolved value using current user ID
-          payload.owner_user_id = resolveOwnerUserId(data.channel_type, currentUserId)
+          // Use channelType from form if available (for super admin), otherwise fall back to current logic
+          const channelTypeValue = data.channelType as 'public' | 'private' | 'test' | undefined
+          if (channelTypeValue) {
+            payload.owner_user_id = resolveOwnerUserId(channelTypeValue, currentUserId)
+          } else {
+            payload.owner_user_id = resolveOwnerUserId(isSuperAdmin ? 'public' : 'private', currentUserId)
+          }
           const payloadWithKeyMode =
             isMultiKeyChannel && data.key_mode
               ? {
@@ -1062,7 +1065,7 @@ export function ChannelMutateDrawer({
         } else {
           // Create new channel(s)
           const currentUserId = useAuthStore.getState().auth.user?.id
-          const channelType = isSuperAdmin ? data.channel_type : 'private'
+          const channelType = isSuperAdmin ? 'public' : 'private'
           const payload = transformFormDataToCreatePayload(data)
           // Override owner_user_id with resolved value using current user ID
           payload.channel.owner_user_id = resolveOwnerUserId(channelType, currentUserId)
@@ -1095,10 +1098,9 @@ export function ChannelMutateDrawer({
     (v: boolean) => {
       onOpenChange(v)
       if (!v) {
-        form.reset({
-          ...CHANNEL_FORM_DEFAULT_VALUES,
-          channel_type: isSuperAdmin ? 'public' : 'private',
-        })
+      form.reset({
+        ...CHANNEL_FORM_DEFAULT_VALUES,
+      })
         setAdvancedSettingsOpen(false)
       }
     },
@@ -1223,93 +1225,63 @@ export function ChannelMutateDrawer({
                   )}
                 />
 
-                <div className='grid gap-4 sm:grid-cols-2'>
-                  {isSuperAdmin ? (
-                    <FormField
-                      control={form.control}
-                      name='channel_type'
-                      render={({ field }) => {
-                        // Editing: private channels are read-only; public/test can toggle between each other
-                        // Creating: public/test selectable (super admin creates public by default)
-                        const isPrivateReadonly = isEditing && field.value === 'private'
-                        const editOptions =
-                          isEditing && !isPrivateReadonly
-                            ? [
-                                { value: 'public', label: t('Public Channel') },
-                                { value: 'test', label: t('Test Channel') },
-                              ]
-                            : isPrivateReadonly
-                              ? [{ value: 'private', label: t('Private Channel') }]
-                              : [
-                                  { value: 'public', label: t('Public Channel') },
-                                  { value: 'test', label: t('Test Channel') },
-                                ]
-                        return (
-                          <FormItem>
-                            <FormLabel>{t('Channel Type')}</FormLabel>
-                            {isPrivateReadonly ? (
-                              <FormControl>
-                                <Input
-                                  value={t('Private Channel')}
-                                  disabled
-                                  className='bg-muted'
-                                />
-                              </FormControl>
-                            ) : (
-                              <Select
-                                items={editOptions}
-                                onValueChange={field.onChange}
-                                value={field.value || 'public'}
-                              >
-                                <FormControl>
-                                  <SelectTrigger>
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                </FormControl>
-                                <SelectContent alignItemWithTrigger={false}>
-                                  {editOptions.map((opt) => (
-                                    <SelectItem key={opt.value} value={opt.value}>
-                                      {opt.label}
+                {/* Channel Ownership Type Selector - Only shown when editing */}
+                {isEditing && (
+                  <FormField
+                    control={form.control}
+                    name='channelType'
+                    render={({ field }) => {
+                      const currentChannelType = field.value as 'public' | 'private' | 'test'
+                      // Super admin: can switch between public/test (private is locked)
+                      // Non-super-admin: only shows private, locked
+                      const isPrivate = currentChannelType === 'private'
+                      const ownershipOptions = isSuperAdmin
+                        ? isPrivate
+                          ? [{ value: 'private', label: t('Private Channel') }]
+                          : [
+                              { value: 'public', label: t('Public Channel') },
+                              { value: 'test', label: t('Test Channel') },
+                            ]
+                        : [{ value: 'private', label: t('Private Channel') }]
+
+                      return (
+                        <FormItem>
+                          <FormLabel>{t('Channel Ownership')}</FormLabel>
+                          <FormControl>
+                            <Select
+                              value={currentChannelType}
+                              onValueChange={(value) => {
+                                if (isPrivate) return // Private channels cannot be switched
+                                field.onChange(value as 'public' | 'private' | 'test')
+                              }}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder={t('Select ownership type')} />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectGroup>
+                                  {ownershipOptions.map((option) => (
+                                    <SelectItem key={option.value} value={option.value}>
+                                      {option.label}
                                     </SelectItem>
                                   ))}
-                                </SelectContent>
-                              </Select>
-                            )}
-                            <FormDescription>
-                              {isPrivateReadonly
-                                ? t('Private channels cannot be changed to other types')
-                                : t(
-                                    'Public: shared by all users; Test: for testing purposes'
-                                  )}
-                            </FormDescription>
-                            <FormMessage />
-                          </FormItem>
-                        )
-                      }}
-                    />
-                  ) : (
-                    <FormField
-                      control={form.control}
-                      name='channel_type'
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>{t('Channel Type')}</FormLabel>
-                          <FormControl>
-                            <Input
-                              value={t('Private Channel')}
-                              disabled
-                              className='bg-muted'
-                            />
+                                </SelectGroup>
+                              </SelectContent>
+                            </Select>
                           </FormControl>
-                          <FormDescription>
-                            {t('Channels you create are private by default')}
+                          <FormDescription className='text-xs'>
+                            {isPrivate
+                              ? t('Private channels cannot be changed to other types')
+                              : isSuperAdmin
+                                ? t('Super admin can switch between public and test channels')
+                                : t('Only super admin can create public or test channels')}
                           </FormDescription>
                           <FormMessage />
                         </FormItem>
-                      )}
-                    />
-                  )}
-                </div>
+                      )
+                    }}
+                  />
+                )}
 
                 {currentType === 1 && (
                   <FormField

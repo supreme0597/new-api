@@ -138,6 +138,7 @@ func GetLeaderboardData(startTs int64, endTs int64, vendorId int) ([]Leaderboard
 		Select("models.model_name, models.vendor_id, vendors.name as vendor_name").
 		Joins("LEFT JOIN vendors ON vendors.id = models.vendor_id").
 		Where("models.model_name IN ?", modelNames).
+		Where("models.vendor_id > 0").
 		Scan(&mvRows).Error
 	if err != nil {
 		return nil, err
@@ -153,9 +154,14 @@ func GetLeaderboardData(startTs int64, endTs int64, vendorId int) ([]Leaderboard
 	for _, row := range aggRows {
 		mv, exists := modelVendorMap[row.ModelName]
 
+		// 跳过没有供应商的模型
+		if !exists {
+			continue
+		}
+
 		// 如果指定了 vendorId，只保留该 vendor 的模型
 		if vendorId > 0 {
-			if !exists || mv.VendorID != vendorId {
+			if mv.VendorID != vendorId {
 				continue
 			}
 		}
@@ -179,10 +185,7 @@ func GetLeaderboardData(startTs int64, endTs int64, vendorId int) ([]Leaderboard
 		ttftScore := calcTtftScore(int(avgTtftMs))
 		score := tpsScore*0.6 + ttftScore*0.4
 
-		vendorName := ""
-		if exists {
-			vendorName = mv.VendorName
-		}
+		vendorName := mv.VendorName
 
 		items = append(items, LeaderboardItem{
 			ModelName:   row.ModelName,

@@ -218,7 +218,6 @@ const EditChannelModal = (props) => {
     upstream_model_update_last_detected_models: [],
     upstream_model_update_ignored_models: '',
     // 模型性能排行榜相关
-    channel_type: 'public',
     owner_user_id: null,
     sampling_interval_seconds: '',
   };
@@ -981,14 +980,6 @@ const EditChannelModal = (props) => {
       }
 
       initialBaseUrlRef.current = data.base_url || '';
-      // 根据 owner_user_id 初始化 channel_type
-      if (data.owner_user_id === -999) {
-        data.channel_type = 'test';
-      } else if (data.owner_user_id != null && data.owner_user_id > 0) {
-        data.channel_type = 'private';
-      } else {
-        data.channel_type = 'public';
-      }
       setInputs(data);
       if (formApiRef.current) {
         formApiRef.current.setValues(data);
@@ -1884,16 +1875,11 @@ const EditChannelModal = (props) => {
 
     let res;
     localInputs.auto_ban = localInputs.auto_ban ? 1 : 0;
-    // 根据 channel_type 设置 owner_user_id
-    if (localInputs.channel_type === 'test') {
-      localInputs.owner_user_id = -999;
-    } else if (localInputs.channel_type === 'private') {
-      const user = JSON.parse(localStorage.getItem('user') || '{}');
+    // owner_user_id 由用户角色决定：超级管理员创建公共渠道，其他用户创建私有渠道
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    if (!isRoot()) {
       localInputs.owner_user_id = user.id || null;
-    } else {
-      localInputs.owner_user_id = null;
     }
-    delete localInputs.channel_type;
     // sampling_interval_seconds: 空字符串转为 null，否则转为数字
     if (localInputs.sampling_interval_seconds === '' || localInputs.sampling_interval_seconds === undefined) {
       localInputs.sampling_interval_seconds = null;
@@ -2810,38 +2796,6 @@ const EditChannelModal = (props) => {
                       <Text className='text-sm font-medium text-gray-500 mb-3 block'>
                         {t('性能采样设置')}
                       </Text>
-
-                      {isRoot() ? (
-                        <Form.Select
-                          field='channel_type'
-                          label={t('渠道类型')}
-                          optionList={
-                            inputs.channel_type === 'private'
-                              ? [{ label: t('私有渠道'), value: 'private' }]
-                              : [
-                                  { label: t('公共渠道'), value: 'public' },
-                                  { label: t('测试渠道'), value: 'test' },
-                                ]
-                          }
-                          disabled={inputs.channel_type === 'private'}
-                          onChange={(value) => {
-                            if (value === 'public') {
-                              handleInputChange('owner_user_id', null);
-                            } else if (value === 'test') {
-                              handleInputChange('owner_user_id', -999);
-                            }
-                          }}
-                        />
-                      ) : (
-                        <Form.Select
-                          field='channel_type'
-                          label={t('渠道类型')}
-                          optionList={[
-                            { label: t('私有渠道'), value: 'private' },
-                          ]}
-                          disabled
-                        />
-                      )}
 
                       <Form.Input
                         field='sampling_interval_seconds'

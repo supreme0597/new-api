@@ -1,0 +1,8 @@
+{
+  "translation.No Data Available": "暂无数据",
+  "translation.No performance data available. Configure test channels and refresh samples first.": "暂无性能数据，请先配置测试渠道并刷新采样。",
+  "translation.Owner": "归属人",
+  "translation.All Owners": "所有归属人",
+  "translation.Public: shared by all users; Test: for testing purposes": "公共：所有用户共享；测试：用于测试目的",
+  "translation.Channels you create are private by default": "你创建的渠道默认为私有渠道"
+}

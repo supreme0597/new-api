@@ -24,6 +24,7 @@ export async function login(payload: LoginPayload) {
     {
       username: payload.username,
       password: payload.password,
+      ldap_login: payload.ldap_login ?? false,
     }
   )
   return res.data

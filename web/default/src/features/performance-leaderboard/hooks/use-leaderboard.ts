@@ -18,6 +18,8 @@ export function useLeaderboard(params: {
         pageSize: params.pageSize,
       }),
     staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: true,
+    refetchOnMount: true,
   })
 }
 

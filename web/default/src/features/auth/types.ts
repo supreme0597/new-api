@@ -8,6 +8,7 @@ export interface LoginPayload {
   username: string
   password: string
   turnstile?: string
+  ldap_login?: boolean
 }
 
 export interface TwoFAPayload {
@@ -109,6 +110,7 @@ export interface SystemStatus {
     oauth_register_enabled?: boolean
     register_enabled?: boolean
     password_register_enabled?: boolean
+    ldap_enabled?: boolean
     custom_oauth_providers?: CustomOAuthProviderInfo[]
     [key: string]: unknown
   }
@@ -151,12 +153,10 @@ export interface SystemStatus {
   oauth_register_enabled?: boolean
   register_enabled?: boolean
   password_register_enabled?: boolean
+  ldap_enabled?: boolean
   custom_oauth_providers?: CustomOAuthProviderInfo[]
-  [key: string]: unknown
 }
 
-// ============================================================================
-// OAuth
 // ============================================================================
 
 export interface OAuthProvider {

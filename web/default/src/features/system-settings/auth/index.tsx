@@ -47,6 +47,19 @@ const defaultAuthSettings: AuthSettings = {
   'passkey.allow_insecure_origin': false,
   'passkey.user_verification': 'preferred',
   'passkey.attachment_preference': '',
+  'ldap.enabled': false,
+  'ldap.url': '',
+  'ldap.user': '',
+  'ldap.password': '',
+  'ldap.type': '(employeeID=%s)',
+  'ldap.sc': '',
+  'ldap.ldaps': false,
+  'ldap.skip_tls': false,
+  'ldap.map': '{"real_name":"cn","email":"mail","department":"department"}',
+  'ldap.test_user': '',
+  'ldap.test_pass': '',
+  'ldap.allowed_groups': '',
+  'ldap.group_attribute': 'memberOf',
 }
 
 export function AuthSettings() {

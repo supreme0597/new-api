@@ -34,6 +34,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { PasswordInput } from '@/components/password-input'
 import { Turnstile } from '@/components/turnstile'
+import { Checkbox } from '@/components/ui/checkbox'
 import { login, wechatLoginByCode } from '@/features/auth/api'
 import { LegalConsent } from '@/features/auth/components/legal-consent'
 import { OAuthProviders } from '@/features/auth/components/oauth-providers'
@@ -56,12 +57,16 @@ export function UserAuthForm({
   const [isPasskeyLoading, setIsPasskeyLoading] = useState(false)
   const [isWeChatDialogOpen, setIsWeChatDialogOpen] = useState(false)
   const [isWeChatSubmitting, setIsWeChatSubmitting] = useState(false)
+  const [ldapLogin, setLdapLogin] = useState(false)
   const legalConsentErrorMessage = t('Please agree to the legal terms first')
   const loginFailedMessage = t('Login failed')
 
   const { status } = useStatus()
   const passkeyLoginEnabled = Boolean(
     status?.passkey_login ?? status?.data?.passkey_login
+  )
+  const ldapEnabled = Boolean(
+    status?.ldap_enabled ?? status?.data?.ldap_enabled
   )
   const {
     isTurnstileEnabled,
@@ -131,6 +136,7 @@ export function UserAuthForm({
         username: data.username,
         password: data.password,
         turnstile: turnstileToken,
+        ldap_login: ldapLogin,
       })
 
       if (res.success) {
@@ -302,6 +308,23 @@ export function UserAuthForm({
             </FormItem>
           )}
         />
+
+        {/* LDAP Login Checkbox */}
+        {ldapEnabled && (
+          <div className='flex items-center space-x-2'>
+            <Checkbox
+              id='ldap-login'
+              checked={ldapLogin}
+              onCheckedChange={(checked) => setLdapLogin(checked === true)}
+            />
+            <Label
+              htmlFor='ldap-login'
+              className='text-sm font-normal leading-none'
+            >
+              {t('Sign in with LDAP authentication')}
+            </Label>
+          </div>
+        )}
 
         {/* Submit Button */}
         <Button

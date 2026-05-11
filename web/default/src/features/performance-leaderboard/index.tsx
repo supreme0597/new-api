@@ -1,14 +1,12 @@
-import { useState } from 'react'
-import { useNavigate, useSearch } from '@tanstack/react-router'
+import { Link, useNavigate, useSearch } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
-import { Trophy, Clock, Zap, CheckCircle, BarChart3, HelpCircle } from 'lucide-react'
+import { Clock, Zap, CheckCircle, BarChart3, ExternalLink } from 'lucide-react'
 import { PublicLayout } from '@/components/layout'
 import { PageTransition } from '@/components/page-transition'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   Tooltip,
   TooltipContent,
-  TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import {
@@ -22,7 +20,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { useLeaderboard, useLeaderboardVendors } from './hooks/use-leaderboard'
 import type { LeaderboardTimeRange, LeaderboardItem } from './types'
-import { ScoreLegend, MetricTooltip } from './metrics-legend'
+import { MetricTooltip } from './metrics-legend'
 
 const TIME_RANGES: { value: LeaderboardTimeRange; labelKey: string }[] = [
   { value: 24, labelKey: '24h' },
@@ -57,7 +55,7 @@ export function PerformanceLeaderboard() {
       to: '/performance-leaderboard',
       search: (prev: Record<string, unknown>) => ({
         ...prev,
-        vendor_id: value === '__all__' ? undefined : Number(value),
+        vendor_id: value === '__all__' ? undefined : value,
         page: 1,
       }),
     })
@@ -119,6 +117,12 @@ export function PerformanceLeaderboard() {
                 )}
               </p>
             </div>
+
+            {/* Scoring Rules Card */}
+            <ScoringRulesCard
+              tpsBenchmark={data?.tpsBenchmark ?? 100}
+              ttftBenchmark={data?.ttftBenchmark ?? 1000}
+            />
 
             {/* Filters */}
             <div className='flex flex-wrap items-center gap-3'>
@@ -231,9 +235,6 @@ function LeaderboardTable({
 
   return (
     <div className='space-y-3'>
-      <div className='flex items-center justify-end'>
-        <ScoreLegend />
-      </div>
       <div className='bg-card overflow-hidden rounded-xl border'>
         <div className='overflow-x-auto'>
           <table className='w-full text-sm'>
@@ -294,7 +295,17 @@ function LeaderboardTable({
                 <td className='px-4 py-3'>
                   <RankBadge rank={item.rank} />
                 </td>
-                <td className='px-4 py-3 font-medium'>{item.model_name}</td>
+                <td className='px-4 py-3 font-medium'>
+                  <Link
+                    to='/pricing/$modelId'
+                    params={{ modelId: item.model_name }}
+                    search={{ tab: 'performance' }}
+                    className='inline-flex items-center gap-1 hover:text-primary hover:underline'
+                  >
+                    {item.model_name}
+                    <ExternalLink className='h-3 w-3 opacity-50' />
+                  </Link>
+                </td>
                 <td className='text-muted-foreground px-4 py-3'>
                   {item.vendor_name}
                 </td>
@@ -315,7 +326,7 @@ function LeaderboardTable({
                   />
                 </td>
                 <td className='px-4 py-3 text-right font-mono'>
-                  {(item.success_rate * 100).toFixed(1)}%
+                  {item.success_rate.toFixed(1)}%
                 </td>
                 <td className='px-4 py-3 text-right font-mono'>
                   <MetricValue
@@ -407,6 +418,97 @@ function MetricValue({
     <span className={`font-semibold ${getColorClass()}`}>
       {format(value)}
     </span>
+  )
+}
+
+function ScoringRulesCard({
+  tpsBenchmark,
+  ttftBenchmark,
+}: {
+  tpsBenchmark: number
+  ttftBenchmark: number
+}) {
+  const { t } = useTranslation()
+
+  const scoreLevels = [
+    { min: 80, color: 'bg-emerald-500', label: t('Excellent (≥80)') },
+    { min: 60, color: 'bg-blue-500', label: t('Good (60-79)') },
+    { min: 40, color: 'bg-orange-500', label: t('Average (40-59)') },
+    { min: 0, color: 'bg-red-500', label: t('Poor (<40)') },
+  ]
+
+  const tpsLevels = [
+    { threshold: `≥${tpsBenchmark}`, color: 'bg-emerald-500', label: t('Excellent') },
+    { threshold: `≥${Math.round(tpsBenchmark * 0.7)}`, color: 'bg-blue-500', label: t('Good') },
+    { threshold: `≥${Math.round(tpsBenchmark * 0.4)}`, color: 'bg-orange-500', label: t('Average') },
+    { threshold: `<${Math.round(tpsBenchmark * 0.4)}`, color: 'bg-red-500', label: t('Poor') },
+  ]
+
+  const ttftLevels = [
+    { threshold: `≤${ttftBenchmark}ms`, color: 'bg-emerald-500', label: t('Excellent') },
+    { threshold: `≤${Math.round(ttftBenchmark * 1.5)}ms`, color: 'bg-blue-500', label: t('Good') },
+    { threshold: `≤${Math.round(ttftBenchmark * 3)}ms`, color: 'bg-orange-500', label: t('Average') },
+    { threshold: `>${Math.round(ttftBenchmark * 3)}ms`, color: 'bg-red-500', label: t('Poor') },
+  ]
+
+  return (
+    <div className='bg-card/60 rounded-xl border p-4 shadow-sm'>
+      <div className='mb-3 flex items-center gap-2'>
+        <BarChart3 className='text-muted-foreground/70 h-4 w-4' />
+        <h3 className='text-sm font-semibold'>{t('Scoring Rules')}</h3>
+        <span className='text-muted-foreground/60 text-xs'>
+          {t('Data from live traffic sampling')}
+        </span>
+      </div>
+      <div className='grid grid-cols-1 gap-4 sm:grid-cols-3'>
+        {/* Score */}
+        <div className='space-y-2'>
+          <div className='text-muted-foreground text-xs font-medium'>
+            {t('Score')} (0-100)
+          </div>
+          <div className='space-y-1.5'>
+            {scoreLevels.map((level) => (
+              <div key={level.min} className='flex items-center gap-2 text-xs'>
+                <span className={`inline-block h-2.5 w-2.5 rounded-full ${level.color}`} />
+                <span className='text-muted-foreground'>{level.label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        {/* TPS */}
+        <div className='space-y-2'>
+          <div className='text-muted-foreground text-xs font-medium'>
+            TPS ({t('Tokens Per Second')}) — {t('Higher is better')}
+          </div>
+          <div className='space-y-1.5'>
+            {tpsLevels.map((level, idx) => (
+              <div key={idx} className='flex items-center gap-2 text-xs'>
+                <span className={`inline-block h-2.5 w-2.5 rounded-full ${level.color}`} />
+                <span className='text-muted-foreground'>
+                  {level.threshold} — {level.label}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+        {/* TTFT */}
+        <div className='space-y-2'>
+          <div className='text-muted-foreground text-xs font-medium'>
+            TTFT ({t('Time To First Token')}) — {t('Lower is better')}
+          </div>
+          <div className='space-y-1.5'>
+            {ttftLevels.map((level, idx) => (
+              <div key={idx} className='flex items-center gap-2 text-xs'>
+                <span className={`inline-block h-2.5 w-2.5 rounded-full ${level.color}`} />
+                <span className='text-muted-foreground'>
+                  {level.threshold} — {level.label}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }
 

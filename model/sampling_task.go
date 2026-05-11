@@ -38,11 +38,13 @@ type LastSamplingResult struct {
 
 // SamplingResult 采样结果详情
 type SamplingResult struct {
-	Tps          float64
-	TtftMs       int
-	TotalTokens  int
-	LatencyMs    int64 // 总延迟（请求开始到响应结束）
-	GenerationMs int64 // 生成时间（首字节到响应结束）
+	Tps              float64
+	TtftMs           int
+	TotalTokens      int
+	LatencyMs        int64 // 总延迟（请求开始到响应结束）
+	GenerationMs     int64 // 生成时间（首字节到响应结束）
+	PromptTokens     int   // 输入token数（prompt）
+	CompletionTokens int   // 输出token数（completion）
 }
 
 // ChannelSamplingStatus 单个渠道的采样状态
@@ -343,6 +345,23 @@ func RunSamplingTask() error {
 
 				common.SysLog(fmt.Sprintf("[Sampling] 采样成功: 渠道=%s, 模型=%s, TPS=%.1f, TTFT=%dms", channelName, modelName, result.Tps, result.TtftMs))
 
+				// 记录到使用日志
+				RecordTaskBillingLog(RecordTaskBillingLogParams{
+					UserId:           TestChannelOwnerUserId,
+					LogType:          LogTypeConsume,
+					Content:          fmt.Sprintf("性能采样: %s@%s, TPS=%.1f, TTFT=%dms", modelName, channelName, result.Tps, result.TtftMs),
+					ChannelId:        ch.Id,
+					ModelName:        modelName,
+					Quota:            0,
+					TokenId:          -1,
+					Group:            ch.Group,
+					PromptTokens:     result.PromptTokens,
+					CompletionTokens: result.CompletionTokens,
+					UseTimeSeconds:   int(result.LatencyMs / 1000),
+					IsStream:         true,
+					Other:            map[string]interface{}{"sampling": true, "tps": result.Tps, "ttft": result.TtftMs},
+				})
+
 				if err := RecordSamplingMetric(modelName, ch.Group, result.LatencyMs, int64(result.TtftMs), int64(result.TotalTokens), result.GenerationMs); err != nil {
 					common.SysError(fmt.Sprintf("[Sampling] 记录性能数据失败: 渠道=%s, 模型=%s, 错误=%v", channelName, modelName, err))
 				}
@@ -488,13 +507,21 @@ func sampleModelPerformance(channel *Channel, modelName string, config *Sampling
 		tps = float64(totalTokens) / elapsed
 	}
 
-	common.SysLog(fmt.Sprintf("%s 采样完成: elapsed=%.2fs, tokens=%d, TPS=%.1f, TTFT=%dms", logPrefix, elapsed, totalTokens, tps, ttftMs))
+	// 估算 prompt token 数（类似 countTokensInChunk 的估算方法）
+	promptTokens := len(config.Prompt) / 4
+	if len(config.Prompt)%4 > 0 {
+		promptTokens++
+	}
+
+	common.SysLog(fmt.Sprintf("%s 采样完成: elapsed=%.2fs, promptTokens=%d, completionTokens=%d, TPS=%.1f, TTFT=%dms", logPrefix, elapsed, promptTokens, totalTokens, tps, ttftMs))
 	return &SamplingResult{
-		Tps:          tps,
-		TtftMs:       ttftMs,
-		TotalTokens:  totalTokens,
-		LatencyMs:    latencyMs,
-		GenerationMs: generationMs,
+		Tps:              tps,
+		TtftMs:           ttftMs,
+		TotalTokens:      totalTokens,
+		LatencyMs:        latencyMs,
+		GenerationMs:     generationMs,
+		PromptTokens:     promptTokens,
+		CompletionTokens: totalTokens,
 	}, nil
 }
 

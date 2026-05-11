@@ -1,5 +1,25 @@
 {
+  "Adjust TPS and TTFT benchmark values. Higher benchmarks make it harder to achieve high scores. Changes take effect immediately on all historical data rankings.": "Adjust TPS and TTFT benchmark values. Higher benchmarks make it harder to achieve high scores. Changes take effect immediately on all historical data rankings.",
+  "Comma-separated list of allowed LDAP groups. Leave empty to allow all groups.": "Comma-separated list of allowed LDAP groups. Leave empty to allow all groups.",
+  "JSON format, defines LDAP attribute to system field mapping": "JSON format, defines LDAP attribute to system field mapping",
+  "Password for the admin account": "Password for the admin account",
+  "Password for the test user": "Password for the test user",
+  "Sign in with LDAP authentication": "Sign in with LDAP authentication",
+  "Allow users to authenticate via LDAP/Active Directory": "Allow users to authenticate via LDAP/Active Directory",
+  "Associate this channel with a vendor": "Associate this channel with a vendor",
   "Base input and output token prices for this tier.": "Base input and output token prices for this tier.",
+  "Private channels cannot be changed to other types": "Private channels cannot be changed to other types",
+  "Super admin can switch between public and test channels": "Super admin can switch between public and test channels",
+  "Only super admin can create public or test channels": "Only super admin can create public or test channels",
+  "Configure performance sampling benchmarks, prompts, and scheduled sampling": "Configure performance sampling benchmarks, prompts, and scheduled sampling",
+  "Configure the prompt and max tokens for performance sampling. The system will use this configuration to sample all models on test channels.": "Configure the prompt and max tokens for performance sampling. The system will use this configuration to sample all models on test channels.",
   "Each tier supports up to 2 conditions. The last tier without conditions is the fallback.": "Each tier supports up to 2 conditions. The last tier without conditions is the fallback.",
-  "Set separate prices for cache reads and writes.": "Set separate prices for cache reads and writes."
+  "This view shows public channels and your private channels.": "This view shows public channels and your private channels.",
+  "Public: shared by all users; Private: only visible to you; Test: for testing purposes": "Public: shared by all users; Private: only visible to you; Test: for testing purposes",
+  "Time To First Token": "Time To First Token",
+  "Set separate prices for cache reads and writes.": "Set separate prices for cache reads and writes.",
+  "Set the time window and interval for automatic sampling. Set interval to 0 to disable scheduled sampling. Admins can also click \"Start Sampling\" to trigger manually.": "Set the time window and interval for automatic sampling. Set interval to 0 to disable scheduled sampling. Admins can also click \"Start Sampling\" to trigger manually.",
+  "No performance data found for the selected filters.": "No performance data found for the selected filters.",
+  "Real-time model performance rankings based on TPS, TTFT, and success rate from live traffic sampling.": "Real-time model performance rankings based on TPS, TTFT, and success rate from live traffic sampling.",
+  "Unable to load leaderboard": "Unable to load leaderboard"
 }

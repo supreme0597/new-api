@@ -3,6 +3,7 @@ import { createSectionRegistry } from '../utils/section-registry'
 import { BasicAuthSection } from './basic-auth-section'
 import { BotProtectionSection } from './bot-protection-section'
 import { CustomOAuthSection } from './custom-oauth/custom-oauth-section'
+import { LDAPSection } from './ldap-section'
 import { OAuthSection } from './oauth-section'
 import { PasskeySection } from './passkey-section'
 
@@ -109,6 +110,30 @@ const AUTH_SECTIONS = [
     titleKey: 'Custom OAuth',
     descriptionKey: 'Configure custom OAuth providers for user authentication',
     build: () => <CustomOAuthSection />,
+  },
+  {
+    id: 'ldap',
+    titleKey: 'LDAP Authentication',
+    descriptionKey: 'Configure LDAP/Active Directory authentication for enterprise users',
+    build: (settings: AuthSettings) => (
+      <LDAPSection
+        defaultValues={{
+          'ldap.enabled': settings['ldap.enabled'],
+          'ldap.url': settings['ldap.url'],
+          'ldap.user': settings['ldap.user'],
+          'ldap.password': settings['ldap.password'],
+          'ldap.type': settings['ldap.type'],
+          'ldap.sc': settings['ldap.sc'],
+          'ldap.ldaps': settings['ldap.ldaps'],
+          'ldap.skip_tls': settings['ldap.skip_tls'],
+          'ldap.map': settings['ldap.map'],
+          'ldap.test_user': settings['ldap.test_user'],
+          'ldap.test_pass': settings['ldap.test_pass'],
+          'ldap.allowed_groups': settings['ldap.allowed_groups'],
+          'ldap.group_attribute': settings['ldap.group_attribute'],
+        }}
+      />
+    ),
   },
 ] as const
 
