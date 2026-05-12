@@ -1,6 +1,6 @@
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
-import { Clock, Zap, CheckCircle, BarChart3, ExternalLink, ArrowUp, ArrowDown } from 'lucide-react'
+import { Clock, Zap, CheckCircle, BarChart3, ExternalLink, ArrowUp, ArrowDown, ChevronsUpDown, ChevronRight, FileText } from 'lucide-react'
 import { PublicLayout } from '@/components/layout'
 import { PageTransition } from '@/components/page-transition'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -379,7 +379,7 @@ function LeaderboardTable({
                 <button
                   type='button'
                   onClick={() => handleSort('tps')}
-                  className='inline-flex items-center justify-end gap-1 hover:text-foreground transition-colors'
+                  className='inline-flex items-center justify-end gap-1 cursor-pointer hover:text-foreground transition-colors'
                 >
                   <MetricTooltip metric='tps'>
                     <Zap className='h-3.5 w-3.5' />
@@ -388,7 +388,9 @@ function LeaderboardTable({
                   <span className='inline-flex w-3'>
                     {sortBy === 'tps' ? (
                       sortOrder === 'desc' ? <ArrowDown className='h-3 w-3' /> : <ArrowUp className='h-3 w-3' />
-                    ) : null}
+                    ) : (
+                      <ChevronsUpDown className='h-3 w-3 opacity-30' />
+                    )}
                   </span>
                 </button>
               </th>
@@ -396,7 +398,7 @@ function LeaderboardTable({
                 <button
                   type='button'
                   onClick={() => handleSort('ttft')}
-                  className='inline-flex items-center justify-end gap-1 hover:text-foreground transition-colors'
+                  className='inline-flex items-center justify-end gap-1 cursor-pointer hover:text-foreground transition-colors'
                 >
                   <MetricTooltip metric='ttft'>
                     <Clock className='h-3.5 w-3.5' />
@@ -405,7 +407,9 @@ function LeaderboardTable({
                   <span className='inline-flex w-3'>
                     {sortBy === 'ttft' ? (
                       sortOrder === 'desc' ? <ArrowDown className='h-3 w-3' /> : <ArrowUp className='h-3 w-3' />
-                    ) : null}
+                    ) : (
+                      <ChevronsUpDown className='h-3 w-3 opacity-30' />
+                    )}
                   </span>
                 </button>
               </th>
@@ -422,7 +426,7 @@ function LeaderboardTable({
                 <button
                   type='button'
                   onClick={() => handleSort('score')}
-                  className='inline-flex items-center justify-end gap-1 hover:text-foreground transition-colors'
+                  className='inline-flex items-center justify-end gap-1 cursor-pointer hover:text-foreground transition-colors'
                 >
                   <MetricTooltip metric='score'>
                     <BarChart3 className='h-3.5 w-3.5' />
@@ -431,7 +435,9 @@ function LeaderboardTable({
                   <span className='inline-flex w-3'>
                     {sortBy === 'score' ? (
                       sortOrder === 'desc' ? <ArrowDown className='h-3 w-3' /> : <ArrowUp className='h-3 w-3' />
-                    ) : null}
+                    ) : (
+                      <ChevronsUpDown className='h-3 w-3 opacity-30' />
+                    )}
                   </span>
                 </button>
               </th>
@@ -449,10 +455,11 @@ function LeaderboardTable({
                 <td className='px-4 py-3 font-medium'>
                   <button
                     type='button'
-                    className='inline-flex items-center gap-1 font-medium hover:text-primary hover:underline'
+                    className='inline-flex items-center gap-1 cursor-pointer font-medium hover:underline'
                     onClick={() => onModelClick?.(item.model_name)}
                   >
                     {item.model_name}
+                    <ChevronRight className='h-3.5 w-3.5 text-muted-foreground/50' />
                   </button>
                 </td>
                 <td className='text-muted-foreground px-4 py-3'>
@@ -474,14 +481,15 @@ function LeaderboardTable({
                     format={(v) => `${v.toFixed(0)}ms`}
                   />
                 </td>
-                <td 
-                  className='px-4 py-3 text-right font-mono cursor-pointer hover:bg-muted/40 transition-colors group'
+                <td
+                  className='px-4 py-3 text-right font-mono cursor-pointer hover:bg-muted/40 transition-colors'
                   onClick={() => onRowClick?.(item.model_name)}
                 >
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span className='group-hover:text-primary'>
+                      <span className='inline-flex items-center gap-1'>
                         {item.success_rate.toFixed(1)}%
+                        <FileText className='h-3 w-3 text-muted-foreground/50' />
                       </span>
                     </TooltipTrigger>
                     <TooltipContent>
