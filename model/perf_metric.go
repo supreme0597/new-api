@@ -234,7 +234,10 @@ func GetLeaderboardData(startTs int64, endTs int64, vendorId int, sortBy string,
 
 		// 计算评分：TPS 40% + TTFT 30% + Success Rate 30%
 		tpsScore := calcTpsScore(avgTps)
-		ttftScore := calcTtftScore(int(avgTtftMs))
+		ttftScore := 0.0
+		if row.TtftCount > 0 {
+			ttftScore = calcTtftScore(int(avgTtftMs))
+		}
 		successRateScore := successRate // successRate 已经是 0-100 的百分制
 		score := tpsScore*0.4 + ttftScore*0.3 + successRateScore*0.3
 
