@@ -1,6 +1,6 @@
 import { Link, useNavigate, useSearch } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
-import { Clock, Zap, CheckCircle, BarChart3, ExternalLink } from 'lucide-react'
+import { Clock, Zap, CheckCircle, BarChart3, ExternalLink, ArrowUp, ArrowDown } from 'lucide-react'
 import { PublicLayout } from '@/components/layout'
 import { PageTransition } from '@/components/page-transition'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -18,9 +18,14 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
-import { useLeaderboard, useLeaderboardVendors } from './hooks/use-leaderboard'
+import { useLeaderboard, useLeaderboardVendors, useModelPerformanceDetail } from './hooks/use-leaderboard'
 import type { LeaderboardTimeRange, LeaderboardItem } from './types'
 import { MetricTooltip } from './metrics-legend'
+import { ModelDetailDialog } from './components/model-detail-dialog'
+import { useState, useMemo } from 'react'
+
+export type SortBy = 'score' | 'tps' | 'ttft'
+export type SortOrder = 'asc' | 'desc'
 
 const TIME_RANGES: { value: LeaderboardTimeRange; labelKey: string }[] = [
   { value: 24, labelKey: '24h' },
@@ -38,12 +43,16 @@ export function PerformanceLeaderboard() {
   const vendorId = search.vendor_id ? Number(search.vendor_id) : undefined
   const hours = (search.hours as LeaderboardTimeRange) || 24
   const page = search.page || 1
+  const sortBy = (search.sort_by as SortBy) || 'score'
+  const sortOrder = (search.sort_order as SortOrder) || 'desc'
 
   const leaderboardQuery = useLeaderboard({
     vendorId,
     hours,
     page,
     pageSize: PAGE_SIZE,
+    sortBy,
+    sortOrder,
   })
   const vendorsQuery = useLeaderboardVendors()
 
@@ -82,7 +91,37 @@ export function PerformanceLeaderboard() {
     })
   }
 
+  const handleSortChange = (newSortBy: SortBy, newSortOrder: SortOrder) => {
+    navigate({
+      to: '/performance-leaderboard',
+      search: (prev: Record<string, unknown>) => ({
+        ...prev,
+        sort_by: newSortBy,
+        sort_order: newSortOrder,
+      }),
+    })
+  }
+
   const totalPages = data ? Math.ceil(data.total / PAGE_SIZE) : 0
+
+  // Detail dialog state
+  const [detailDialogOpen, setDetailDialogOpen] = useState(false)
+  const [selectedModel, setSelectedModel] = useState<string | null>(null)
+
+  const detailQuery = useModelPerformanceDetail(
+    selectedModel,
+    hours
+  )
+
+  const handleOpenDetail = (modelName: string) => {
+    setSelectedModel(modelName)
+    setDetailDialogOpen(true)
+  }
+
+  const handleCloseDetail = () => {
+    setDetailDialogOpen(false)
+    setSelectedModel(null)
+  }
 
   return (
     <PublicLayout showMainContainer={false}>
@@ -193,7 +232,15 @@ export function PerformanceLeaderboard() {
             />
           ) : (
             <>
-              <LeaderboardTable items={data.list} tpsBenchmark={data.tpsBenchmark} ttftBenchmark={data.ttftBenchmark} />
+              <LeaderboardTable 
+                items={data.list} 
+                tpsBenchmark={data.tpsBenchmark} 
+                ttftBenchmark={data.ttftBenchmark} 
+                onRowClick={handleOpenDetail}
+                sortBy={sortBy}
+                sortOrder={sortOrder}
+                onSortChange={handleSortChange}
+              />
               {totalPages > 1 && (
                 <Pagination
                   page={page}
@@ -203,6 +250,16 @@ export function PerformanceLeaderboard() {
               )}
             </>
           )}
+
+          {/* Model Detail Dialog */}
+          <ModelDetailDialog
+            open={detailDialogOpen}
+            onOpenChange={handleCloseDetail}
+            modelName={selectedModel || ''}
+            data={detailQuery.data?.data}
+            isLoading={detailQuery.isLoading}
+            hours={hours}
+          />
         </PageTransition>
       </div>
     </PublicLayout>
@@ -213,12 +270,34 @@ function LeaderboardTable({
   items,
   tpsBenchmark,
   ttftBenchmark,
+  onRowClick,
+  sortBy = 'score',
+  sortOrder = 'desc',
+  onSortChange,
 }: {
   items: LeaderboardItem[]
   tpsBenchmark: number
   ttftBenchmark: number
+  onRowClick?: (modelName: string) => void
+  sortBy?: SortBy
+  sortOrder?: SortOrder
+  onSortChange?: (sortBy: SortBy, sortOrder: SortOrder) => void
 }) {
   const { t } = useTranslation()
+
+  // Backend handles sorting; just re-assign ranks for display
+  const sortedItems = useMemo(() => {
+    return items.map((item, i) => ({ ...item, rank: i + 1 }))
+  }, [items])
+
+  const handleSort = (column: SortBy) => {
+    if (!onSortChange) return
+    if (sortBy === column) {
+      onSortChange(column, sortOrder === 'desc' ? 'asc' : 'desc')
+    } else {
+      onSortChange(column, 'desc')
+    }
+  }
 
   if (items.length === 0) {
     return (
@@ -250,44 +329,69 @@ function LeaderboardTable({
                 {t('Vendor')}
               </th>
               <th className='px-4 py-3 text-right font-medium'>
-                <div className='flex items-center justify-end gap-1'>
+                <button
+                  type='button'
+                  onClick={() => handleSort('tps')}
+                  className='inline-flex items-center justify-end gap-1 hover:text-foreground transition-colors'
+                >
                   <MetricTooltip metric='tps'>
                     <Zap className='h-3.5 w-3.5' />
                     <span>{t('Avg TPS')}</span>
                   </MetricTooltip>
-                </div>
+                  <span className='inline-flex w-3'>
+                    {sortBy === 'tps' ? (
+                      sortOrder === 'desc' ? <ArrowDown className='h-3 w-3' /> : <ArrowUp className='h-3 w-3' />
+                    ) : null}
+                  </span>
+                </button>
               </th>
               <th className='px-4 py-3 text-right font-medium'>
-                <div className='flex items-center justify-end gap-1'>
+                <button
+                  type='button'
+                  onClick={() => handleSort('ttft')}
+                  className='inline-flex items-center justify-end gap-1 hover:text-foreground transition-colors'
+                >
                   <MetricTooltip metric='ttft'>
                     <Clock className='h-3.5 w-3.5' />
                     <span>{t('Avg TTFT')}</span>
                   </MetricTooltip>
-                </div>
+                  <span className='inline-flex w-3'>
+                    {sortBy === 'ttft' ? (
+                      sortOrder === 'desc' ? <ArrowDown className='h-3 w-3' /> : <ArrowUp className='h-3 w-3' />
+                    ) : null}
+                  </span>
+                </button>
               </th>
               <th className='px-4 py-3 text-right font-medium'>
-                <div className='flex items-center justify-end gap-1'>
+                <div className='inline-flex items-center justify-end gap-1'>
                   <MetricTooltip metric='success_rate'>
                     <CheckCircle className='h-3.5 w-3.5' />
                     <span>{t('Success Rate')}</span>
                   </MetricTooltip>
+                  <span className='inline-flex w-3' />
                 </div>
               </th>
               <th className='px-4 py-3 text-right font-medium'>
-                <div className='flex items-center justify-end gap-1'>
+                <button
+                  type='button'
+                  onClick={() => handleSort('score')}
+                  className='inline-flex items-center justify-end gap-1 hover:text-foreground transition-colors'
+                >
                   <MetricTooltip metric='score'>
                     <BarChart3 className='h-3.5 w-3.5' />
                     <span>{t('Score')}</span>
                   </MetricTooltip>
-                </div>
-              </th>
-              <th className='px-4 py-3 text-right font-medium'>
-                {t('Samples')}
+                  <span className='inline-flex w-3'>
+                    {sortBy === 'score' ? (
+                      sortOrder === 'desc' ? <ArrowDown className='h-3 w-3' /> : <ArrowUp className='h-3 w-3' />
+                    ) : null}
+                  </span>
+                </button>
               </th>
             </tr>
           </thead>
           <tbody>
-            {items.map((item) => (
+            {sortedItems.map((item) => (
               <tr
                 key={`${item.model_name}-${item.vendor_name}`}
                 className='border-b last:border-0 hover:bg-muted/20 transition-colors'
@@ -325,8 +429,20 @@ function LeaderboardTable({
                     format={(v) => `${v.toFixed(0)}ms`}
                   />
                 </td>
-                <td className='px-4 py-3 text-right font-mono'>
-                  {item.success_rate.toFixed(1)}%
+                <td 
+                  className='px-4 py-3 text-right font-mono cursor-pointer hover:bg-muted/40 transition-colors group'
+                  onClick={() => onRowClick?.(item.model_name)}
+                >
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className='group-hover:text-primary'>
+                        {item.success_rate.toFixed(1)}%
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>{t('Click to view call details')}</p>
+                    </TooltipContent>
+                  </Tooltip>
                 </td>
                 <td className='px-4 py-3 text-right font-mono'>
                   <MetricValue
@@ -336,9 +452,6 @@ function LeaderboardTable({
                     isScore
                     format={(v) => v.toFixed(2)}
                   />
-                </td>
-                <td className='text-muted-foreground px-4 py-3 text-right'>
-                  {item.sample_count.toLocaleString()}
                 </td>
               </tr>
             ))}
@@ -451,6 +564,13 @@ function ScoringRulesCard({
     { threshold: `>${Math.round(ttftBenchmark * 3)}ms`, color: 'bg-red-500', label: t('Poor') },
   ]
 
+  const successRateLevels = [
+    { threshold: '≥95%', color: 'bg-emerald-500', label: t('Excellent') },
+    { threshold: '≥80%', color: 'bg-blue-500', label: t('Good') },
+    { threshold: '≥50%', color: 'bg-orange-500', label: t('Average') },
+    { threshold: '<50%', color: 'bg-red-500', label: t('Poor') },
+  ]
+
   return (
     <div className='bg-card/60 rounded-xl border p-4 shadow-sm'>
       <div className='mb-3 flex items-center gap-2'>
@@ -460,11 +580,14 @@ function ScoringRulesCard({
           {t('Data from live traffic sampling')}
         </span>
       </div>
-      <div className='grid grid-cols-1 gap-4 sm:grid-cols-3'>
+      <div className='grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4'>
         {/* Score */}
         <div className='space-y-2'>
           <div className='text-muted-foreground text-xs font-medium'>
             {t('Score')} (0-100)
+          </div>
+          <div className='text-muted-foreground/70 text-xs'>
+            {t('TPS × 40% + TTFT × 30% + Success Rate × 30%')}
           </div>
           <div className='space-y-1.5'>
             {scoreLevels.map((level) => (
@@ -498,6 +621,22 @@ function ScoringRulesCard({
           </div>
           <div className='space-y-1.5'>
             {ttftLevels.map((level, idx) => (
+              <div key={idx} className='flex items-center gap-2 text-xs'>
+                <span className={`inline-block h-2.5 w-2.5 rounded-full ${level.color}`} />
+                <span className='text-muted-foreground'>
+                  {level.threshold} — {level.label}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+        {/* Success Rate */}
+        <div className='space-y-2'>
+          <div className='text-muted-foreground text-xs font-medium'>
+            {t('Success Rate')} — {t('Higher is better')}
+          </div>
+          <div className='space-y-1.5'>
+            {successRateLevels.map((level, idx) => (
               <div key={idx} className='flex items-center gap-2 text-xs'>
                 <span className={`inline-block h-2.5 w-2.5 rounded-full ${level.color}`} />
                 <span className='text-muted-foreground'>

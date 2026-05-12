@@ -76,11 +76,11 @@ export function UserCharts({ metric = 'quota', defaultDays, hideTimeRangePresets
     getSavedGranularity()
   )
   const [selectedRange, setSelectedRange] = useState<number>(() =>
-    getDefaultDays(timeGranularity)
+    defaultDays ?? getDefaultDays(timeGranularity)
   )
   const [topUserLimit, setTopUserLimit] = useState(10)
   const [timeRange, setTimeRange] = useState(() => {
-    const days = getDefaultDays(timeGranularity)
+    const days = defaultDays ?? getDefaultDays(timeGranularity)
     const { start, end } = getRollingDateRange(days)
     return {
       start_timestamp: Math.floor(start.getTime() / 1000),
@@ -101,12 +101,11 @@ export function UserCharts({ metric = 'quota', defaultDays, hideTimeRangePresets
     (g: TimeGranularity) => {
       setTimeGranularity(g)
       saveGranularity(g)
-      const days = getDefaultDays(g)
-      if (days !== selectedRange) {
-        handleRangeChange(days)
-      }
+      // Granularity and time range are independent controls.
+      // Switching granularity only changes how data is grouped,
+      // not the time window being queried.
     },
-    [selectedRange, handleRangeChange]
+    []
   )
 
   useEffect(() => {

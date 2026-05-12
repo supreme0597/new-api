@@ -126,6 +126,18 @@ export function sortModels(
     case SORT_OPTIONS.PRICE_HIGH:
       sorted.sort((a, b) => getModelPrice(b) - getModelPrice(a))
       break
+    case SORT_OPTIONS.LATENCY_LOW:
+      sorted.sort((a, b) => (a.avg_ttft_ms ?? Infinity) - (b.avg_ttft_ms ?? Infinity))
+      break
+    case SORT_OPTIONS.LATENCY_HIGH:
+      sorted.sort((a, b) => (b.avg_ttft_ms ?? -1) - (a.avg_ttft_ms ?? -1))
+      break
+    case SORT_OPTIONS.THROUGHPUT_HIGH:
+      sorted.sort((a, b) => (b.avg_tps ?? -1) - (a.avg_tps ?? -1))
+      break
+    case SORT_OPTIONS.THROUGHPUT_LOW:
+      sorted.sort((a, b) => (a.avg_tps ?? Infinity) - (b.avg_tps ?? Infinity))
+      break
   }
 
   return sorted

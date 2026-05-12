@@ -53,7 +53,7 @@ function MetricTooltip({
     tps: t('Tokens Per Second - measures output speed. Higher is better.'),
     ttft: t('Time To First Token - measures response latency. Lower is better.'),
     success_rate: t('Percentage of successful requests out of total samples.'),
-    score: t('Combined performance score (0-100) based on TPS, TTFT, and success rate.'),
+    score: t('Combined performance score (0-100): TPS × 40% + TTFT × 30% + Success Rate × 30%.'),
   }
 
   return (

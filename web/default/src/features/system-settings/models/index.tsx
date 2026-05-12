@@ -75,6 +75,10 @@ const defaultModelSettings: ModelSettings = {
   SamplingIntervalMinutes: 30,
   SamplingStartTime: '00:00',
   SamplingEndTime: '23:59',
+  SamplingDefaultDurationMinutes: 1,
+  SamplingDefaultMaxRequests: 4,
+  SamplingDefaultMaxSuccess: 3,
+  SamplingRateLimitGroup: '{}',
 }
 
 export function ModelSettings() {

@@ -1,10 +1,13 @@
 import { api } from '@/lib/api'
+import type { ModelPerformanceDetailResponse } from './types'
 
 export interface LeaderboardParams {
   vendor_id?: number
   hours?: number
   page?: number
   pageSize?: number
+  sort_by?: string
+  sort_order?: string
 }
 
 export async function getLeaderboard(params: LeaderboardParams = {}) {
@@ -13,6 +16,8 @@ export async function getLeaderboard(params: LeaderboardParams = {}) {
   if (params.hours) searchParams.set('hours', String(params.hours))
   if (params.page) searchParams.set('page', String(params.page))
   if (params.pageSize) searchParams.set('pageSize', String(params.pageSize))
+  if (params.sort_by) searchParams.set('sort_by', params.sort_by)
+  if (params.sort_order) searchParams.set('sort_order', params.sort_order)
 
   const res = await api.get(`/api/model-performance/list?${searchParams.toString()}`)
   return res.data
@@ -20,5 +25,19 @@ export async function getLeaderboard(params: LeaderboardParams = {}) {
 
 export async function getLeaderboardVendors() {
   const res = await api.get('/api/model-performance/vendors')
+  return res.data
+}
+
+export async function getModelPerformanceDetail(
+  modelName: string,
+  hours?: number
+): Promise<ModelPerformanceDetailResponse> {
+  const searchParams = new URLSearchParams()
+  searchParams.set('model_name', modelName)
+  if (hours) searchParams.set('hours', String(hours))
+
+  const res = await api.get(
+    `/api/model-performance/detail?${searchParams.toString()}`
+  )
   return res.data
 }

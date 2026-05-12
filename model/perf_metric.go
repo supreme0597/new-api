@@ -1,6 +1,8 @@
 package model
 
 import (
+	"fmt"
+	"sort"
 	"time"
 
 	"github.com/QuantumNous/new-api/setting/perf_metrics_setting"
@@ -47,6 +49,62 @@ func UpsertPerfMetric(metric *PerfMetric) error {
 			"generation_ms":    gorm.Expr("generation_ms + ?", metric.GenerationMs),
 		}),
 	}).Create(metric).Error
+}
+
+// PerfMetricRow is the JSON-serializable row returned by the list API.
+// Unlike PerfMetric (which uses json:"-" for counters), this struct
+// exposes all fields for the sampling history table.
+type PerfMetricRow struct {
+	ModelName      string `json:"model_name"`
+	Group          string `json:"group"`
+	BucketTs       int64  `json:"bucket_ts"`
+	RequestCount   int64  `json:"request_count"`
+	SuccessCount   int64  `json:"success_count"`
+	TotalLatencyMs int64  `json:"total_latency_ms"`
+	TtftSumMs      int64  `json:"ttft_sum_ms"`
+	TtftCount      int64  `json:"ttft_count"`
+	OutputTokens   int64  `json:"output_tokens"`
+	GenerationMs   int64  `json:"generation_ms"`
+}
+
+func GetPerfMetricsList(modelName string, group string, startTs int64, endTs int64, page int, pageSize int) ([]PerfMetricRow, int64, error) {
+	query := DB.Model(&PerfMetric{}).
+		Where("bucket_ts >= ? AND bucket_ts <= ?", startTs, endTs)
+	if modelName != "" {
+		query = query.Where("model_name = ?", modelName)
+	}
+	if group != "" {
+		query = query.Where(commonGroupCol+" = ?", group)
+	}
+
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	var metrics []PerfMetric
+	offset := (page - 1) * pageSize
+	err := query.Order("bucket_ts DESC").Offset(offset).Limit(pageSize).Find(&metrics).Error
+	if err != nil {
+		return nil, 0, err
+	}
+
+	rows := make([]PerfMetricRow, len(metrics))
+	for i, m := range metrics {
+		rows[i] = PerfMetricRow{
+			ModelName:      m.ModelName,
+			Group:          m.Group,
+			BucketTs:       m.BucketTs,
+			RequestCount:   m.RequestCount,
+			SuccessCount:   m.SuccessCount,
+			TotalLatencyMs: m.TotalLatencyMs,
+			TtftSumMs:      m.TtftSumMs,
+			TtftCount:      m.TtftCount,
+			OutputTokens:   m.OutputTokens,
+			GenerationMs:   m.GenerationMs,
+		}
+	}
+	return rows, total, nil
 }
 
 func GetPerfMetrics(modelName string, group string, startTs int64, endTs int64) ([]PerfMetric, error) {
@@ -105,7 +163,7 @@ type LeaderboardAggRow struct {
 
 // GetLeaderboardData 获取排行榜数据（从 perf_metrics 聚合）
 // 按 model_name 聚合，再从 models + vendors 表获取 vendor_name
-func GetLeaderboardData(startTs int64, endTs int64, vendorId int) ([]LeaderboardItem, error) {
+func GetLeaderboardData(startTs int64, endTs int64, vendorId int, sortBy string, sortOrder string) ([]LeaderboardItem, error) {
 	// Step 1: 从 perf_metrics 按 model_name 聚合
 	var aggRows []LeaderboardAggRow
 	query := DB.Model(&PerfMetric{}).
@@ -138,7 +196,6 @@ func GetLeaderboardData(startTs int64, endTs int64, vendorId int) ([]Leaderboard
 		Select("models.model_name, models.vendor_id, vendors.name as vendor_name").
 		Joins("LEFT JOIN vendors ON vendors.id = models.vendor_id").
 		Where("models.model_name IN ?", modelNames).
-		Where("models.vendor_id > 0").
 		Scan(&mvRows).Error
 	if err != nil {
 		return nil, err
@@ -154,14 +211,9 @@ func GetLeaderboardData(startTs int64, endTs int64, vendorId int) ([]Leaderboard
 	for _, row := range aggRows {
 		mv, exists := modelVendorMap[row.ModelName]
 
-		// 跳过没有供应商的模型
-		if !exists {
-			continue
-		}
-
 		// 如果指定了 vendorId，只保留该 vendor 的模型
 		if vendorId > 0 {
-			if mv.VendorID != vendorId {
+			if !exists || mv.VendorID != vendorId {
 				continue
 			}
 		}
@@ -180,12 +232,16 @@ func GetLeaderboardData(startTs int64, endTs int64, vendorId int) ([]Leaderboard
 			successRate = float64(row.SuccessCount) / float64(row.RequestCount) * 100
 		}
 
-		// 计算评分
+		// 计算评分：TPS 40% + TTFT 30% + Success Rate 30%
 		tpsScore := calcTpsScore(avgTps)
 		ttftScore := calcTtftScore(int(avgTtftMs))
-		score := tpsScore*0.6 + ttftScore*0.4
+		successRateScore := successRate // successRate 已经是 0-100 的百分制
+		score := tpsScore*0.4 + ttftScore*0.3 + successRateScore*0.3
 
 		vendorName := mv.VendorName
+		if vendorName == "" {
+			vendorName = "-"
+		}
 
 		items = append(items, LeaderboardItem{
 			ModelName:   row.ModelName,
@@ -198,8 +254,9 @@ func GetLeaderboardData(startTs int64, endTs int64, vendorId int) ([]Leaderboard
 		})
 	}
 
-	// Step 4: 按 score 降序排序，填充 rank
-	sortLeaderboardItems(items)
+	// Step 4: 按指定字段排序，填充 rank
+	desc := sortOrder != "asc"
+	sortLeaderboardItemsBy(items, sortBy, desc)
 	for i := range items {
 		items[i].Rank = i + 1
 	}
@@ -207,15 +264,25 @@ func GetLeaderboardData(startTs int64, endTs int64, vendorId int) ([]Leaderboard
 	return items, nil
 }
 
-// sortLeaderboardItems 按 score 降序排序
-func sortLeaderboardItems(items []LeaderboardItem) {
-	for i := 0; i < len(items); i++ {
-		for j := i + 1; j < len(items); j++ {
-			if items[j].Score > items[i].Score {
-				items[i], items[j] = items[j], items[i]
-			}
+// sortLeaderboardItemsBy 按指定字段排序
+func sortLeaderboardItemsBy(items []LeaderboardItem, sortBy string, desc bool) {
+	sort.SliceStable(items, func(i, j int) bool {
+		var less bool
+		switch sortBy {
+		case "tps":
+			less = items[i].AvgTps < items[j].AvgTps
+		case "ttft":
+			less = items[i].AvgTtftMs < items[j].AvgTtftMs
+		case "success_rate":
+			less = items[i].SuccessRate < items[j].SuccessRate
+		default: // "score"
+			less = items[i].Score < items[j].Score
 		}
-	}
+		if desc {
+			return !less
+		}
+		return less
+	})
 }
 
 func DeletePerfMetricsBefore(cutoffTs int64) error {
@@ -230,6 +297,35 @@ func PerfMetricStartTime(hours int) int64 {
 		hours = 24
 	}
 	return time.Now().Add(-time.Duration(hours) * time.Hour).Unix()
+}
+
+// RecordSamplingFailure 将采样失败记录到 perf_metrics
+// RequestCount=1, SuccessCount=0 表示失败，排行榜可据此计算成功率
+func RecordSamplingFailure(modelName string, group string) error {
+	now := time.Now().Unix()
+	bucketSeconds := perf_metrics_setting.GetBucketSeconds()
+	if bucketSeconds <= 0 {
+		bucketSeconds = 3600
+	}
+	bucketTs := now - (now % bucketSeconds)
+
+	if group == "" {
+		group = "default"
+	}
+
+	metric := &PerfMetric{
+		ModelName:      modelName,
+		Group:          group,
+		BucketTs:       bucketTs,
+		RequestCount:   1, // 总请求 +1
+		SuccessCount:   0, // 成功 = 0（表示失败）
+		TotalLatencyMs: 0,
+		TtftSumMs:      0,
+		TtftCount:      0,
+		OutputTokens:   0,
+		GenerationMs:   0,
+	}
+	return UpsertPerfMetric(metric)
 }
 
 // RecordSamplingMetric 直接将采样性能数据写入 perf_metrics 表
@@ -259,4 +355,151 @@ func RecordSamplingMetric(modelName string, group string, latencyMs int64, ttftM
 		GenerationMs:   generationMs,
 	}
 	return UpsertPerfMetric(metric)
+}
+
+// ModelPerformanceDetailRecord 模型性能详情记录
+type ModelPerformanceDetailRecord struct {
+	Group        string  `json:"group"`
+	BucketTs     int64   `json:"bucket_ts"`
+	RequestCount int64   `json:"request_count"`
+	SuccessCount int64   `json:"success_count"`
+	SuccessRate  float64 `json:"success_rate"`
+	AvgTps       float64 `json:"avg_tps"`
+	AvgTtftMs    int64   `json:"avg_ttft_ms"`
+	AvgLatencyMs int64   `json:"avg_latency_ms"`
+	TotalTokens  int64   `json:"total_tokens"`
+}
+
+// ModelPerformanceDetail 模型性能详情响应
+type ModelPerformanceDetail struct {
+	ModelName          string                         `json:"model_name"`
+	VendorName         string                         `json:"vendor_name"`
+	TotalRequests      int64                          `json:"total_requests"`
+	TotalSuccess       int64                          `json:"total_success"`
+	TotalFailed        int64                          `json:"total_failed"`
+	OverallSuccessRate float64                        `json:"overall_success_rate"`
+	AvgTps             float64                        `json:"avg_tps"`
+	AvgTtftMs          int64                          `json:"avg_ttft_ms"`
+	Records            []ModelPerformanceDetailRecord `json:"records"`
+	TimeRange          struct {
+		StartTs int64 `json:"start_ts"`
+		EndTs   int64 `json:"end_ts"`
+	} `json:"time_range"`
+}
+
+// GetModelPerformanceDetail 获取指定模型在指定时间范围内的性能详情
+// 按 group 和 bucket_ts 分组返回详细记录
+func GetModelPerformanceDetail(modelName string, startTs int64, endTs int64) (*ModelPerformanceDetail, error) {
+	var metrics []PerfMetric
+	err := DB.Where("model_name = ? AND bucket_ts >= ? AND bucket_ts <= ?", modelName, startTs, endTs).
+		Order(fmt.Sprintf("bucket_ts DESC, %s ASC", commonGroupCol)).
+		Find(&metrics).Error
+	if err != nil {
+		return nil, err
+	}
+
+	if len(metrics) == 0 {
+		return &ModelPerformanceDetail{
+			ModelName:  modelName,
+			VendorName: "-",
+			Records:    []ModelPerformanceDetailRecord{},
+		}, nil
+	}
+
+	// 获取供应商名称
+	var vendorName string
+	type modelVendor struct {
+		VendorID   int
+		VendorName string
+	}
+	var mv modelVendor
+	err = DB.Table("models").
+		Select("models.vendor_id, vendors.name as vendor_name").
+		Joins("LEFT JOIN vendors ON vendors.id = models.vendor_id").
+		Where("models.model_name = ?", modelName).
+		Scan(&mv).Error
+	if err != nil || mv.VendorName == "" {
+		vendorName = "-"
+	} else {
+		vendorName = mv.VendorName
+	}
+
+	// 计算汇总数据
+	var totalRequests, totalSuccess int64
+	records := make([]ModelPerformanceDetailRecord, 0, len(metrics))
+
+	for _, m := range metrics {
+		successRate := 0.0
+		if m.RequestCount > 0 {
+			successRate = float64(m.SuccessCount) / float64(m.RequestCount) * 100
+		}
+
+		avgTps := 0.0
+		if m.GenerationMs > 0 {
+			avgTps = float64(m.OutputTokens) / (float64(m.GenerationMs) / 1000.0)
+		}
+
+		avgTtftMs := int64(0)
+		if m.TtftCount > 0 {
+			avgTtftMs = m.TtftSumMs / m.TtftCount
+		}
+
+		avgLatencyMs := int64(0)
+		if m.RequestCount > 0 {
+			avgLatencyMs = m.TotalLatencyMs / m.RequestCount
+		}
+
+		records = append(records, ModelPerformanceDetailRecord{
+			Group:        m.Group,
+			BucketTs:     m.BucketTs,
+			RequestCount: m.RequestCount,
+			SuccessCount: m.SuccessCount,
+			SuccessRate:  successRate,
+			AvgTps:       avgTps,
+			AvgTtftMs:    avgTtftMs,
+			AvgLatencyMs: avgLatencyMs,
+			TotalTokens:  m.OutputTokens,
+		})
+
+		totalRequests += m.RequestCount
+		totalSuccess += m.SuccessCount
+	}
+
+	detail := &ModelPerformanceDetail{
+		ModelName:     modelName,
+		VendorName:    vendorName,
+		TotalRequests: totalRequests,
+		TotalSuccess:  totalSuccess,
+		TotalFailed:   totalRequests - totalSuccess,
+		Records:       records,
+	}
+
+	if totalRequests > 0 {
+		detail.OverallSuccessRate = float64(totalSuccess) / float64(totalRequests) * 100
+	}
+
+	// 计算平均TPS和TTFT（加权平均）
+	var totalTpsWeight, totalTpsSum float64
+	var totalTtftWeight, totalTtftSum int64
+	for _, r := range records {
+		if r.AvgTps > 0 {
+			totalTpsWeight += float64(r.RequestCount)
+			totalTpsSum += r.AvgTps * float64(r.RequestCount)
+		}
+		if r.AvgTtftMs > 0 {
+			totalTtftWeight += r.RequestCount
+			totalTtftSum += r.AvgTtftMs * r.RequestCount
+		}
+	}
+	if totalTpsWeight > 0 {
+		detail.AvgTps = totalTpsSum / totalTpsWeight
+	}
+	if totalTtftWeight > 0 {
+		detail.AvgTtftMs = totalTtftSum / totalTtftWeight
+	}
+
+	detail.TimeRange.StartTs = startTs
+	detail.TimeRange.EndTs = endTs
+
+	return detail, nil
 }

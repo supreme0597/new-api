@@ -69,6 +69,10 @@ export type PricingModel = {
   input_modalities?: Modality[]
   output_modalities?: Modality[]
   capabilities?: ModelCapability[]
+  /** Performance metrics from sampling (populated client-side) */
+  avg_tps?: number
+  avg_ttft_ms?: number
+  perf_score?: number
 }
 
 /** Input/output modalities supported by a model. */

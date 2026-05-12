@@ -6,6 +6,8 @@ const leaderboardSearchSchema = z.object({
   vendor_id: z.string().optional().catch(undefined),
   hours: z.number().optional().catch(24),
   page: z.number().optional().catch(1),
+  sort_by: z.enum(['score', 'tps', 'ttft']).optional().catch('score'),
+  sort_order: z.enum(['desc', 'asc']).optional().catch('desc'),
 })
 
 export const Route = createFileRoute('/performance-leaderboard/')({

@@ -173,6 +173,10 @@ const MODELS_SECTIONS = [
           SamplingIntervalMinutes: settings.SamplingIntervalMinutes,
           SamplingStartTime: settings.SamplingStartTime,
           SamplingEndTime: settings.SamplingEndTime,
+          SamplingDefaultDurationMinutes: settings.SamplingDefaultDurationMinutes,
+          SamplingDefaultMaxRequests: settings.SamplingDefaultMaxRequests,
+          SamplingDefaultMaxSuccess: settings.SamplingDefaultMaxSuccess,
+          SamplingRateLimitGroup: settings.SamplingRateLimitGroup,
         }}
       />
     ),

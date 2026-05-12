@@ -142,6 +142,10 @@ func InitOptionMap() {
 	common.OptionMap["ModelRequestRateLimitDurationMinutes"] = strconv.Itoa(setting.ModelRequestRateLimitDurationMinutes)
 	common.OptionMap["ModelRequestRateLimitSuccessCount"] = strconv.Itoa(setting.ModelRequestRateLimitSuccessCount)
 	common.OptionMap["ModelRequestRateLimitGroup"] = setting.ModelRequestRateLimitGroup2JSONString()
+	common.OptionMap["SamplingDefaultDurationMinutes"] = strconv.Itoa(setting.SamplingDefaultDurationMinutes)
+	common.OptionMap["SamplingDefaultMaxRequests"] = strconv.Itoa(setting.SamplingDefaultMaxRequests)
+	common.OptionMap["SamplingDefaultMaxSuccess"] = strconv.Itoa(setting.SamplingDefaultMaxSuccess)
+	common.OptionMap["SamplingRateLimitGroup"] = setting.SamplingRateLimitGroup2JSONString()
 	common.OptionMap["ModelRatio"] = ratio_setting.ModelRatio2JSONString()
 	common.OptionMap["ModelPrice"] = ratio_setting.ModelPrice2JSONString()
 	common.OptionMap["CacheRatio"] = ratio_setting.CacheRatio2JSONString()
@@ -234,11 +238,12 @@ func UpdateOption(key string, value string) error {
 
 func updateOptionMap(key string, value string) (err error) {
 	common.OptionMapRWMutex.Lock()
+	oldValue := common.OptionMap[key]
 	common.OptionMap[key] = value
 	common.OptionMapRWMutex.Unlock()
 
-	// 采样配置变更时通知调度器立即重新读取
-	if strings.HasPrefix(key, "Sampling") || key == "TpsBenchmark" || key == "TtftBenchmark" {
+	// 仅在采样配置值真正发生变化时通知调度器，避免 SyncOptions 定期同步导致调度器被反复唤醒
+	if oldValue != value && (strings.HasPrefix(key, "Sampling") || key == "TpsBenchmark" || key == "TtftBenchmark") {
 		NotifySamplingConfigChange()
 	}
 
@@ -511,6 +516,14 @@ func updateOptionMap(key string, value string) (err error) {
 		setting.ModelRequestRateLimitSuccessCount, _ = strconv.Atoi(value)
 	case "ModelRequestRateLimitGroup":
 		err = setting.UpdateModelRequestRateLimitGroupByJSONString(value)
+	case "SamplingDefaultDurationMinutes":
+		setting.SamplingDefaultDurationMinutes, _ = strconv.Atoi(value)
+	case "SamplingDefaultMaxRequests":
+		setting.SamplingDefaultMaxRequests, _ = strconv.Atoi(value)
+	case "SamplingDefaultMaxSuccess":
+		setting.SamplingDefaultMaxSuccess, _ = strconv.Atoi(value)
+	case "SamplingRateLimitGroup":
+		err = setting.UpdateSamplingRateLimitGroupByJSONString(value)
 	case "RetryTimes":
 		common.RetryTimes, _ = strconv.Atoi(value)
 	case "DataExportInterval":

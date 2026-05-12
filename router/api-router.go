@@ -35,6 +35,7 @@ func SetApiRouter(router *gin.Engine) {
 		perfMetricsRoute.Use(middleware.TryUserAuth())
 		{
 			perfMetricsRoute.GET("/summary", controller.GetPerfMetricsSummary)
+			perfMetricsRoute.GET("/list", controller.GetPerfMetricsList)
 			perfMetricsRoute.GET("", controller.GetPerfMetrics)
 		}
 		apiRouter.GET("/rankings", controller.GetRankings)
@@ -272,6 +273,7 @@ func SetApiRouter(router *gin.Engine) {
 			modelPerformanceRoute.GET("/list", controller.GetModelPerformanceList)
 			modelPerformanceRoute.GET("/vendors", controller.GetModelPerformanceVendors)
 			modelPerformanceRoute.GET("/sources", controller.GetModelPerformanceVendors)
+			modelPerformanceRoute.GET("/detail", controller.GetModelPerformanceDetail)
 		}
 		// 性能采样管理（仅管理员）
 		modelPerformanceAdminRoute := apiRouter.Group("/model-performance")

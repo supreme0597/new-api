@@ -12,9 +12,8 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/setting"
 )
-
-const DefaultSamplingIntervalSeconds = 10
 
 var ErrSamplingForbidden = errors.New("sampling forbidden or rate limited")
 
@@ -254,126 +253,188 @@ func RunSamplingTask() error {
 			defer wg.Done()
 
 			models := ch.GetModels()
-			interval := getChannelSamplingInterval(ch)
 			channelName := ch.Name
 			if channelName == "" {
 				channelName = fmt.Sprintf("渠道 #%d", ch.Id)
 			}
 
-			// 渠道级计数器
-			chDone := 0
-			chSuccess := 0
-			chFailed := 0
-			chTotal := channelStatuses[ch.Id].TotalTasks
-
-			common.SysLog(fmt.Sprintf("[Sampling] 开始采样渠道: %s (ID=%d), 模型数=%d", channelName, ch.Id, len(models)))
-
-			for i, modelName := range models {
-				if modelName == "" {
-					continue
+			// 获取该渠道的采样限流配置
+			groups := ch.GetGroups()
+			duration := setting.SamplingDefaultDurationMinutes
+			totalCount := setting.SamplingDefaultMaxRequests
+			successCount := setting.SamplingDefaultMaxSuccess
+			for _, group := range groups {
+				if d, t, s, found := setting.GetSamplingGroupRateLimit(group); found {
+					duration = d
+					totalCount = t
+					successCount = s
+					break
 				}
-
-				// 检查是否请求停止
-				if samplingStopFlag.Load() {
-					common.SysLog(fmt.Sprintf("[Sampling] 渠道 %s 收到停止请求，中断", channelName))
-					return
-				}
-
-				// 模型间间隔（第一个模型不需要等待）
-				if i > 0 && interval > 0 {
-					time.Sleep(time.Duration(interval) * time.Second)
-				}
-
-				// 检查是否请求停止
-				if samplingStopFlag.Load() {
-					common.SysLog(fmt.Sprintf("[Sampling] 渠道 %s 收到停止请求，中断", channelName))
-					return
-				}
-
-				currentDone := int(doneAtomic.Add(1))
-				currentSuccess := int(successAtomic.Load())
-				currentFailed := int(failedAtomic.Load())
-				chDone++
-
-				updateSamplingTaskProgress(currentDone, currentSuccess, currentFailed, channelName, modelName,
-					fmt.Sprintf("正在采样: %s / %s (%d/%d)", channelName, modelName, currentDone, totalTasks))
-				updateChannelSamplingProgress(ch.Id, channelName, chDone, chSuccess, chFailed, chTotal,
-					fmt.Sprintf("正在采样: %s", modelName))
-
-				common.SysLog(fmt.Sprintf("[Sampling] [%d/%d] 采样渠道=%s, 模型=%s", currentDone, totalTasks, channelName, modelName))
-
-				result, err := sampleModelPerformance(ch, modelName, config)
-				if err != nil {
-					failedAtomic.Add(1)
-					chFailed++
-					record := SamplingRecord{
-						Channel: channelName,
-						Model:   modelName,
-						Success: false,
-						Message: err.Error(),
-					}
-					resultMutex.Lock()
-					lastResult.FailedList = append(lastResult.FailedList, record)
-					resultMutex.Unlock()
-
-					if errors.Is(err, ErrSamplingForbidden) {
-						common.SysLog(fmt.Sprintf("[Sampling] 渠道 %s 被限流/禁止访问，跳过该渠道剩余模型", channelName))
-						updateSamplingTaskProgress(int(doneAtomic.Load()), int(successAtomic.Load()), int(failedAtomic.Load()), channelName, modelName,
-							fmt.Sprintf("渠道 %s 被限流，跳过剩余模型", channelName))
-						updateChannelSamplingProgress(ch.Id, channelName, chDone, chSuccess, chFailed, chTotal, "被限流，跳过剩余模型")
-						return // 跳过该渠道剩余模型
-					}
-					common.SysLog(fmt.Sprintf("[Sampling] 采样失败: 渠道=%s, 模型=%s, 错误=%v", channelName, modelName, err))
-					updateSamplingTaskProgress(int(doneAtomic.Load()), int(successAtomic.Load()), int(failedAtomic.Load()), channelName, modelName,
-						fmt.Sprintf("采样失败: %s / %s", channelName, modelName))
-					updateChannelSamplingProgress(ch.Id, channelName, chDone, chSuccess, chFailed, chTotal,
-						fmt.Sprintf("失败: %s", modelName))
-					continue
-				}
-
-				successAtomic.Add(1)
-				chSuccess++
-				record := SamplingRecord{
-					Channel: channelName,
-					Model:   modelName,
-					Success: true,
-					Message: fmt.Sprintf("TPS=%.1f, TTFT=%dms", result.Tps, result.TtftMs),
-				}
-				resultMutex.Lock()
-				lastResult.SuccessList = append(lastResult.SuccessList, record)
-				resultMutex.Unlock()
-
-				common.SysLog(fmt.Sprintf("[Sampling] 采样成功: 渠道=%s, 模型=%s, TPS=%.1f, TTFT=%dms", channelName, modelName, result.Tps, result.TtftMs))
-
-				// 记录到使用日志
-				RecordTaskBillingLog(RecordTaskBillingLogParams{
-					UserId:           TestChannelOwnerUserId,
-					LogType:          LogTypeConsume,
-					Content:          fmt.Sprintf("性能采样: %s@%s, TPS=%.1f, TTFT=%dms", modelName, channelName, result.Tps, result.TtftMs),
-					ChannelId:        ch.Id,
-					ModelName:        modelName,
-					Quota:            0,
-					TokenId:          -1,
-					Group:            ch.Group,
-					PromptTokens:     result.PromptTokens,
-					CompletionTokens: result.CompletionTokens,
-					UseTimeSeconds:   int(result.LatencyMs / 1000),
-					IsStream:         true,
-					Other:            map[string]interface{}{"sampling": true, "tps": result.Tps, "ttft": result.TtftMs},
-				})
-
-				if err := RecordSamplingMetric(modelName, ch.Group, result.LatencyMs, int64(result.TtftMs), int64(result.TotalTokens), result.GenerationMs); err != nil {
-					common.SysError(fmt.Sprintf("[Sampling] 记录性能数据失败: 渠道=%s, 模型=%s, 错误=%v", channelName, modelName, err))
-				}
-
-				updateSamplingTaskProgress(int(doneAtomic.Load()), int(successAtomic.Load()), int(failedAtomic.Load()), channelName, modelName,
-					fmt.Sprintf("完成: %s / %s (TPS=%.1f, TTFT=%dms)", channelName, modelName, result.Tps, result.TtftMs))
-				updateChannelSamplingProgress(ch.Id, channelName, chDone, chSuccess, chFailed, chTotal,
-					fmt.Sprintf("完成: %s", modelName))
 			}
 
+			// 计算渠道内并发度：min(模型数, 最大成功请求数)
+			validModels := make([]string, 0, len(models))
+			for _, m := range models {
+				if m != "" {
+					validModels = append(validModels, m)
+				}
+			}
+			maxConcurrency := len(validModels)
+			if successCount > 0 && successCount < maxConcurrency {
+				maxConcurrency = successCount
+			}
+			if maxConcurrency < 1 {
+				maxConcurrency = 1
+			}
+
+			common.SysLog(fmt.Sprintf("[Sampling] 开始采样渠道: %s (ID=%d), 模型数=%d, 并发度=%d, RPM=%d/%dmin",
+				channelName, ch.Id, len(validModels), maxConcurrency, totalCount, duration))
+
+			// 渠道级计数器
+			chDone := atomic.Int32{}
+			chSuccess := atomic.Int32{}
+			chFailed := atomic.Int32{}
+			chTotal := channelStatuses[ch.Id].TotalTasks
+
+			// 速率限制器：基于滑动窗口
+			rateLimiter := newSamplingRateLimiter(duration, totalCount)
+			sem := make(chan struct{}, maxConcurrency)
+			var chWg sync.WaitGroup
+
+			for _, modelName := range validModels {
+				if samplingStopFlag.Load() {
+					common.SysLog(fmt.Sprintf("[Sampling] 渠道 %s 收到停止请求，中断", channelName))
+					return
+				}
+
+				chWg.Add(1)
+				go func(model string) {
+					defer chWg.Done()
+
+					// 获取并发槽位
+					sem <- struct{}{}
+					defer func() { <-sem }()
+
+					// 等待速率配额
+					if !rateLimiter.Allow() {
+						common.SysLog(fmt.Sprintf("[Sampling] 渠道 %s 等待速率配额: 模型=%s", channelName, model))
+						rateLimiter.Wait()
+					}
+
+					// 记录请求
+					rateLimiter.Record()
+
+					if samplingStopFlag.Load() {
+						return
+					}
+
+					currentDone := int(doneAtomic.Add(1))
+					chDoneVal := int(chDone.Add(1))
+
+					updateSamplingTaskProgress(currentDone, int(successAtomic.Load()), int(failedAtomic.Load()), channelName, model,
+						fmt.Sprintf("正在采样: %s / %s (%d/%d)", channelName, model, currentDone, totalTasks))
+					updateChannelSamplingProgress(ch.Id, channelName, chDoneVal, int(chSuccess.Load()), int(chFailed.Load()), chTotal,
+						fmt.Sprintf("正在采样: %s", model))
+
+					common.SysLog(fmt.Sprintf("[Sampling] [%d/%d] 采样渠道=%s, 模型=%s", currentDone, totalTasks, channelName, model))
+
+					// 重试机制：最多重试 maxRetries 次，指数退避
+					const maxRetries = 3
+					var lastErr error
+					var result *SamplingResult
+
+					for retry := 0; retry <= maxRetries; retry++ {
+						if samplingStopFlag.Load() {
+							return
+						}
+
+						result, lastErr = sampleModelPerformance(ch, model, config)
+						if lastErr == nil {
+							break
+						}
+
+						if errors.Is(lastErr, ErrSamplingForbidden) {
+							break
+						}
+
+						if retry < maxRetries {
+							backoff := time.Duration(1<<retry) * 2 * time.Second
+							common.SysLog(fmt.Sprintf("[Sampling] 采样失败，%ds 后重试 (%d/%d): 渠道=%s, 模型=%s, 错误=%v",
+								backoff/time.Second, retry+1, maxRetries, channelName, model, lastErr))
+							time.Sleep(backoff)
+						}
+					}
+
+					if lastErr != nil {
+						failedAtomic.Add(1)
+						chFailed.Add(1)
+						record := SamplingRecord{
+							Channel: channelName,
+							Model:   model,
+							Success: false,
+							Message: lastErr.Error(),
+						}
+						resultMutex.Lock()
+						lastResult.FailedList = append(lastResult.FailedList, record)
+						resultMutex.Unlock()
+
+						if err := RecordSamplingFailure(model, ch.Group); err != nil {
+							common.SysError(fmt.Sprintf("[Sampling] 记录采样失败数据失败: 渠道=%s, 模型=%s, 错误=%v", channelName, model, err))
+						}
+
+						if errors.Is(lastErr, ErrSamplingForbidden) {
+							common.SysLog(fmt.Sprintf("[Sampling] 渠道 %s 被限流/禁止访问，跳过该渠道剩余模型", channelName))
+							return
+						}
+						common.SysLog(fmt.Sprintf("[Sampling] 采样失败（重试 %d 次后）: 渠道=%s, 模型=%s, 错误=%v", maxRetries, channelName, model, lastErr))
+						return
+					}
+
+					successAtomic.Add(1)
+					chSuccess.Add(1)
+					record := SamplingRecord{
+						Channel: channelName,
+						Model:   model,
+						Success: true,
+						Message: fmt.Sprintf("TPS=%.1f, TTFT=%dms", result.Tps, result.TtftMs),
+					}
+					resultMutex.Lock()
+					lastResult.SuccessList = append(lastResult.SuccessList, record)
+					resultMutex.Unlock()
+
+					common.SysLog(fmt.Sprintf("[Sampling] 采样成功: 渠道=%s, 模型=%s, TPS=%.1f, TTFT=%dms", channelName, model, result.Tps, result.TtftMs))
+
+					RecordTaskBillingLog(RecordTaskBillingLogParams{
+						UserId:           TestChannelOwnerUserId,
+						LogType:          LogTypeConsume,
+						Content:          fmt.Sprintf("性能采样: %s@%s, TPS=%.1f, TTFT=%dms", model, channelName, result.Tps, result.TtftMs),
+						ChannelId:        ch.Id,
+						ModelName:        model,
+						Quota:            0,
+						TokenId:          -1,
+						Group:            ch.Group,
+						PromptTokens:     result.PromptTokens,
+						CompletionTokens: result.CompletionTokens,
+						UseTimeSeconds:   int(result.LatencyMs / 1000),
+						IsStream:         true,
+						Other:            map[string]interface{}{"sampling": true, "tps": result.Tps, "ttft": result.TtftMs},
+					})
+
+					if err := RecordSamplingMetric(model, ch.Group, result.LatencyMs, int64(result.TtftMs), int64(result.TotalTokens), result.GenerationMs); err != nil {
+						common.SysError(fmt.Sprintf("[Sampling] 记录性能数据失败: 渠道=%s, 模型=%s, 错误=%v", channelName, model, err))
+					}
+
+					updateSamplingTaskProgress(int(doneAtomic.Load()), int(successAtomic.Load()), int(failedAtomic.Load()), channelName, model,
+						fmt.Sprintf("完成: %s / %s (TPS=%.1f, TTFT=%dms)", channelName, model, result.Tps, result.TtftMs))
+					updateChannelSamplingProgress(ch.Id, channelName, int(chDone.Load()), int(chSuccess.Load()), int(chFailed.Load()), chTotal,
+						fmt.Sprintf("完成: %s", model))
+				}(modelName)
+			}
+
+			chWg.Wait()
+
 			common.SysLog(fmt.Sprintf("[Sampling] 渠道 %s 采样完成", channelName))
-			updateChannelSamplingProgress(ch.Id, channelName, chDone, chSuccess, chFailed, chTotal, "采样完成")
+			updateChannelSamplingProgress(ch.Id, channelName, int(chDone.Load()), int(chSuccess.Load()), int(chFailed.Load()), chTotal, "采样完成")
 		}(channel)
 	}
 
@@ -388,14 +449,6 @@ func RunSamplingTask() error {
 		fmt.Sprintf("采样完成: %d 成功, %d 失败, 总计 %d", successTasks, failedTasks, totalTasks))
 
 	return nil
-}
-
-// getChannelSamplingInterval 获取渠道的采样间隔（秒）
-func getChannelSamplingInterval(channel *Channel) int {
-	if channel.SamplingIntervalSeconds != nil && *channel.SamplingIntervalSeconds > 0 {
-		return *channel.SamplingIntervalSeconds
-	}
-	return DefaultSamplingIntervalSeconds
 }
 
 // sampleModelPerformance 对单个模型执行采样，返回采样结果详情
@@ -764,4 +817,86 @@ func calcSleepUntilWindowStart(interval int) time.Duration {
 		waitMinutes = interval
 	}
 	return time.Duration(waitMinutes) * time.Minute
+}
+
+// samplingRateLimiter 采样任务专用的滑动窗口速率限制器
+type samplingRateLimiter struct {
+	mu       sync.Mutex
+	window   time.Duration // 时间窗口
+	maxCount int           // 窗口内最大请求数
+	requests []time.Time   // 请求记录
+	notify   chan struct{} // 通知等待中的 goroutine 有配额释放
+}
+
+func newSamplingRateLimiter(durationMinutes, maxCount int) *samplingRateLimiter {
+	window := time.Duration(durationMinutes) * time.Minute
+	if window <= 0 {
+		window = time.Minute
+	}
+	return &samplingRateLimiter{
+		window:   window,
+		maxCount: maxCount,
+		requests: make([]time.Time, 0, maxCount),
+		notify:   make(chan struct{}, 1),
+	}
+}
+
+// Allow 非阻塞检查是否可以发送请求
+func (r *samplingRateLimiter) Allow() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.cleanup()
+	return len(r.requests) < r.maxCount
+}
+
+// Record 记录一次请求
+func (r *samplingRateLimiter) Record() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.requests = append(r.requests, time.Now())
+	// 通知可能在 Wait 的 goroutine
+	select {
+	case r.notify <- struct{}{}:
+	default:
+	}
+}
+
+// Wait 阻塞等待直到有可用配额
+func (r *samplingRateLimiter) Wait() {
+	for {
+		r.mu.Lock()
+		r.cleanup()
+		if len(r.requests) < r.maxCount {
+			r.mu.Unlock()
+			return
+		}
+		// 计算需要等待的时间
+		waitUntil := r.requests[0].Add(r.window)
+		waitDuration := time.Until(waitUntil)
+		r.mu.Unlock()
+
+		if waitDuration <= 0 {
+			return
+		}
+
+		// 等待，或被新配额释放通知唤醒
+		select {
+		case <-r.notify:
+			continue
+		case <-time.After(waitDuration):
+			continue
+		}
+	}
+}
+
+// cleanup 清理过期的请求记录
+func (r *samplingRateLimiter) cleanup() {
+	cutoff := time.Now().Add(-r.window)
+	i := 0
+	for i < len(r.requests) && r.requests[i].Before(cutoff) {
+		i++
+	}
+	if i > 0 {
+		r.requests = r.requests[i:]
+	}
 }

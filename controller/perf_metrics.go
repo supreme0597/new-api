@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/QuantumNous/new-api/model"
 	perfmetrics "github.com/QuantumNous/new-api/pkg/perf_metrics"
 
 	"github.com/gin-gonic/gin"
@@ -65,5 +66,68 @@ func GetPerfMetrics(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"data":    result,
+	})
+}
+
+func GetPerfMetricsList(c *gin.Context) {
+	startTsStr := c.Query("start_timestamp")
+	endTsStr := c.Query("end_timestamp")
+	if startTsStr == "" || endTsStr == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"message": "start_timestamp and end_timestamp are required",
+		})
+		return
+	}
+	startTs, err := strconv.ParseInt(startTsStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"message": "invalid start_timestamp",
+		})
+		return
+	}
+	endTs, err := strconv.ParseInt(endTsStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"message": "invalid end_timestamp",
+		})
+		return
+	}
+
+	modelName := c.Query("model")
+	group := c.Query("group")
+
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 20
+	}
+	if pageSize > 100 {
+		pageSize = 100
+	}
+
+	rows, total, err := model.GetPerfMetricsList(modelName, group, startTs, endTs, page, pageSize)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"message": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+		"data": gin.H{
+			"list":      rows,
+			"total":     total,
+			"page":      page,
+			"page_size": pageSize,
+		},
 	})
 }

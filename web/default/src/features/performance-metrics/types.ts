@@ -58,3 +58,27 @@ export type PerfSummaryAllData = {
     models: PerfModelSummary[]
   }
 }
+
+export type PerfMetricRow = {
+  model_name: string
+  group: string
+  bucket_ts: number
+  request_count: number
+  success_count: number
+  total_latency_ms: number
+  ttft_sum_ms: number
+  ttft_count: number
+  output_tokens: number
+  generation_ms: number
+}
+
+export type PerfMetricsListResult = {
+  success: boolean
+  message?: string
+  data: {
+    list: PerfMetricRow[]
+    total: number
+    page: number
+    page_size: number
+  }
+}

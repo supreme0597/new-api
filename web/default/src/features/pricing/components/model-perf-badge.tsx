@@ -25,7 +25,7 @@ import {
 } from '@/features/performance-metrics/lib/format'
 
 export type ModelPerfBadgeData = {
-  avg_latency_ms: number
+  avg_ttft_ms: number
   success_rate: number
   avg_tps: number
 }
@@ -47,7 +47,7 @@ export const ModelPerfBadge = memo(function ModelPerfBadge(
     return null
   }
 
-  const { avg_latency_ms, avg_tps, success_rate } = props.perf
+  const { avg_ttft_ms, avg_tps, success_rate } = props.perf
 
   let statusColor = 'bg-emerald-500'
   if (success_rate < 99) {
@@ -68,7 +68,7 @@ export const ModelPerfBadge = memo(function ModelPerfBadge(
           {t('Latency short')}
         </div>
         <div className='text-muted-foreground/80 font-mono text-xs leading-4 whitespace-nowrap'>
-          {avg_latency_ms > 0 ? formatLatency(avg_latency_ms) : '—'}
+          {avg_ttft_ms > 0 ? formatLatency(avg_ttft_ms) : '—'}
         </div>
       </div>
       <div title={t('Throughput')} className='min-w-0'>

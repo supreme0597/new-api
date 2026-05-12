@@ -18,6 +18,8 @@ func GetModelPerformanceList(c *gin.Context) {
 	hours, _ := strconv.Atoi(c.DefaultQuery("hours", "24"))
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
+	sortBy := c.DefaultQuery("sort_by", "score")
+	sortOrder := c.DefaultQuery("sort_order", "desc")
 
 	if page < 1 {
 		page = 1
@@ -40,7 +42,7 @@ func GetModelPerformanceList(c *gin.Context) {
 	endTs := time.Now().Unix()
 	startTs := endTs - int64(hours)*3600
 
-	items, err := model.GetLeaderboardData(startTs, endTs, vendorId)
+	items, err := model.GetLeaderboardData(startTs, endTs, vendorId, sortBy, sortOrder)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"success": false,
@@ -132,5 +134,40 @@ func StopSamplingTask(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "已发送停止请求",
+	})
+}
+
+// GetModelPerformanceDetail 获取指定模型的性能详情
+func GetModelPerformanceDetail(c *gin.Context) {
+	modelName := c.Query("model_name")
+	if modelName == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"message": "model_name is required",
+		})
+		return
+	}
+
+	hours, _ := strconv.Atoi(c.DefaultQuery("hours", "24"))
+	if hours < 1 {
+		hours = 24
+	}
+
+	// 计算时间范围
+	endTs := time.Now().Unix()
+	startTs := endTs - int64(hours)*3600
+
+	detail, err := model.GetModelPerformanceDetail(modelName, startTs, endTs)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"message": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    detail,
 	})
 }

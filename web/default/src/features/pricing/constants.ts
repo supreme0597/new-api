@@ -28,6 +28,10 @@ export const SORT_OPTIONS = {
   NAME: 'name',
   PRICE_LOW: 'price-low',
   PRICE_HIGH: 'price-high',
+  LATENCY_LOW: 'latency-low',
+  LATENCY_HIGH: 'latency-high',
+  THROUGHPUT_HIGH: 'throughput-high',
+  THROUGHPUT_LOW: 'throughput-low',
 } as const
 
 export type SortOption = (typeof SORT_OPTIONS)[keyof typeof SORT_OPTIONS]
@@ -37,6 +41,10 @@ export function getSortLabels(t: TFunction): Record<SortOption, string> {
     [SORT_OPTIONS.NAME]: t('Name'),
     [SORT_OPTIONS.PRICE_LOW]: t('Price: Low to High'),
     [SORT_OPTIONS.PRICE_HIGH]: t('Price: High to Low'),
+    [SORT_OPTIONS.LATENCY_LOW]: t('Latency: Low to High'),
+    [SORT_OPTIONS.LATENCY_HIGH]: t('Latency: High to Low'),
+    [SORT_OPTIONS.THROUGHPUT_HIGH]: t('Throughput: High to Low'),
+    [SORT_OPTIONS.THROUGHPUT_LOW]: t('Throughput: Low to High'),
   }
 }
 

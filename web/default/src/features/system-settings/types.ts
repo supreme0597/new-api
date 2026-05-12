@@ -190,6 +190,10 @@ export type ModelSettings = {
   SamplingIntervalMinutes: number
   SamplingStartTime: string
   SamplingEndTime: string
+  SamplingDefaultDurationMinutes: number
+  SamplingDefaultMaxRequests: number
+  SamplingDefaultMaxSuccess: number
+  SamplingRateLimitGroup: string
 }
 
 export type BillingSettings = {

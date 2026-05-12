@@ -1268,6 +1268,7 @@ export function ChannelMutateDrawer({
                           <FormControl>
                             <Select
                               value={currentChannelType}
+                              disabled={isPrivate}
                               onValueChange={(value) => {
                                 if (isPrivate) return // Private channels cannot be switched
                                 field.onChange(value as 'public' | 'private' | 'test')

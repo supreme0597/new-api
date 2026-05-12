@@ -45,6 +45,7 @@ export function useSidebarData(): SidebarData {
   const { t } = useTranslation()
   const userRole = useAuthStore((state) => state.auth.user?.role)
   const isAdmin = userRole != null && userRole >= ROLE.ADMIN
+  const isRoot = userRole === ROLE.SUPER_ADMIN
 
   return {
     workspaces: [
@@ -159,12 +160,16 @@ export function useSidebarData(): SidebarData {
             url: '/subscriptions',
             icon: CreditCard,
           },
-          {
-            title: t('System Settings'),
-            url: '/system-settings/site',
-            activeUrls: ['/system-settings'],
-            icon: Settings,
-          },
+          ...(isRoot
+            ? [
+                {
+                  title: t('System Settings'),
+                  url: '/system-settings/site',
+                  activeUrls: ['/system-settings'],
+                  icon: Settings,
+                },
+              ]
+            : []),
         ],
       },
     ],

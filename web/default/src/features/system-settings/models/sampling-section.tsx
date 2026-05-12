@@ -1,18 +1,16 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as z from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
+import dayjs from '@/lib/dayjs'
 import { api } from '@/lib/api'
+import { getPerfMetricsList } from '@/features/performance-metrics/api'
+import type { PerfMetricRow } from '@/features/performance-metrics/types'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible'
 import {
   Form,
   FormControl,
@@ -40,6 +38,8 @@ import {
 import { SettingsSection } from '../components/settings-section'
 import { useResetForm } from '../hooks/use-reset-form'
 import { useUpdateOption } from '../hooks/use-update-option'
+import { SamplingRateLimitVisualEditor } from './sampling-rate-limit-visual-editor'
+import { SamplingRecordsTable } from './sampling-records-table'
 
 // ---------------------------------------------------------------------------
 // Schema
@@ -53,6 +53,10 @@ const schema = z.object({
   SamplingIntervalMinutes: z.coerce.number().min(0).max(1440),
   SamplingStartTime: z.string(),
   SamplingEndTime: z.string(),
+  SamplingDefaultDurationMinutes: z.coerce.number().min(0).max(1440),
+  SamplingDefaultMaxRequests: z.coerce.number().min(0).max(100000000),
+  SamplingDefaultMaxSuccess: z.coerce.number().min(1).max(100000000),
+  SamplingRateLimitGroup: z.string(),
 })
 
 type SamplingFormValues = z.infer<typeof schema>
@@ -82,25 +86,6 @@ type SamplingResultItem = {
   channel: string
   model: string
   message: string
-}
-
-type SamplingLastResult = {
-  time: string
-  success: number
-  failed: number
-  total: number
-  success_list?: SamplingResultItem[]
-  failed_list?: SamplingResultItem[]
-}
-
-type ChannelProgress = {
-  channel_id: number
-  channel_name: string
-  done_tasks: number
-  total_tasks: number
-  success_tasks: number
-  failed_tasks: number
-  message?: string
 }
 
 type SamplingStatus = {
@@ -263,14 +248,85 @@ export function SamplingSection({ defaultValues }: Props) {
           <div className='space-y-4'>
             <h4 className='text-sm font-medium'>{t('Benchmark Settings')}</h4>
             <Alert>
-              <AlertTitle>{t('Note')}</AlertTitle>
+              <AlertTitle>{t('Sampling Rate Limit')}</AlertTitle>
               <AlertDescription>
                 {t(
-                  'Adjust TPS and TTFT benchmark values. Higher benchmarks make it harder to achieve high scores. Changes take effect immediately on all historical data rankings.'
+                  'Configure per-group rate limiting for sampling. Controls how many requests can be sent to upstream providers within a time window, preventing rate limit violations.'
                 )}
               </AlertDescription>
             </Alert>
-            <div className='grid grid-cols-1 gap-4 sm:grid-cols-2'>
+
+            <div className='grid grid-cols-3 gap-4'>
+              <FormField
+                control={form.control}
+                name='SamplingDefaultDurationMinutes'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('Default Window (min)')}</FormLabel>
+                    <FormControl>
+                      <Input type='number' min={0} max={1440} {...field} />
+                    </FormControl>
+                    <FormDescription>
+                      {t('Global default time window for rate limiting')}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name='SamplingDefaultMaxRequests'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('Default Max Requests')}</FormLabel>
+                    <FormControl>
+                      <Input type='number' min={0} max={100000000} {...field} />
+                    </FormControl>
+                    <FormDescription>
+                      {t('Max total requests per window')}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name='SamplingDefaultMaxSuccess'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('Default Max Success')}</FormLabel>
+                    <FormControl>
+                      <Input type='number' min={1} max={100000000} {...field} />
+                    </FormControl>
+                    <FormDescription>
+                      {t('Max successful requests per window')}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <FormField
+              control={form.control}
+              name='SamplingRateLimitGroup'
+              render={({ field }) => (
+                <FormItem>
+                  <FormControl>
+                    <SamplingRateLimitVisualEditor
+                      value={field.value}
+                      onChange={field.onChange}
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    {t(
+                      'Override rate limits for specific groups. Format: [window(min), maxRequests, maxSuccess].'
+                    )}
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
               <FormField
                 control={form.control}
                 name='TpsBenchmark'
@@ -330,7 +386,6 @@ export function SamplingSection({ defaultValues }: Props) {
                 )}
               />
             </div>
-          </div>
 
           <Separator />
 
@@ -518,77 +573,6 @@ export function SamplingSection({ defaultValues }: Props) {
           <div className='space-y-4'>
             <h4 className='text-sm font-medium'>{t('Sampling Status')}</h4>
 
-            {/* Last sampling record */}
-            {samplingStatus?.last_result && (
-              <div className='rounded-lg border p-3 space-y-2'>
-                <div className='flex flex-wrap items-center gap-2'>
-                  <span className='text-sm font-medium'>
-                    {t('Last Sampling Record')}:
-                  </span>
-                  <span className='text-muted-foreground text-sm'>
-                    {samplingStatus.last_result.time}
-                  </span>
-                  <Badge variant='outline' className='text-green-600'>
-                    {t('Success')} {samplingStatus.last_result.success}
-                  </Badge>
-                  <Badge variant='outline' className='text-red-600'>
-                    {t('Failed')} {samplingStatus.last_result.failed}
-                  </Badge>
-                  <Badge variant='secondary'>
-                    {t('Total')} {samplingStatus.last_result.total}
-                  </Badge>
-                </div>
-
-                {/* Success list */}
-                {(samplingStatus.last_result.success_list?.length ?? 0) > 0 && (
-                  <Collapsible defaultOpen>
-                    <CollapsibleTrigger className='flex items-center gap-1 text-sm text-green-600 hover:underline'>
-                      {t('Success List')} (
-                      {samplingStatus.last_result.success_list!.length})
-                    </CollapsibleTrigger>
-                    <CollapsibleContent>
-                      <div className='mt-1 max-h-48 space-y-0.5 overflow-y-auto'>
-                        {samplingStatus.last_result.success_list!.map(
-                          (item, idx) => (
-                            <div
-                              key={idx}
-                              className='text-muted-foreground text-xs'
-                            >
-                              {item.channel} / {item.model} — {item.message}
-                            </div>
-                          )
-                        )}
-                      </div>
-                    </CollapsibleContent>
-                  </Collapsible>
-                )}
-
-                {/* Failed list */}
-                {(samplingStatus.last_result.failed_list?.length ?? 0) > 0 && (
-                  <Collapsible defaultOpen>
-                    <CollapsibleTrigger className='flex items-center gap-1 text-sm text-red-600 hover:underline'>
-                      {t('Failed List')} (
-                      {samplingStatus.last_result.failed_list!.length})
-                    </CollapsibleTrigger>
-                    <CollapsibleContent>
-                      <div className='mt-1 max-h-48 space-y-0.5 overflow-y-auto'>
-                        {samplingStatus.last_result.failed_list!.map(
-                          (item, idx) => (
-                            <div
-                              key={idx}
-                              className='text-muted-foreground text-xs'
-                            >
-                              {item.channel} / {item.model} — {item.message}
-                            </div>
-                          )
-                        )}
-                      </div>
-                    </CollapsibleContent>
-                  </Collapsible>
-                )}
-              </div>
-            )}
-
             {/* Running progress */}
             {samplingStatus?.is_running && (
               <div className='rounded-lg border border-yellow-300 bg-yellow-50 p-3 space-y-3 dark:border-yellow-800 dark:bg-yellow-950/30'>
@@ -687,6 +671,14 @@ export function SamplingSection({ defaultValues }: Props) {
                 {t('No sampling records yet')}
               </p>
             )}
+          </div>
+
+          <Separator />
+
+          {/* ---- Sampling Records (History) ---- */}
+          <div className='space-y-4'>
+            <h4 className='text-sm font-medium'>{t('Sampling Records')}</h4>
+            <SamplingRecordsTable />
           </div>
 
           <Button type='submit' disabled={updateOption.isPending}>
