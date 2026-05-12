@@ -1,4 +1,4 @@
-import { Link, useNavigate, useSearch } from '@tanstack/react-router'
+import { useNavigate, useSearch } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 import { Clock, Zap, CheckCircle, BarChart3, ExternalLink, ArrowUp, ArrowDown } from 'lucide-react'
 import { PublicLayout } from '@/components/layout'
@@ -18,10 +18,19 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
 import { useLeaderboard, useLeaderboardVendors, useModelPerformanceDetail } from './hooks/use-leaderboard'
 import type { LeaderboardTimeRange, LeaderboardItem } from './types'
 import { MetricTooltip } from './metrics-legend'
 import { ModelDetailDialog } from './components/model-detail-dialog'
+import { ModelDetailsPerformance } from '@/features/pricing/components/model-details-performance'
+import type { PricingModel } from '@/features/pricing/types'
 import { useState, useMemo } from 'react'
 
 export type SortBy = 'score' | 'tps' | 'ttft'
@@ -104,7 +113,7 @@ export function PerformanceLeaderboard() {
 
   const totalPages = data ? Math.ceil(data.total / PAGE_SIZE) : 0
 
-  // Detail dialog state
+  // Sampling detail dialog state (for success rate column)
   const [detailDialogOpen, setDetailDialogOpen] = useState(false)
   const [selectedModel, setSelectedModel] = useState<string | null>(null)
 
@@ -122,6 +131,25 @@ export function PerformanceLeaderboard() {
     setDetailDialogOpen(false)
     setSelectedModel(null)
   }
+
+  // Performance detail sheet state (for model name column)
+  const [perfSheetOpen, setPerfSheetOpen] = useState(false)
+  const [perfModelName, setPerfModelName] = useState<string | null>(null)
+
+  const handleOpenPerfDetail = (modelName: string) => {
+    setPerfModelName(modelName)
+    setPerfSheetOpen(true)
+  }
+
+  const handleClosePerfDetail = () => {
+    setPerfSheetOpen(false)
+    setPerfModelName(null)
+  }
+
+  // Minimal PricingModel for ModelDetailsPerformance (only model_name is used)
+  const perfModel: PricingModel | null = perfModelName
+    ? { id: 0, model_name: perfModelName, quota_type: 1, model_ratio: 1, completion_ratio: 1, enable_groups: [] }
+    : null
 
   return (
     <PublicLayout showMainContainer={false}>
@@ -237,6 +265,7 @@ export function PerformanceLeaderboard() {
                 tpsBenchmark={data.tpsBenchmark} 
                 ttftBenchmark={data.ttftBenchmark} 
                 onRowClick={handleOpenDetail}
+                onModelClick={handleOpenPerfDetail}
                 sortBy={sortBy}
                 sortOrder={sortOrder}
                 onSortChange={handleSortChange}
@@ -251,7 +280,7 @@ export function PerformanceLeaderboard() {
             </>
           )}
 
-          {/* Model Detail Dialog */}
+{/* Model Detail Dialog (sampling records, for success rate column) */}
           <ModelDetailDialog
             open={detailDialogOpen}
             onOpenChange={handleCloseDetail}
@@ -260,6 +289,22 @@ export function PerformanceLeaderboard() {
             isLoading={detailQuery.isLoading}
             hours={hours}
           />
+
+          {/* Performance Detail Sheet (for model name column) */}
+          <Sheet open={perfSheetOpen} onOpenChange={handleClosePerfDetail}>
+            <SheetContent
+              side='right'
+              className='flex h-dvh w-full overflow-hidden p-0 sm:max-w-2xl lg:max-w-3xl xl:max-w-4xl 2xl:max-w-5xl'
+            >
+              <SheetHeader className='sr-only'>
+                <SheetTitle>{perfModelName}</SheetTitle>
+                <SheetDescription>{t('Model performance details')}</SheetDescription>
+              </SheetHeader>
+              <div className='flex-1 overflow-y-auto px-4 pt-11 pb-5 sm:px-6 sm:pt-12 sm:pb-6'>
+                {perfModel && <ModelDetailsPerformance model={perfModel} />}
+              </div>
+            </SheetContent>
+          </Sheet>
         </PageTransition>
       </div>
     </PublicLayout>
@@ -271,6 +316,7 @@ function LeaderboardTable({
   tpsBenchmark,
   ttftBenchmark,
   onRowClick,
+  onModelClick,
   sortBy = 'score',
   sortOrder = 'desc',
   onSortChange,
@@ -279,6 +325,7 @@ function LeaderboardTable({
   tpsBenchmark: number
   ttftBenchmark: number
   onRowClick?: (modelName: string) => void
+  onModelClick?: (modelName: string) => void
   sortBy?: SortBy
   sortOrder?: SortOrder
   onSortChange?: (sortBy: SortBy, sortOrder: SortOrder) => void
@@ -400,15 +447,13 @@ function LeaderboardTable({
                   <RankBadge rank={item.rank} />
                 </td>
                 <td className='px-4 py-3 font-medium'>
-                  <Link
-                    to='/pricing/$modelId'
-                    params={{ modelId: item.model_name }}
-                    search={{ tab: 'performance' }}
-                    className='inline-flex items-center gap-1 hover:text-primary hover:underline'
+                  <button
+                    type='button'
+                    className='inline-flex items-center gap-1 font-medium hover:text-primary hover:underline'
+                    onClick={() => onModelClick?.(item.model_name)}
                   >
                     {item.model_name}
-                    <ExternalLink className='h-3 w-3 opacity-50' />
-                  </Link>
+                  </button>
                 </td>
                 <td className='text-muted-foreground px-4 py-3'>
                   {item.vendor_name}

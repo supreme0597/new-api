@@ -64,7 +64,12 @@ func GetPerfMetrics(c *gin.Context) {
 		return
 	}
 
-	result.Groups = filterActiveGroups(result.Groups)
+	filtered := filterActiveGroups(result.Groups)
+	if len(filtered) > 0 {
+		result.Groups = filtered
+	}
+	// If no active groups match, keep all groups to avoid empty results
+	// (consistent with leaderboard which does not filter by group)
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,

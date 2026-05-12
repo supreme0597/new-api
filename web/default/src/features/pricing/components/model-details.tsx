@@ -202,7 +202,7 @@ function OverviewSummaryGrid(props: { model: PricingModel }) {
   const { t } = useTranslation()
   const metricsQuery = useQuery({
     queryKey: ['perf-metrics', props.model.model_name],
-    queryFn: () => getPerfMetrics(props.model.model_name, 24),
+    queryFn: () => getPerfMetrics(props.model.model_name, undefined, 24),
     staleTime: 60 * 1000,
   })
 
