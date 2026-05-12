@@ -30,6 +30,7 @@
   "Test Password": "Test Password",
   "Test User": "Test User",
   "AIGC2D": "AIGC2D",
+  "Alipay": "Alipay",
   "All Channel Types": "All Channel Types",
   "Allow users to authenticate via LDAP/Active Directory": "Allow users to authenticate via LDAP/Active Directory",
   "Allowed Groups": "Allowed Groups",
@@ -200,14 +201,13 @@
   "Wait time between each model sample in this group": "Wait time between each model sample in this group",
   "Webhook URL": "Webhook URL",
   "Webhook URL:": "Webhook URL:",
+  "WeChat Pay": "WeChat Pay",
   "whsec_xxx": "whsec_xxx",
   "Xinference": "Xinference",
-  "Xunfei": "Xunfei",
-  "Alipay": "Alipay",
-  "WeChat Pay": "WeChat Pay",
   "No performance data found for the selected filters.": "No performance data found for the selected filters.",
   "Real-time model performance rankings based on TPS, TTFT, and success rate from live traffic sampling.": "Real-time model performance rankings based on TPS, TTFT, and success rate from live traffic sampling.",
   "Unable to load leaderboard": "Unable to load leaderboard",
   "User Statistics": "User Statistics",
-  "Token Usage": "Token Usage"
+  "Token Usage": "Token Usage",
+  "Xunfei": "Xunfei"
 }
