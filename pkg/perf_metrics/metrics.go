@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/setting/perf_metrics_setting"
 )
@@ -87,7 +86,7 @@ func Query(params QueryParams) (QueryResult, error) {
 	startTs := endTs - int64(params.Hours)*3600
 
 	merged := map[bucketKey]counters{}
-	rows, err := model.GetPerfMetrics(params.Model, params.Group, startTs, endTs)
+	rows, err := DBFuncs.GetPerfMetrics(params.Model, params.Group, startTs, endTs)
 	if err != nil {
 		return QueryResult{}, err
 	}
@@ -132,7 +131,7 @@ func QuerySummaryAll(hours int) (SummaryAllResult, error) {
 	endTs := time.Now().Unix()
 	startTs := endTs - int64(hours)*3600
 
-	rows, err := model.GetPerfMetricsSummaryAll(startTs, endTs)
+	rows, err := DBFuncs.GetPerfMetricsSummary(startTs, endTs)
 	if err != nil {
 		return SummaryAllResult{}, err
 	}
@@ -199,6 +198,45 @@ func bucketStart(ts int64) int64 {
 		bucketSeconds = 3600
 	}
 	return ts - (ts % bucketSeconds)
+}
+
+// HotBucketCounters is the exported counter type for hot bucket merging.
+type HotBucketCounters struct {
+	RequestCount   int64
+	SuccessCount   int64
+	TotalLatencyMs int64
+	TtftSumMs      int64
+	TtftCount      int64
+	OutputTokens   int64
+	GenerationMs   int64
+}
+
+// MergeHotBuckets aggregates in-memory hot buckets within [startTs, endTs]
+// by model_name and returns the result. This allows callers outside this
+// package (e.g. model.GetLeaderboardData) to include unflushed data.
+func MergeHotBuckets(startTs, endTs int64) map[string]HotBucketCounters {
+	merged := map[string]HotBucketCounters{}
+	hotBuckets.Range(func(key, value any) bool {
+		k := key.(bucketKey)
+		if k.bucketTs < startTs || k.bucketTs > endTs {
+			return true
+		}
+		snap := value.(*atomicBucket).snapshot()
+		if snap.requestCount == 0 {
+			return true
+		}
+		cur := merged[k.model]
+		cur.RequestCount += snap.requestCount
+		cur.SuccessCount += snap.successCount
+		cur.TotalLatencyMs += snap.totalLatencyMs
+		cur.TtftSumMs += snap.ttftSumMs
+		cur.TtftCount += snap.ttftCount
+		cur.OutputTokens += snap.outputTokens
+		cur.GenerationMs += snap.generationMs
+		merged[k.model] = cur
+		return true
+	})
+	return merged
 }
 
 func mergeCounters(merged map[bucketKey]counters, key bucketKey, value counters) {
@@ -286,25 +324,25 @@ func bucketPoint(ts int64, value counters) BucketPoint {
 	}
 }
 
-func avg(sum int64, count int64) int64 {
-	if count <= 0 {
+func avg(sum, count int64) int64 {
+	if count == 0 {
 		return 0
 	}
 	return sum / count
 }
 
-func successRate(value counters) float64 {
-	if value.requestCount <= 0 {
+func successRate(c counters) float64 {
+	if c.requestCount == 0 {
 		return 0
 	}
-	return float64(value.successCount) / float64(value.requestCount) * 100
+	return float64(c.successCount) / float64(c.requestCount) * 100
 }
 
-func avgTps(value counters) float64 {
-	if value.outputTokens <= 0 || value.generationMs <= 0 {
+func avgTps(c counters) float64 {
+	if c.generationMs <= 0 {
 		return 0
 	}
-	return float64(value.outputTokens) / (float64(value.generationMs) / 1000)
+	return float64(c.outputTokens) / (float64(c.generationMs) / 1000.0)
 }
 
 func recordRedis(key bucketKey, sample Sample) {
@@ -333,24 +371,6 @@ func recordRedis(key bucketKey, sample Sample) {
 	}
 	pipe.Expire(ctx, redisKey, time.Hour)
 	_, _ = pipe.Exec(ctx)
-}
-
-func mergeRedisActiveBuckets(merged map[bucketKey]counters, params QueryParams, startTs int64, endTs int64) {
-	if !common.RedisEnabled || common.RDB == nil || params.Model == "" || params.Group == "" {
-		return
-	}
-	active := bucketStart(time.Now().Unix())
-	if active < startTs || active > endTs {
-		return
-	}
-	key := bucketKey{model: params.Model, group: params.Group, bucketTs: active}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	values, err := common.RDB.HGetAll(ctx, redisBucketKey(key)).Result()
-	if err != nil || len(values) == 0 {
-		return
-	}
-	mergeCounters(merged, key, redisCounters(values))
 }
 
 func redisBucketKey(key bucketKey) string {

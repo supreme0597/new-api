@@ -280,7 +280,6 @@ func migrateDB() error {
 		&SubscriptionPreConsumeRecord{},
 		&CustomOAuthProvider{},
 		&UserOAuthBinding{},
-		&ModelPerformance{},
 		&SamplingConfig{},
 		&PerfMetric{},
 	)
@@ -333,7 +332,6 @@ func migrateDBFast() error {
 		{&SubscriptionPreConsumeRecord{}, "SubscriptionPreConsumeRecord"},
 		{&CustomOAuthProvider{}, "CustomOAuthProvider"},
 		{&UserOAuthBinding{}, "UserOAuthBinding"},
-		{&ModelPerformance{}, "ModelPerformance"},
 		{&SamplingConfig{}, "SamplingConfig"},
 		{&PerfMetric{}, "PerfMetric"},
 	}

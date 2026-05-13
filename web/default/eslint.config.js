@@ -10,7 +10,6 @@ export default defineConfig(
   { ignores: ['dist', 'src/components/ui'] },
   {
     extends: [
-
       js.configs.recommended,
       ...tseslint.configs.recommended,
       ...pluginQuery.configs['flat/recommended'],

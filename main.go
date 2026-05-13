@@ -308,6 +308,8 @@ func InitResources() error {
 		return err
 	}
 
+	// Register database functions with perf_metrics package (must be before Init)
+	model.RegisterPerfMetricsDB()
 	perfmetrics.Init()
 
 	// 启动系统监控

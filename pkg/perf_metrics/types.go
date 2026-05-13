@@ -7,6 +7,53 @@ type Store interface {
 	Query(params QueryParams) (QueryResult, error)
 }
 
+// DBFuncs holds database function references to avoid import cycles.
+// The model package registers these at init time.
+var DBFuncs struct {
+	UpsertPerfMetric      func(metric *PerfMetricData) error
+	DeleteBefore          func(cutoffTs int64) error
+	GetPerfMetrics        func(modelName string, group string, startTs int64, endTs int64) ([]PerfMetricRow, error)
+	GetPerfMetricsSummary func(startTs int64, endTs int64) ([]PerfMetricSummaryRow, error)
+}
+
+// PerfMetricData is the data needed for upserting a perf metric.
+type PerfMetricData struct {
+	ModelName      string
+	Group          string
+	BucketTs       int64
+	RequestCount   int64
+	SuccessCount   int64
+	TotalLatencyMs int64
+	TtftSumMs      int64
+	TtftCount      int64
+	OutputTokens   int64
+	GenerationMs   int64
+}
+
+// PerfMetricRow is a row from the perf_metrics table.
+type PerfMetricRow struct {
+	ModelName      string
+	Group          string
+	BucketTs       int64
+	RequestCount   int64
+	SuccessCount   int64
+	TotalLatencyMs int64
+	TtftSumMs      int64
+	TtftCount      int64
+	OutputTokens   int64
+	GenerationMs   int64
+}
+
+// PerfMetricSummaryRow is a summary row from the perf_metrics table.
+type PerfMetricSummaryRow struct {
+	ModelName      string
+	RequestCount   int64
+	SuccessCount   int64
+	TotalLatencyMs int64
+	OutputTokens   int64
+	GenerationMs   int64
+}
+
 type Sample struct {
 	Model        string
 	Group        string
@@ -128,25 +175,11 @@ func (b *atomicBucket) drain() counters {
 }
 
 func (b *atomicBucket) addCounters(c counters) {
-	if c.requestCount != 0 {
-		b.requestCount.Add(c.requestCount)
-	}
-	if c.successCount != 0 {
-		b.successCount.Add(c.successCount)
-	}
-	if c.totalLatencyMs != 0 {
-		b.totalLatencyMs.Add(c.totalLatencyMs)
-	}
-	if c.ttftSumMs != 0 {
-		b.ttftSumMs.Add(c.ttftSumMs)
-	}
-	if c.ttftCount != 0 {
-		b.ttftCount.Add(c.ttftCount)
-	}
-	if c.outputTokens != 0 {
-		b.outputTokens.Add(c.outputTokens)
-	}
-	if c.generationMs != 0 {
-		b.generationMs.Add(c.generationMs)
-	}
+	b.requestCount.Add(c.requestCount)
+	b.successCount.Add(c.successCount)
+	b.totalLatencyMs.Add(c.totalLatencyMs)
+	b.ttftSumMs.Add(c.ttftSumMs)
+	b.ttftCount.Add(c.ttftCount)
+	b.outputTokens.Add(c.outputTokens)
+	b.generationMs.Add(c.generationMs)
 }
