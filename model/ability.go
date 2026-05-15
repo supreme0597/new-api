@@ -68,7 +68,7 @@ func GetGroupEnabledModels(group string) []string {
 	// Find distinct models, exclude test channels
 	DB.Table("abilities").
 		Joins("left join channels on abilities.channel_id = channels.id").
-		Where(commonGroupCol+" = ? and abilities.enabled = ?", group, true).
+		Where("abilities."+commonGroupCol+" = ? and abilities.enabled = ?", group, true).
 		Where("(channels.owner_user_id IS NULL OR channels.owner_user_id != -999)").
 		Distinct("abilities.model").Pluck("abilities.model", &models)
 	return models
@@ -78,7 +78,7 @@ func GetGroupEnabledModelsForUser(group string, userId int) []string {
 	var models []string
 	applyAbilityChannelOwnerScope(DB.Table("abilities").
 		Joins("left join channels on abilities.channel_id = channels.id").
-		Where(commonGroupCol+" = ? and abilities.enabled = ?", group, true).
+		Where("abilities."+commonGroupCol+" = ? and abilities.enabled = ?", group, true).
 		Where("(channels.owner_user_id IS NULL OR channels.owner_user_id != -999)"), userId).
 		Distinct("abilities.model").Pluck("abilities.model", &models)
 	return models
@@ -117,7 +117,7 @@ func getPriority(group string, model string, retry int) (int, error) {
 	err := DB.Model(&Ability{}).
 		Select("DISTINCT(abilities.priority)").
 		Joins("left join channels on abilities.channel_id = channels.id").
-		Where(commonGroupCol+" = ? and abilities.model = ? and abilities.enabled = ?", group, model, true).
+		Where("abilities."+commonGroupCol+" = ? and abilities.model = ? and abilities.enabled = ?", group, model, true).
 		Where("(channels.owner_user_id IS NULL OR channels.owner_user_id != -999)").
 		Order("priority DESC").              // 按优先级降序排序
 		Pluck("priority", &priorities).Error // Pluck用于将查询的结果直接扫描到一个切片中
@@ -147,11 +147,11 @@ func getChannelQuery(group string, model string, retry int) (*gorm.DB, error) {
 	maxPrioritySubQuery := DB.Model(&Ability{}).
 		Select("MAX(abilities.priority)").
 		Joins("left join channels on abilities.channel_id = channels.id").
-		Where(commonGroupCol+" = ? and abilities.model = ? and abilities.enabled = ?", group, model, true).
+		Where("abilities."+commonGroupCol+" = ? and abilities.model = ? and abilities.enabled = ?", group, model, true).
 		Where("(channels.owner_user_id IS NULL OR channels.owner_user_id != -999)")
 	channelQuery := DB.Table("abilities").
 		Joins("left join channels on abilities.channel_id = channels.id").
-		Where(commonGroupCol+" = ? and abilities.model = ? and abilities.enabled = ? and abilities.priority = (?)", group, model, true, maxPrioritySubQuery).
+		Where("abilities."+commonGroupCol+" = ? and abilities.model = ? and abilities.enabled = ? and abilities.priority = (?)", group, model, true, maxPrioritySubQuery).
 		Where("(channels.owner_user_id IS NULL OR channels.owner_user_id != -999)")
 	if retry != 0 {
 		priority, err := getPriority(group, model, retry)
