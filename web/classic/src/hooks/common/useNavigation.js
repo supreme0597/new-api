@@ -25,7 +25,6 @@ export const useNavigation = (t, docsLink, headerNavModules, isAdminUser) => {
     const defaultModules = {
       home: true,
       console: true,
-      channelAnalytics: true,
       pricing: true,
       modelPerformance: true,
       docs: true,
@@ -55,12 +54,6 @@ export const useNavigation = (t, docsLink, headerNavModules, isAdminUser) => {
         text: t('性能排行榜'),
         itemKey: 'modelPerformance',
         to: '/model-performance',
-      },
-      {
-        text: t('用量统计'),
-        itemKey: 'channelAnalytics',
-        to: '/channel-analytics',
-        requireAdmin: true,
       },
       ...(docsLink
         ? [
