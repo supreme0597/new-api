@@ -12,8 +12,15 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/pkg/perf_metrics"
 	"github.com/QuantumNous/new-api/setting"
 )
+
+// SamplingConfig 采样配置（轻量级容器，仅用于传递 prompt 和 maxTokens）
+type SamplingConfig struct {
+	Prompt    string
+	MaxTokens int
+}
 
 var ErrSamplingForbidden = errors.New("sampling forbidden or rate limited")
 
@@ -74,10 +81,9 @@ type SamplingTaskStatus struct {
 }
 
 var (
-	samplingTaskStatus   SamplingTaskStatus
-	samplingTaskMutex    sync.RWMutex
-	samplingStopFlag     atomic.Bool
-	samplingConfigNotify = make(chan struct{}, 1) // 通知调度器配置已变更
+	samplingTaskStatus SamplingTaskStatus
+	samplingTaskMutex  sync.RWMutex
+	samplingStopFlag   atomic.Bool
 )
 
 // GetSamplingTaskStatus 获取当前采样任务状态
@@ -297,7 +303,7 @@ func RunSamplingTask() error {
 			chTotal := channelStatuses[ch.Id].TotalTasks
 
 			// 速率限制器：基于滑动窗口
-			rateLimiter := newSamplingRateLimiter(duration, totalCount)
+			rateLimiter := setting.NewSlidingWindowLimiter(duration, totalCount)
 			sem := make(chan struct{}, maxConcurrency)
 			var chWg sync.WaitGroup
 
@@ -378,9 +384,12 @@ func RunSamplingTask() error {
 						lastResult.FailedList = append(lastResult.FailedList, record)
 						resultMutex.Unlock()
 
-						if err := RecordSamplingFailure(model, ch.Group); err != nil {
-							common.SysError(fmt.Sprintf("[Sampling] 记录采样失败数据失败: 渠道=%s, 模型=%s, 错误=%v", channelName, model, err))
-						}
+perfmetrics.Record(perfmetrics.Sample{
+							Model:   model,
+							Group:   ch.Group,
+							Source:  "sampling",
+							Success: false,
+						})
 
 						if errors.Is(lastErr, ErrSamplingForbidden) {
 							common.SysLog(fmt.Sprintf("[Sampling] 渠道 %s 被限流/禁止访问，跳过该渠道剩余模型", channelName))
@@ -420,9 +429,17 @@ func RunSamplingTask() error {
 						Other:            map[string]interface{}{"sampling": true, "tps": result.Tps, "ttft": result.TtftMs},
 					})
 
-					if err := RecordSamplingMetric(model, ch.Group, result.LatencyMs, int64(result.TtftMs), int64(result.TotalTokens), result.GenerationMs); err != nil {
-						common.SysError(fmt.Sprintf("[Sampling] 记录性能数据失败: 渠道=%s, 模型=%s, 错误=%v", channelName, model, err))
-					}
+					perfmetrics.Record(perfmetrics.Sample{
+						Model:        model,
+						Group:        ch.Group,
+						Source:       "sampling",
+						Success:      true,
+						LatencyMs:    result.LatencyMs,
+						TtftMs:       int64(result.TtftMs),
+						HasTtft:      result.TtftMs > 0,
+						OutputTokens: int64(result.CompletionTokens),
+						GenerationMs: result.GenerationMs,
+					})
 
 					updateSamplingTaskProgress(int(doneAtomic.Load()), int(successAtomic.Load()), int(failedAtomic.Load()), channelName, model,
 						fmt.Sprintf("完成: %s / %s (TPS=%.1f, TTFT=%dms)", channelName, model, result.Tps, result.TtftMs))
@@ -517,29 +534,8 @@ func sampleModelPerformance(channel *Channel, modelName string, config *Sampling
 		return nil, fmt.Errorf("unexpected status %d: %s", resp.StatusCode, string(body))
 	}
 
-	// 读取流式响应，记录首字节时间和总 token 数
-	var firstByteTime time.Time
-	totalTokens := 0
-	buf := make([]byte, 4096)
-	for {
-		n, readErr := resp.Body.Read(buf)
-		if n > 0 {
-			// 记录首字节到达时间（TTFT）
-			if firstByteTime.IsZero() {
-				firstByteTime = time.Now()
-			}
-			// 简单统计 SSE 数据中的 token
-			chunk := string(buf[:n])
-			totalTokens += countTokensInChunk(chunk)
-		}
-		if readErr == io.EOF {
-			break
-		}
-		if readErr != nil {
-			common.SysError(fmt.Sprintf("%s 读取响应流出错: %v", logPrefix, readErr))
-			break
-		}
-	}
+	// 使用共享 SSE 解析器解析流式响应
+	promptTokens, completionTokens, firstByteTime := ParseSSEStreamResponse(resp.Body)
 
 	endTime := time.Now()
 	latencyMs := endTime.Sub(startTime).Milliseconds()
@@ -557,59 +553,19 @@ func sampleModelPerformance(channel *Channel, modelName string, config *Sampling
 	elapsed := endTime.Sub(startTime).Seconds()
 	var tps float64
 	if elapsed > 0 {
-		tps = float64(totalTokens) / elapsed
+		tps = float64(completionTokens) / elapsed
 	}
 
-	// 估算 prompt token 数（类似 countTokensInChunk 的估算方法）
-	promptTokens := len(config.Prompt) / 4
-	if len(config.Prompt)%4 > 0 {
-		promptTokens++
-	}
-
-	common.SysLog(fmt.Sprintf("%s 采样完成: elapsed=%.2fs, promptTokens=%d, completionTokens=%d, TPS=%.1f, TTFT=%dms", logPrefix, elapsed, promptTokens, totalTokens, tps, ttftMs))
+	common.SysLog(fmt.Sprintf("%s 采样完成: elapsed=%.2fs, promptTokens=%d, completionTokens=%d, TPS=%.1f, TTFT=%dms", logPrefix, elapsed, promptTokens, completionTokens, tps, ttftMs))
 	return &SamplingResult{
 		Tps:              tps,
 		TtftMs:           ttftMs,
-		TotalTokens:      totalTokens,
+		TotalTokens:      promptTokens + completionTokens,
 		LatencyMs:        latencyMs,
 		GenerationMs:     generationMs,
 		PromptTokens:     promptTokens,
-		CompletionTokens: totalTokens,
+		CompletionTokens: completionTokens,
 	}, nil
-}
-
-// countTokensInChunk 简单统计 SSE 响应中的 token 数量
-// 通过计数 content 字段中的字符来估算
-func countTokensInChunk(chunk string) int {
-	count := 0
-	lines := strings.Split(chunk, "\n")
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if !strings.HasPrefix(line, "data: ") {
-			continue
-		}
-		data := strings.TrimPrefix(line, "data: ")
-		if data == "[DONE]" {
-			continue
-		}
-		// 查找 "content" 字段中的文本
-		if idx := strings.Index(data, `"content"`); idx >= 0 {
-			// 简单估算：每个中文字符约1个token，每个英文单词约1个token
-			// 这里用字符数/4做粗略估算
-			contentStart := idx + 11 // skip `"content":"`
-			if contentStart < len(data) {
-				remaining := data[contentStart:]
-				if endIdx := strings.Index(remaining, `"`); endIdx > 0 {
-					content := remaining[:endIdx]
-					count += len(content) / 4
-					if len(content)%4 > 0 {
-						count++
-					}
-				}
-			}
-		}
-	}
-	return count
 }
 
 // getSamplingConfigFromOptions 从 OptionMap 读取采样配置
@@ -758,28 +714,10 @@ func StartSamplingScheduler() {
 	}()
 }
 
-// interruptibleSleep 可被配置变更通知打断的 sleep
-// 当收到 samplingConfigNotify 信号时立即返回，使调度器重新读取最新配置
+// interruptibleSleep 执行 sleep
+// 采样配置通过 OptionMap 读取，scheduler 每次循环自动获取最新值，无需 channel 通知
 func interruptibleSleep(d time.Duration) {
-	timer := time.NewTimer(d)
-	defer timer.Stop()
-	select {
-	case <-timer.C:
-		// 正常超时
-	case <-samplingConfigNotify:
-		// 配置变更，提前唤醒
-		common.SysLog("[Sampling] 检测到配置变更，提前唤醒调度器")
-	}
-}
-
-// NotifySamplingConfigChange 通知调度器采样配置已变更
-// 调度器会立即重新读取配置并重新计算调度时间
-func NotifySamplingConfigChange() {
-	select {
-	case samplingConfigNotify <- struct{}{}:
-	default:
-		// channel 已有信号，无需重复发送
-	}
+	time.Sleep(d)
 }
 
 // calcSleepUntilWindowStart 计算距离下一个采样窗口开始的等待时间
@@ -819,84 +757,4 @@ func calcSleepUntilWindowStart(interval int) time.Duration {
 	return time.Duration(waitMinutes) * time.Minute
 }
 
-// samplingRateLimiter 采样任务专用的滑动窗口速率限制器
-type samplingRateLimiter struct {
-	mu       sync.Mutex
-	window   time.Duration // 时间窗口
-	maxCount int           // 窗口内最大请求数
-	requests []time.Time   // 请求记录
-	notify   chan struct{} // 通知等待中的 goroutine 有配额释放
-}
 
-func newSamplingRateLimiter(durationMinutes, maxCount int) *samplingRateLimiter {
-	window := time.Duration(durationMinutes) * time.Minute
-	if window <= 0 {
-		window = time.Minute
-	}
-	return &samplingRateLimiter{
-		window:   window,
-		maxCount: maxCount,
-		requests: make([]time.Time, 0, maxCount),
-		notify:   make(chan struct{}, 1),
-	}
-}
-
-// Allow 非阻塞检查是否可以发送请求
-func (r *samplingRateLimiter) Allow() bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.cleanup()
-	return len(r.requests) < r.maxCount
-}
-
-// Record 记录一次请求
-func (r *samplingRateLimiter) Record() {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.requests = append(r.requests, time.Now())
-	// 通知可能在 Wait 的 goroutine
-	select {
-	case r.notify <- struct{}{}:
-	default:
-	}
-}
-
-// Wait 阻塞等待直到有可用配额
-func (r *samplingRateLimiter) Wait() {
-	for {
-		r.mu.Lock()
-		r.cleanup()
-		if len(r.requests) < r.maxCount {
-			r.mu.Unlock()
-			return
-		}
-		// 计算需要等待的时间
-		waitUntil := r.requests[0].Add(r.window)
-		waitDuration := time.Until(waitUntil)
-		r.mu.Unlock()
-
-		if waitDuration <= 0 {
-			return
-		}
-
-		// 等待，或被新配额释放通知唤醒
-		select {
-		case <-r.notify:
-			continue
-		case <-time.After(waitDuration):
-			continue
-		}
-	}
-}
-
-// cleanup 清理过期的请求记录
-func (r *samplingRateLimiter) cleanup() {
-	cutoff := time.Now().Add(-r.window)
-	i := 0
-	for i < len(r.requests) && r.requests[i].Before(cutoff) {
-		i++
-	}
-	if i > 0 {
-		r.requests = r.requests[i:]
-	}
-}

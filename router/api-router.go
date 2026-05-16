@@ -285,21 +285,6 @@ func SetApiRouter(router *gin.Engine) {
 			modelPerformanceAdminRoute.POST("/stop", controller.StopSamplingTask)
 		}
 
-		// 渠道供应商分析（仅管理员）
-		channelAnalyticsRoute := apiRouter.Group("/channel-analytics")
-		channelAnalyticsRoute.Use(middleware.AdminAuth())
-		{
-			channelAnalyticsRoute.GET("/overview", controller.GetChannelAnalyticsOverview)
-			channelAnalyticsRoute.GET("/vendors", controller.GetChannelAnalyticsVendors)
-			channelAnalyticsRoute.GET("/trend", controller.GetChannelAnalyticsTrend)
-			channelAnalyticsRoute.GET("/vendor/:vendor_id", controller.GetChannelAnalyticsVendorDetail)
-			channelAnalyticsRoute.GET("/vendor/:vendor_id/users", controller.GetChannelAnalyticsUserRanking)
-			channelAnalyticsRoute.GET("/vendor/:vendor_id/models", controller.GetChannelAnalyticsModels)
-			channelAnalyticsRoute.GET("/vendor/:vendor_id/model-trend", controller.GetChannelAnalyticsModelTrend)
-			channelAnalyticsRoute.GET("/model-comparison/items", controller.GetChannelAnalyticsModelComparisonItems)
-			channelAnalyticsRoute.GET("/model-comparison/trend", controller.GetChannelAnalyticsModelComparisonTrend)
-		}
-
 		tokenRoute := apiRouter.Group("/token")
 		tokenRoute.Use(middleware.UserAuth())
 		{

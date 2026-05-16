@@ -56,9 +56,8 @@ type Channel struct {
 	OtherSettings string `json:"settings" gorm:"column:settings"` // 其他设置，存储azure版本等不需要检索的信息，详见dto.ChannelOtherSettings
 
 	// 性能排行榜相关
-	VendorID                *int    `json:"vendor_id" gorm:"index"`
-	VendorName              *string `json:"vendor_name" gorm:"type:varchar(128);default:''"`
-	SamplingIntervalSeconds *int    `json:"sampling_interval_seconds" gorm:"default:null"`
+	VendorID   *int    `json:"vendor_id" gorm:"index"`
+	VendorName *string `json:"vendor_name" gorm:"type:varchar(128);default:''"`
 
 	// cache info
 	Keys          []string `json:"-" gorm:"-"`
@@ -405,26 +404,6 @@ func GetAllChannels(startIdx int, num int, selectAll bool, idSort bool, sortOpti
 	} else {
 		err = order.Apply(DB).Limit(num).Offset(startIdx).Omit("key").Find(&channels).Error
 	}
-	return channels, err
-}
-
-func GetAllChannelsForActor(startIdx int, num int, selectAll bool, idSort bool, userId int, isAdmin bool, scope string) ([]*Channel, error) {
-	var channels []*Channel
-	order := "priority desc"
-	if idSort {
-		order = "id desc"
-	}
-	query := ApplyChannelViewScope(DB.Model(&Channel{}), userId, isAdmin)
-	switch scope {
-	case "public":
-		query = query.Where("owner_user_id IS NULL")
-	case "private":
-		query = query.Where("owner_user_id IS NOT NULL")
-	}
-	if !selectAll {
-		query = query.Omit("key").Limit(num).Offset(startIdx)
-	}
-	err := query.Order(order).Find(&channels).Error
 	return channels, err
 }
 

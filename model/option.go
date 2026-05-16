@@ -238,14 +238,8 @@ func UpdateOption(key string, value string) error {
 
 func updateOptionMap(key string, value string) (err error) {
 	common.OptionMapRWMutex.Lock()
-	oldValue := common.OptionMap[key]
 	common.OptionMap[key] = value
 	common.OptionMapRWMutex.Unlock()
-
-	// 仅在采样配置值真正发生变化时通知调度器，避免 SyncOptions 定期同步导致调度器被反复唤醒
-	if oldValue != value && (strings.HasPrefix(key, "Sampling") || key == "TpsBenchmark" || key == "TtftBenchmark") {
-		NotifySamplingConfigChange()
-	}
 
 	common.OptionMapRWMutex.RLock()
 	defer common.OptionMapRWMutex.RUnlock()

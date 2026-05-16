@@ -57,6 +57,7 @@ type PerfMetricSummaryRow struct {
 type Sample struct {
 	Model        string
 	Group        string
+	Source       string // "relay" | "sampling" — 标记数据来源，便于审计和调试，不影响 bucketKey 聚合
 	LatencyMs    int64
 	TtftMs       int64
 	HasTtft      bool

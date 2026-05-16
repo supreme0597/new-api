@@ -1,7 +1,6 @@
 package setting
 
 import (
-	"encoding/json"
 	"fmt"
 	"math"
 	"sync"
@@ -28,13 +27,14 @@ func SamplingRateLimitGroup2JSONString() string {
 	SamplingRateLimitMutex.RLock()
 	defer SamplingRateLimitMutex.RUnlock()
 
-	jsonBytes, err := json.Marshal(SamplingRateLimitGroup)
+	jsonBytes, err := common.Marshal(SamplingRateLimitGroup)
 	if err != nil {
 		common.SysLog("error marshalling sampling rate limit group: " + err.Error())
 	}
 	return string(jsonBytes)
 }
 
+// UpdateSamplingRateLimitGroupByJSONString 从 JSON 字符串更新采样限流配置
 func UpdateSamplingRateLimitGroupByJSONString(jsonStr string) error {
 	SamplingRateLimitMutex.Lock()
 	defer SamplingRateLimitMutex.Unlock()
@@ -43,7 +43,7 @@ func UpdateSamplingRateLimitGroupByJSONString(jsonStr string) error {
 	if jsonStr == "" || jsonStr == "{}" {
 		return nil
 	}
-	return json.Unmarshal([]byte(jsonStr), &SamplingRateLimitGroup)
+	return common.Unmarshal([]byte(jsonStr), &SamplingRateLimitGroup)
 }
 
 // GetSamplingGroupRateLimit 获取分组的采样限流配置
@@ -78,7 +78,7 @@ func GetSamplingGroupRateLimit(group string) (duration, totalCount, successCount
 
 func CheckSamplingRateLimitGroup(jsonStr string) error {
 	checkGroup := make(map[string][3]int)
-	err := json.Unmarshal([]byte(jsonStr), &checkGroup)
+	err := common.Unmarshal([]byte(jsonStr), &checkGroup)
 	if err != nil {
 		return err
 	}

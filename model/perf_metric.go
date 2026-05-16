@@ -6,7 +6,6 @@ import (
 	"time"
 
 	perfmetrics "github.com/QuantumNous/new-api/pkg/perf_metrics"
-	"github.com/QuantumNous/new-api/setting/perf_metrics_setting"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -327,64 +326,6 @@ func PerfMetricStartTime(hours int) int64 {
 		hours = 24
 	}
 	return time.Now().Add(-time.Duration(hours) * time.Hour).Unix()
-}
-
-// RecordSamplingFailure 将采样失败记录到 perf_metrics
-// RequestCount=1, SuccessCount=0 表示失败，排行榜可据此计算成功率
-func RecordSamplingFailure(modelName string, group string) error {
-	now := time.Now().Unix()
-	bucketSeconds := perf_metrics_setting.GetBucketSeconds()
-	if bucketSeconds <= 0 {
-		bucketSeconds = 3600
-	}
-	bucketTs := now - (now % bucketSeconds)
-
-	if group == "" {
-		group = "default"
-	}
-
-	metric := &PerfMetric{
-		ModelName:      modelName,
-		Group:          group,
-		BucketTs:       bucketTs,
-		RequestCount:   1, // 总请求 +1
-		SuccessCount:   0, // 成功 = 0（表示失败）
-		TotalLatencyMs: 0,
-		TtftSumMs:      0,
-		TtftCount:      0,
-		OutputTokens:   0,
-		GenerationMs:   0,
-	}
-	return UpsertPerfMetric(metric)
-}
-
-// RecordSamplingMetric 直接将采样性能数据写入 perf_metrics 表
-// 这是采样任务专用的写入路径，绕过 pkg/perf_metrics 的内存缓冲
-func RecordSamplingMetric(modelName string, group string, latencyMs int64, ttftMs int64, outputTokens int64, generationMs int64) error {
-	now := time.Now().Unix()
-	bucketSeconds := perf_metrics_setting.GetBucketSeconds()
-	if bucketSeconds <= 0 {
-		bucketSeconds = 3600
-	}
-	bucketTs := now - (now % bucketSeconds)
-
-	if group == "" {
-		group = "default"
-	}
-
-	metric := &PerfMetric{
-		ModelName:      modelName,
-		Group:          group,
-		BucketTs:       bucketTs,
-		RequestCount:   1,
-		SuccessCount:   1,
-		TotalLatencyMs: latencyMs,
-		TtftSumMs:      ttftMs,
-		TtftCount:      1,
-		OutputTokens:   outputTokens,
-		GenerationMs:   generationMs,
-	}
-	return UpsertPerfMetric(metric)
 }
 
 // ModelPerformanceDetailRecord 模型性能详情记录

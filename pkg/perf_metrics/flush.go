@@ -95,3 +95,11 @@ func parseRedisInt(value string) int64 {
 	parsed, _ := strconv.ParseInt(value, 10, 64)
 	return parsed
 }
+
+// Flush 将 hotBuffer 中已完成的 bucket 刷新到 DB。
+// 供外部在需要立即持久化时调用（如采样任务完成后）。
+// 与定时 flushLoop 并发安全：atomicBucket.drain() 使用 Swap(0) 原子操作，
+// 两个并发 flush 不会导致数据重复写入。
+func Flush() {
+	flushCompletedBuckets()
+}
