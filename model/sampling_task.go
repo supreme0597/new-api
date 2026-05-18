@@ -86,6 +86,43 @@ var (
 	samplingStopFlag   atomic.Bool
 )
 
+// resolveUpstreamModel 根据渠道的 model_mapping 将下游模型名解析为上游模型名
+// 逻辑与 relay/helper.ModelMappedHelper 保持一致（链式映射 + 循环检测）
+func resolveUpstreamModel(channel *Channel, downstreamModel string) string {
+	mappingJSON := channel.GetModelMapping()
+	if mappingJSON == "" || mappingJSON == "{}" {
+		return downstreamModel
+	}
+
+	var modelMap map[string]string
+	if err := common.Unmarshal([]byte(mappingJSON), &modelMap); err != nil {
+		common.SysError(fmt.Sprintf("[Sampling] 解析 model_mapping 失败: 渠道=%s, err=%v", channel.Name, err))
+		return downstreamModel
+	}
+
+	currentModel := downstreamModel
+	visitedModels := map[string]bool{currentModel: true}
+	for {
+		if mappedModel, exists := modelMap[currentModel]; exists && mappedModel != "" {
+			// 模型重定向循环检测，避免无限循环
+			if visitedModels[mappedModel] {
+				// 映射到自身：不是真正的映射，返回原名
+				if mappedModel == currentModel {
+					break
+				}
+				// 检测到真正的循环，记录警告并返回当前值
+				common.SysError(fmt.Sprintf("[Sampling] model_mapping 包含循环: %s -> %s", currentModel, mappedModel))
+				break
+			}
+			visitedModels[mappedModel] = true
+			currentModel = mappedModel
+		} else {
+			break
+		}
+	}
+	return currentModel
+}
+
 // GetSamplingTaskStatus 获取当前采样任务状态
 func GetSamplingTaskStatus() SamplingTaskStatus {
 	samplingTaskMutex.RLock()
@@ -384,7 +421,7 @@ func RunSamplingTask() error {
 						lastResult.FailedList = append(lastResult.FailedList, record)
 						resultMutex.Unlock()
 
-perfmetrics.Record(perfmetrics.Sample{
+						perfmetrics.Record(perfmetrics.Sample{
 							Model:   model,
 							Group:   ch.Group,
 							Source:  "sampling",
@@ -470,7 +507,10 @@ perfmetrics.Record(perfmetrics.Sample{
 
 // sampleModelPerformance 对单个模型执行采样，返回采样结果详情
 func sampleModelPerformance(channel *Channel, modelName string, config *SamplingConfig) (*SamplingResult, error) {
-	logPrefix := fmt.Sprintf("[Sampling][渠道=%s,模型=%s]", channel.Name, modelName)
+	// 将下游模型名解析为上游模型名（应用渠道的 model_mapping）
+	upstreamModel := resolveUpstreamModel(channel, modelName)
+
+	logPrefix := fmt.Sprintf("[Sampling][渠道=%s,模型=%s(原始=%s)]", channel.Name, upstreamModel, modelName)
 
 	baseURL := channel.GetBaseURL()
 	if baseURL == "" {
@@ -486,7 +526,7 @@ func sampleModelPerformance(channel *Channel, modelName string, config *Sampling
 		"messages": [{"role": "user", "content": %q}],
 		"max_tokens": %d,
 		"stream": true
-	}`, modelName, config.Prompt, config.MaxTokens)
+	}`, upstreamModel, config.Prompt, config.MaxTokens)
 
 	req, err := http.NewRequest("POST", url, strings.NewReader(requestBody))
 	if err != nil {
@@ -756,5 +796,3 @@ func calcSleepUntilWindowStart(interval int) time.Duration {
 	}
 	return time.Duration(waitMinutes) * time.Minute
 }
-
-
