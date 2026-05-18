@@ -37,6 +37,7 @@ const DEFAULT_HEADER_NAV_MODULES: HeaderNavModules = {
   console: true,
   pricing: { enabled: true, requireAuth: false },
   rankings: { enabled: true, requireAuth: false },
+  performance_leaderboard: { enabled: true, requireAuth: false },
   docs: true,
   about: true,
 }
@@ -51,6 +52,7 @@ function cloneHeaderNavDefaults(): HeaderNavModules {
     ...DEFAULT_HEADER_NAV_MODULES,
     pricing: { ...DEFAULT_HEADER_NAV_MODULES.pricing },
     rankings: { ...DEFAULT_HEADER_NAV_MODULES.rankings },
+    performance_leaderboard: { ...DEFAULT_HEADER_NAV_MODULES.performance_leaderboard },
   }
 }
 
@@ -116,6 +118,10 @@ export function parseHeaderNavModules(raw: unknown): HeaderNavModules {
     }
     if (key === 'rankings') {
       result.rankings = parseAccess(value, result.rankings)
+      return
+    }
+    if (key === 'performance_leaderboard') {
+      result.performance_leaderboard = parseAccess(value, result.performance_leaderboard)
       return
     }
 
