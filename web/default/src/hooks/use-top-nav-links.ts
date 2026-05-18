@@ -20,11 +20,13 @@ import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '@/stores/auth-store'
 import { useStatus } from '@/hooks/use-status'
+import { parseHeaderNavModulesFromStatus } from '@/lib/nav-modules'
 
 export type TopNavLink = {
   title: string
   href: string
   disabled?: boolean
+  requiresAuth?: boolean
   external?: boolean
 }
 
@@ -115,8 +117,10 @@ export function useTopNavLinks(): TopNavLink[] {
 
   // Parse HeaderNavModules
   const modules = useMemo(() => {
-    return parseHeaderNavModules(status?.HeaderNavModules)
-  }, [status?.HeaderNavModules])
+    return parseHeaderNavModulesFromStatus(
+      status as Record<string, unknown> | null
+    )
+  }, [status])
 
   // Documentation link (may be external)
   const docsLink: string | undefined = status?.docs_link as string | undefined
@@ -138,15 +142,15 @@ export function useTopNavLinks(): TopNavLink[] {
   // Pricing
   const pricing = modules?.pricing
   if (pricing && typeof pricing === 'object' && pricing.enabled) {
-    const disabled = pricing.requireAuth && !isAuthed
-    links.push({ title: t('Model Square'), href: '/pricing', disabled })
+    const requiresAuth = pricing.requireAuth && !isAuthed
+    links.push({ title: t('Model Square'), href: '/pricing', requiresAuth })
   }
 
   // Rankings
   const rankings = modules?.rankings
   if (rankings && typeof rankings === 'object' && rankings.enabled) {
-    const disabled = rankings.requireAuth && !isAuthed
-    links.push({ title: t('Rankings'), href: '/rankings', disabled })
+    const requiresAuth = rankings.requireAuth && !isAuthed
+    links.push({ title: t('Rankings'), href: '/rankings', requiresAuth })
   }
 
   // Performance Leaderboard
