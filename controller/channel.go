@@ -166,6 +166,10 @@ func GetAllChannels(c *gin.Context) {
 			ownerFilter = o
 		}
 	}
+	// model_tag filter
+	modelTagFilter := c.Query("model_tag")
+	// model filter
+	modelFilter := c.Query("model")
 	if enableTagMode {
 		tags, err := model.GetPaginatedChannelTags(buildChannelListQuery(groupFilter, statusFilter, typeFilter), pageInfo.GetStartIdx(), pageInfo.GetPageSize())
 		if err != nil {
@@ -223,6 +227,12 @@ func GetAllChannels(c *gin.Context) {
 				if ownerFilter > 0 && (ch.OwnerUserId == nil || *ch.OwnerUserId != ownerFilter) {
 					continue
 				}
+				if modelTagFilter != "" && (ch.Tag == nil || *ch.Tag != modelTagFilter) {
+					continue
+				}
+				if modelFilter != "" && !strings.Contains(ch.Models, modelFilter) {
+					continue
+				}
 				filtered = append(filtered, ch)
 			}
 			channelData = append(channelData, filtered...)
@@ -249,6 +259,12 @@ func GetAllChannels(c *gin.Context) {
 			baseQuery = baseQuery.Where("status = ?", common.ChannelStatusEnabled)
 		} else if statusFilter == 0 {
 			baseQuery = baseQuery.Where("status != ?", common.ChannelStatusEnabled)
+		}
+		if modelTagFilter != "" {
+			baseQuery = baseQuery.Where("tag = ?", modelTagFilter)
+		}
+		if modelFilter != "" {
+			baseQuery = baseQuery.Where("models LIKE ?", "%"+modelFilter+"%")
 		}
 
 		err := sortOptions.Apply(buildChannelListQuery(groupFilter, statusFilter, typeFilter)).
@@ -427,7 +443,6 @@ func SearchChannels(c *gin.Context) {
 						channelData = append(channelData, ch)
 					}
 				}
-				channelData = append(channelData, tagChannels...)
 			}
 		}
 	} else {
