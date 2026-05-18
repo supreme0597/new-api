@@ -176,11 +176,25 @@ func (b *atomicBucket) drain() counters {
 }
 
 func (b *atomicBucket) addCounters(c counters) {
-	b.requestCount.Add(c.requestCount)
-	b.successCount.Add(c.successCount)
-	b.totalLatencyMs.Add(c.totalLatencyMs)
-	b.ttftSumMs.Add(c.ttftSumMs)
-	b.ttftCount.Add(c.ttftCount)
-	b.outputTokens.Add(c.outputTokens)
-	b.generationMs.Add(c.generationMs)
+	if c.requestCount != 0 {
+		b.requestCount.Add(c.requestCount)
+	}
+	if c.successCount != 0 {
+		b.successCount.Add(c.successCount)
+	}
+	if c.totalLatencyMs != 0 {
+		b.totalLatencyMs.Add(c.totalLatencyMs)
+	}
+	if c.ttftSumMs != 0 {
+		b.ttftSumMs.Add(c.ttftSumMs)
+	}
+	if c.ttftCount != 0 {
+		b.ttftCount.Add(c.ttftCount)
+	}
+	if c.outputTokens != 0 {
+		b.outputTokens.Add(c.outputTokens)
+	}
+	if c.generationMs != 0 {
+		b.generationMs.Add(c.generationMs)
+	}
 }
