@@ -119,18 +119,30 @@ func ApplyChannelViewScope(query *gorm.DB, userId int, isAdmin bool) *gorm.DB {
 	return query.Where("owner_user_id IS NULL OR owner_user_id = ?", userId)
 }
 
+// ApplyChannelScopeFilter 为 GORM 查询添加 scope 过滤（public/private/test）
+func ApplyChannelScopeFilter(query *gorm.DB, scope string) *gorm.DB {
+	switch scope {
+	case "public":
+		return query.Where("owner_user_id IS NULL")
+	case "private":
+		return query.Where("owner_user_id IS NOT NULL AND owner_user_id != ?", TestChannelOwnerUserId)
+	case "test":
+		return query.Where("owner_user_id = ?", TestChannelOwnerUserId)
+	default:
+		return query
+	}
+}
+
+// GetChannelOwnerUserIds 获取所有私有渠道的 owner 用户ID列表（去重，排除测试渠道）
 func GetChannelOwnerUserIds() []int {
 	var owners []int
 	DB.Model(&Channel{}).Where("owner_user_id IS NOT NULL AND owner_user_id != ?", TestChannelOwnerUserId).Distinct("owner_user_id").Pluck("owner_user_id", &owners)
 	return owners
 }
 
-func ApplyChannelManageScope(query *gorm.DB, userId int, isAdmin bool) *gorm.DB {
-	if isAdmin {
-		return query
-	}
-	return query.Where("owner_user_id = ? AND owner_user_id != ?", userId, TestChannelOwnerUserId)
-}
+// =============================================================================
+// ChannelInfo 结构体 + JSON 序列化
+// =============================================================================
 
 type ChannelInfo struct {
 	IsMultiKey             bool                  `json:"is_multi_key"`                        // 是否多Key模式
@@ -498,14 +510,7 @@ func SearchChannelsForActor(keyword string, group string, model string, idSort b
 		order = "id desc"
 	}
 	baseQuery := ApplyChannelViewScope(DB.Model(&Channel{}).Omit("key"), userId, isAdmin)
-	switch scope {
-	case "public":
-		baseQuery = baseQuery.Where("owner_user_id IS NULL")
-	case "private":
-		baseQuery = baseQuery.Where("owner_user_id IS NOT NULL AND owner_user_id != ?", TestChannelOwnerUserId)
-	case "test":
-		baseQuery = baseQuery.Where("owner_user_id = ?", TestChannelOwnerUserId)
-	}
+	baseQuery = ApplyChannelScopeFilter(baseQuery, scope)
 	var whereClause string
 	var args []interface{}
 	if group != "" && group != "null" {

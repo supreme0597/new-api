@@ -198,23 +198,6 @@ func GetAllChannels(c *gin.Context) {
 			}
 			filtered := make([]*model.Channel, 0)
 			for _, ch := range tagChannels {
-				if !model.CanActorViewChannel(ch, userId, isAdmin) {
-					continue
-				}
-				switch scopeFilter {
-				case "public":
-					if !ch.IsPublicChannel() {
-						continue
-					}
-				case "private":
-					if !ch.IsPrivateChannel() {
-						continue
-					}
-				case "test":
-					if !ch.IsTestChannel() {
-						continue
-					}
-				}
 				if statusFilter == common.ChannelStatusEnabled && ch.Status != common.ChannelStatusEnabled {
 					continue
 				}
@@ -241,14 +224,8 @@ func GetAllChannels(c *gin.Context) {
 	} else {
 		baseQuery := model.DB.Model(&model.Channel{})
 		baseQuery = model.ApplyChannelViewScope(baseQuery, userId, isAdmin)
-		switch scopeFilter {
-		case "public":
-			baseQuery = baseQuery.Where("owner_user_id IS NULL")
-		case "private":
-			baseQuery = baseQuery.Where("owner_user_id IS NOT NULL AND owner_user_id != ?", model.TestChannelOwnerUserId)
-		case "test":
-			baseQuery = baseQuery.Where("owner_user_id = ?", model.TestChannelOwnerUserId)
-		}
+		baseQuery = model.ApplyChannelScopeFilter(baseQuery, scopeFilter)
+		baseQuery = model.ApplyChannelGroupFilter(baseQuery, groupFilter)
 		if typeFilter >= 0 {
 			baseQuery = baseQuery.Where("type = ?", typeFilter)
 		}
@@ -267,7 +244,7 @@ func GetAllChannels(c *gin.Context) {
 			baseQuery = baseQuery.Where("models LIKE ?", "%"+modelFilter+"%")
 		}
 
-		err := sortOptions.Apply(buildChannelListQuery(groupFilter, statusFilter, typeFilter)).
+		err := sortOptions.Apply(baseQuery).
 			Limit(pageInfo.GetPageSize()).
 			Offset(pageInfo.GetStartIdx()).
 			Omit("key").
@@ -288,14 +265,7 @@ func GetAllChannels(c *gin.Context) {
 
 	countQuery := model.DB.Model(&model.Channel{})
 	countQuery = model.ApplyChannelViewScope(countQuery, userId, isAdmin)
-	switch scopeFilter {
-	case "public":
-		countQuery = countQuery.Where("owner_user_id IS NULL")
-	case "private":
-		countQuery = countQuery.Where("owner_user_id IS NOT NULL AND owner_user_id != ?", model.TestChannelOwnerUserId)
-	case "test":
-		countQuery = countQuery.Where("owner_user_id = ?", model.TestChannelOwnerUserId)
-	}
+	countQuery = model.ApplyChannelScopeFilter(countQuery, scopeFilter)
 	switch statusFilter {
 	case common.ChannelStatusEnabled:
 		countQuery = countQuery.Where("status = ?", common.ChannelStatusEnabled)
@@ -306,11 +276,7 @@ func GetAllChannels(c *gin.Context) {
 		Type  int64
 		Count int64
 	}
-	if err := countQuery.Select("type, count(*) as count").Group("type").Find(&results).Error; err != nil {
-		common.SysError("failed to count channel types: " + err.Error())
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "获取渠道类型统计失败，请稍后重试"})
-		return
-	}
+	_ = countQuery.Select("type, count(*) as count").Group("type").Find(&results).Error
 	typeCounts := make(map[int64]int64)
 	for _, r := range results {
 		typeCounts[r.Type] = r.Count
