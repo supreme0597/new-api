@@ -109,6 +109,17 @@ export function UserCharts({ metric = 'quota', defaultDays, hideTimeRangePresets
   )
 
   useEffect(() => {
+    if (defaultDays != null) {
+      setSelectedRange(defaultDays)
+      const { start, end } = getRollingDateRange(defaultDays)
+      setTimeRange({
+        start_timestamp: Math.floor(start.getTime() / 1000),
+        end_timestamp: Math.floor(end.getTime() / 1000),
+      })
+    }
+  }, [defaultDays])
+
+  useEffect(() => {
     const updateTheme = async () => {
       setThemeReady(false)
       if (!themeManagerPromise) {
