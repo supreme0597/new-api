@@ -188,7 +188,10 @@ func GetAllChannels(c *gin.Context) {
 				continue
 			}
 			var tagChannels []*model.Channel
-			err := sortOptions.Apply(buildChannelListQuery(groupFilter, statusFilter, typeFilter).Where("tag = ?", *tag)).
+			query := buildChannelListQuery(groupFilter, statusFilter, typeFilter).Where("tag = ?", *tag)
+			query = model.ApplyChannelViewScope(query, userId, isAdmin)
+			query = model.ApplyChannelScopeFilter(query, scopeFilter)
+			err := sortOptions.Apply(query).
 				Omit("key").
 				Find(&tagChannels).Error
 			if err != nil {
@@ -198,15 +201,6 @@ func GetAllChannels(c *gin.Context) {
 			}
 			filtered := make([]*model.Channel, 0)
 			for _, ch := range tagChannels {
-				if statusFilter == common.ChannelStatusEnabled && ch.Status != common.ChannelStatusEnabled {
-					continue
-				}
-				if statusFilter == 0 && ch.Status == common.ChannelStatusEnabled {
-					continue
-				}
-				if typeFilter >= 0 && ch.Type != typeFilter {
-					continue
-				}
 				if ownerFilter > 0 && (ch.OwnerUserId == nil || *ch.OwnerUserId != ownerFilter) {
 					continue
 				}

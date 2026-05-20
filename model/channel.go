@@ -56,20 +56,21 @@ type Channel struct {
 
 	OtherSettings string `json:"settings" gorm:"column:settings"` // 其他设置，存储azure版本等不需要检索的信息，详见dto.ChannelOtherSettings
 
-	// 性能排行榜相关
-	VendorID   *int    `json:"vendor_id" gorm:"index"`
-	VendorName *string `json:"vendor_name" gorm:"type:varchar(128);default:''"`
-
 	// cache info
 	Keys          []string `json:"-" gorm:"-"`
-	OwnerUsername string   `json:"owner_username" gorm:"-"`
+	OwnerUsername string   `json:"owner_username" gorm:"-"` // 用于列表接口返回 owner 用户名
 }
+
+// =============================================================================
+// 渠道所有权 - 类型判断
+// =============================================================================
+
+// TestChannelOwnerUserId 测试渠道的 owner 用户ID（负数，不会与真实用户冲突）
+const TestChannelOwnerUserId = -999
 
 func (channel *Channel) IsPublicChannel() bool {
 	return channel == nil || channel.OwnerUserId == nil
 }
-
-const TestChannelOwnerUserId = -999
 
 func (channel *Channel) IsTestChannel() bool {
 	return channel != nil && channel.OwnerUserId != nil && *channel.OwnerUserId == TestChannelOwnerUserId
@@ -83,6 +84,13 @@ func (channel *Channel) IsOwnedBy(userId int) bool {
 	return channel != nil && channel.OwnerUserId != nil && *channel.OwnerUserId == userId
 }
 
+// =============================================================================
+// 渠道所有权 - 权限检查
+// =============================================================================
+
+// CanActorViewChannel 判断 actor 是否可以查看渠道
+// - admin: 可查看所有渠道
+// - 普通用户: 可查看公共渠道 + 自己拥有的私有渠道
 func CanActorViewChannel(channel *Channel, userId int, isAdmin bool) bool {
 	if channel == nil {
 		return false
@@ -96,6 +104,10 @@ func CanActorViewChannel(channel *Channel, userId int, isAdmin bool) bool {
 	return channel.IsOwnedBy(userId)
 }
 
+// CanActorManageChannel 判断 actor 是否可以管理（增删改）渠道
+// - owner: 始终可管理自己的渠道
+// - 公共渠道: 任何 admin 可管理
+// - 私有渠道: 只有 root 可管理他人的私有渠道
 func CanActorManageChannel(channel *Channel, userId int, isAdmin bool, isRoot bool) bool {
 	if channel == nil {
 		return false
@@ -111,6 +123,13 @@ func CanActorManageChannel(channel *Channel, userId int, isAdmin bool, isRoot bo
 	return isRoot
 }
 
+// =============================================================================
+// 渠道所有权 - 数据库查询过滤
+// =============================================================================
+
+// ApplyChannelViewScope 为 GORM 查询添加查看权限过滤
+// - admin: 不过滤
+// - 普通用户: 仅可查看公共渠道 + 自己的私有渠道（自动排除测试渠道）
 func ApplyChannelViewScope(query *gorm.DB, userId int, isAdmin bool) *gorm.DB {
 	if isAdmin {
 		return query
