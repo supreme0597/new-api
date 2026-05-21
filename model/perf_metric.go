@@ -5,7 +5,6 @@ import (
 	"sort"
 	"time"
 
-	perfmetrics "github.com/QuantumNous/new-api/pkg/perf_metrics"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -176,32 +175,6 @@ func GetLeaderboardData(startTs int64, endTs int64, vendorId int, sortBy string,
 		return nil, err
 	}
 
-	// Step 1.5: 合并内存中的 hotBuckets（未 flush 到 DB 的最新数据）
-	hotData := perfmetrics.MergeHotBuckets(startTs, endTs)
-	aggMap := make(map[string]*LeaderboardAggRow, len(aggRows))
-	for i := range aggRows {
-		aggMap[aggRows[i].ModelName] = &aggRows[i]
-	}
-	for model, hot := range hotData {
-		row, exists := aggMap[model]
-		if !exists {
-			row = &LeaderboardAggRow{ModelName: model}
-			aggMap[model] = row
-		}
-		row.RequestCount += hot.RequestCount
-		row.SuccessCount += hot.SuccessCount
-		row.TtftSumMs += hot.TtftSumMs
-		row.TtftCount += hot.TtftCount
-		row.OutputTokens += hot.OutputTokens
-		row.GenerationMs += hot.GenerationMs
-	}
-	// 重建 aggRows
-	aggRows = make([]LeaderboardAggRow, 0, len(aggMap))
-	for _, row := range aggMap {
-		if row.RequestCount > 0 {
-			aggRows = append(aggRows, *row)
-		}
-	}
 	if len(aggRows) == 0 {
 		return []LeaderboardItem{}, nil
 	}
