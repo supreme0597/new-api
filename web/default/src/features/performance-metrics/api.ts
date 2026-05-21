@@ -14,18 +14,6 @@ export async function getPerfMetrics(model: string, group?: string, hours: numbe
   return res.data
 }
 
-export async function getPerfMetricsList(params: {
-  start_timestamp: number
-  end_timestamp: number
-  model?: string
-  group?: string
-  page?: number
-  page_size?: number
-}) {
-  const res = await api.get('/api/perf-metrics/list', { params })
-  return res.data
-}
-
 export async function getSamplingStatus() {
   const res = await api.get('/api/model-performance/status')
   return res.data

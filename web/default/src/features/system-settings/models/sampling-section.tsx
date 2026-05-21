@@ -6,8 +6,7 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import dayjs from '@/lib/dayjs'
 import { api } from '@/lib/api'
-import { getPerfMetricsList } from '@/features/performance-metrics/api'
-import type { PerfMetricRow } from '@/features/performance-metrics/types'
+
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -39,7 +38,7 @@ import { SettingsSection } from '../components/settings-section'
 import { useResetForm } from '../hooks/use-reset-form'
 import { useUpdateOption } from '../hooks/use-update-option'
 import { SamplingRateLimitVisualEditor } from './sampling-rate-limit-visual-editor'
-import { SamplingRecordsTable } from './sampling-records-table'
+import { SamplingLogsSection } from './sampling-logs-section'
 
 // ---------------------------------------------------------------------------
 // Schema
@@ -678,7 +677,7 @@ export function SamplingSection({ defaultValues }: Props) {
           {/* ---- Sampling Records (History) ---- */}
           <div className='space-y-4'>
             <h4 className='text-sm font-medium'>{t('Sampling Records')}</h4>
-            <SamplingRecordsTable />
+            <SamplingLogsSection />
           </div>
 
           <Button type='submit' disabled={updateOption.isPending}>

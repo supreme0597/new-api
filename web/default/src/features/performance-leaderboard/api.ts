@@ -1,5 +1,4 @@
 import { api } from '@/lib/api'
-import type { ModelPerformanceDetailResponse } from './types'
 
 export interface LeaderboardParams {
   vendor_id?: number
@@ -25,19 +24,5 @@ export async function getLeaderboard(params: LeaderboardParams = {}) {
 
 export async function getLeaderboardVendors() {
   const res = await api.get('/api/model-performance/vendors')
-  return res.data
-}
-
-export async function getModelPerformanceDetail(
-  modelName: string,
-  hours?: number
-): Promise<ModelPerformanceDetailResponse> {
-  const searchParams = new URLSearchParams()
-  searchParams.set('model_name', modelName)
-  if (hours) searchParams.set('hours', String(hours))
-
-  const res = await api.get(
-    `/api/model-performance/detail?${searchParams.toString()}`
-  )
   return res.data
 }

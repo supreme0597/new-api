@@ -25,7 +25,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
-import { useLeaderboard, useLeaderboardVendors, useModelPerformanceDetail } from './hooks/use-leaderboard'
+import { useLeaderboard, useLeaderboardVendors } from './hooks/use-leaderboard'
 import type { LeaderboardTimeRange, LeaderboardItem } from './types'
 import { MetricTooltip } from './metrics-legend'
 import { ModelDetailDialog } from './components/model-detail-dialog'
@@ -116,11 +116,6 @@ export function PerformanceLeaderboard() {
   // Sampling detail dialog state (for success rate column)
   const [detailDialogOpen, setDetailDialogOpen] = useState(false)
   const [selectedModel, setSelectedModel] = useState<string | null>(null)
-
-  const detailQuery = useModelPerformanceDetail(
-    selectedModel,
-    hours
-  )
 
   const handleOpenDetail = (modelName: string) => {
     setSelectedModel(modelName)
@@ -285,8 +280,6 @@ export function PerformanceLeaderboard() {
             open={detailDialogOpen}
             onOpenChange={handleCloseDetail}
             modelName={selectedModel || ''}
-            data={detailQuery.data?.data}
-            isLoading={detailQuery.isLoading}
             hours={hours}
           />
 

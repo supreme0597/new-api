@@ -525,7 +525,8 @@ func sampleModelPerformance(channel *Channel, modelName string, config *Sampling
 		"model": "%s",
 		"messages": [{"role": "user", "content": %q}],
 		"max_tokens": %d,
-		"stream": true
+		"stream": true,
+		"stream_options": {"include_usage": true}
 	}`, upstreamModel, config.Prompt, config.MaxTokens)
 
 	req, err := http.NewRequest("POST", url, strings.NewReader(requestBody))

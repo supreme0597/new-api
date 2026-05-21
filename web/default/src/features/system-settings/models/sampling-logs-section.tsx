@@ -1,21 +1,3 @@
-/*
-Copyright (C) 2023-2026 QuantumNous
-
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU Affero General Public License as
-published by the Free Software Foundation, either version 3 of the
-License, or (at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-GNU Affero General Public License for more details.
-
-You should have received a copy of the GNU Affero General Public License
-along with this program. If not, see <https://www.gnu.org/licenses/>.
-
-For commercial licensing, please contact support@quantumnous.com
-*/
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
@@ -25,9 +7,8 @@ import {
   getPaginationRowModel,
   useReactTable,
 } from '@tanstack/react-table'
-import { Server } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
 import dayjs from '@/lib/dayjs'
+import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { getAllLogs } from '@/features/usage-logs/api'
 import { useCommonLogsColumns } from '@/features/usage-logs/components/columns/common-logs-columns'
@@ -36,13 +17,8 @@ import {
   useUsageLogsContext,
 } from '@/features/usage-logs/components/usage-logs-provider'
 import type { UsageLog } from '@/features/usage-logs/data/schema'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import {
   Table,
   TableBody,
@@ -51,8 +27,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Input } from '@/components/ui/input'
-import { Button } from '@/components/ui/button'
 import { DataTablePagination } from '@/components/data-table/pagination'
 
 // ---------------------------------------------------------------------------
@@ -70,30 +44,97 @@ function fromInputValue(value: string): Date | undefined {
 }
 
 // ---------------------------------------------------------------------------
+// Filter Bar
+// ---------------------------------------------------------------------------
+
+interface FilterBarProps {
+  start: Date | undefined
+  end: Date | undefined
+  onStartChange: (d: Date | undefined) => void
+  onEndChange: (d: Date | undefined) => void
+  model: string
+  onModelChange: (v: string) => void
+  onQuery: () => void
+}
+
+function SamplingFilterBar({
+  start,
+  end,
+  onStartChange,
+  onEndChange,
+  model,
+  onModelChange,
+  onQuery,
+}: FilterBarProps) {
+  const { t } = useTranslation()
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter') {
+        onQuery()
+      }
+    },
+    [onQuery]
+  )
+
+  return (
+    <div className='flex flex-wrap items-end gap-2'>
+      <div className='flex flex-col gap-1'>
+        <label className='text-xs text-muted-foreground'>{t('Start')}</label>
+        <Input
+          type='datetime-local'
+          className='w-[200px]'
+          value={toInputValue(start)}
+          onChange={(e) => onStartChange(fromInputValue(e.target.value))}
+          onKeyDown={handleKeyDown}
+        />
+      </div>
+      <div className='flex flex-col gap-1'>
+        <label className='text-xs text-muted-foreground'>{t('End')}</label>
+        <Input
+          type='datetime-local'
+          className='w-[200px]'
+          value={toInputValue(end)}
+          onChange={(e) => onEndChange(fromInputValue(e.target.value))}
+          onKeyDown={handleKeyDown}
+        />
+      </div>
+      <div className='flex flex-col gap-1'>
+        <label className='text-xs text-muted-foreground'>{t('Model')}</label>
+        <Input
+          className='w-[200px]'
+          placeholder={t('Filter by model')}
+          value={model}
+          onChange={(e) => onModelChange(e.target.value)}
+          onKeyDown={handleKeyDown}
+        />
+      </div>
+      <Button size='sm' onClick={onQuery}>
+        {t('Query')}
+      </Button>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Table Content (must be inside UsageLogsProvider)
 // ---------------------------------------------------------------------------
 
-function LogTableContent({
-  modelName,
-  hours,
-}: {
-  modelName: string
-  hours: number
-}) {
+function SamplingLogsTableContent() {
   const { t } = useTranslation()
   const columns = useCommonLogsColumns(false)
+  const { sensitiveVisible } = useUsageLogsContext()
 
   const now = useMemo(() => dayjs(), [])
-  const defaultStart = useMemo(
-    () => dayjs().subtract(hours, 'hour').toDate(),
-    [hours]
+  const [start, setStart] = useState<Date | undefined>(
+    now.subtract(24, 'hour').toDate()
   )
-
-  const [start, setStart] = useState<Date | undefined>(defaultStart)
   const [end, setEnd] = useState<Date | undefined>(now.toDate())
+  const [modelName, setModelName] = useState('')
 
   const [appliedStart, setAppliedStart] = useState(start)
   const [appliedEnd, setAppliedEnd] = useState(end)
+  const [appliedModel, setAppliedModel] = useState(modelName)
 
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
@@ -101,26 +142,21 @@ function LogTableContent({
   const handleQuery = useCallback(() => {
     setAppliedStart(start)
     setAppliedEnd(end)
+    setAppliedModel(modelName)
     setPage(1)
-  }, [start, end])
+  }, [start, end, modelName])
 
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === 'Enter') handleQuery()
-    },
-    [handleQuery]
-  )
-
+  // Reset page when filters change
   useEffect(() => {
     setPage(1)
-  }, [appliedStart, appliedEnd])
+  }, [appliedStart, appliedEnd, appliedModel])
 
   const { data, isLoading, isFetching } = useQuery({
     queryKey: [
-      'model-detail-logs',
-      modelName,
+      'sampling-logs',
       appliedStart,
       appliedEnd,
+      appliedModel,
       page,
       pageSize,
     ],
@@ -133,7 +169,8 @@ function LogTableContent({
         page_size: pageSize,
         start_time: Math.floor(appliedStart.getTime() / 1000),
         end_time: Math.floor(appliedEnd.getTime() / 1000),
-        model: modelName,
+        model: appliedModel || undefined,
+        token_name: '模型测试',
       } as any)
       if (!res?.success) {
         toast.error(res?.message || t('Failed to load records'))
@@ -169,36 +206,16 @@ function LogTableContent({
 
   return (
     <div className='space-y-4'>
-      {/* Filter bar */}
-      <div className='flex flex-wrap items-end gap-2'>
-        <div className='flex flex-col gap-1'>
-          <label className='text-xs text-muted-foreground'>
-            {t('Start')}
-          </label>
-          <Input
-            type='datetime-local'
-            className='w-[200px]'
-            value={toInputValue(start)}
-            onChange={(e) => setStart(fromInputValue(e.target.value))}
-            onKeyDown={handleKeyDown}
-          />
-        </div>
-        <div className='flex flex-col gap-1'>
-          <label className='text-xs text-muted-foreground'>{t('End')}</label>
-          <Input
-            type='datetime-local'
-            className='w-[200px]'
-            value={toInputValue(end)}
-            onChange={(e) => setEnd(fromInputValue(e.target.value))}
-            onKeyDown={handleKeyDown}
-          />
-        </div>
-        <Button size='sm' onClick={handleQuery}>
-          {t('Query')}
-        </Button>
-      </div>
+      <SamplingFilterBar
+        start={start}
+        end={end}
+        onStartChange={setStart}
+        onEndChange={setEnd}
+        model={modelName}
+        onModelChange={setModelName}
+        onQuery={handleQuery}
+      />
 
-      {/* Table */}
       <div className='rounded-md border'>
         <Table>
           <TableHeader>
@@ -260,43 +277,13 @@ function LogTableContent({
 }
 
 // ---------------------------------------------------------------------------
-// Dialog
+// Exported Component
 // ---------------------------------------------------------------------------
 
-type ModelDetailDialogProps = {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  modelName: string
-  hours: number
-}
-
-export function ModelDetailDialog({
-  open,
-  onOpenChange,
-  modelName,
-  hours,
-}: ModelDetailDialogProps) {
-  const { t } = useTranslation()
-
+export function SamplingLogsSection() {
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className='flex flex-col overflow-hidden sm:max-w-6xl max-h-[85vh] p-0 gap-0'>
-        <DialogHeader className='px-6 pt-6 pb-4 border-b'>
-          <DialogTitle className='flex items-center gap-2 text-lg'>
-            <Server className='h-5 w-5 text-muted-foreground' />
-            {modelName}
-          </DialogTitle>
-          <DialogDescription className='text-sm'>
-            {t('Request logs for the last {{hours}} hours', { hours })}
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className='p-6 overflow-auto'>
-          <UsageLogsProvider>
-            <LogTableContent modelName={modelName} hours={hours} />
-          </UsageLogsProvider>
-        </div>
-      </DialogContent>
-    </Dialog>
+    <UsageLogsProvider>
+      <SamplingLogsTableContent />
+    </UsageLogsProvider>
   )
 }

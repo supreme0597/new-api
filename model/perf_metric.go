@@ -50,62 +50,6 @@ func UpsertPerfMetric(metric *PerfMetric) error {
 	}).Create(metric).Error
 }
 
-// PerfMetricRow is the JSON-serializable row returned by the list API.
-// Unlike PerfMetric (which uses json:"-" for counters), this struct
-// exposes all fields for the sampling history table.
-type PerfMetricRow struct {
-	ModelName      string `json:"model_name"`
-	Group          string `json:"group"`
-	BucketTs       int64  `json:"bucket_ts"`
-	RequestCount   int64  `json:"request_count"`
-	SuccessCount   int64  `json:"success_count"`
-	TotalLatencyMs int64  `json:"total_latency_ms"`
-	TtftSumMs      int64  `json:"ttft_sum_ms"`
-	TtftCount      int64  `json:"ttft_count"`
-	OutputTokens   int64  `json:"output_tokens"`
-	GenerationMs   int64  `json:"generation_ms"`
-}
-
-func GetPerfMetricsList(modelName string, group string, startTs int64, endTs int64, page int, pageSize int) ([]PerfMetricRow, int64, error) {
-	query := DB.Model(&PerfMetric{}).
-		Where("bucket_ts >= ? AND bucket_ts <= ?", startTs, endTs)
-	if modelName != "" {
-		query = query.Where("model_name = ?", modelName)
-	}
-	if group != "" {
-		query = query.Where(commonGroupCol+" = ?", group)
-	}
-
-	var total int64
-	if err := query.Count(&total).Error; err != nil {
-		return nil, 0, err
-	}
-
-	var metrics []PerfMetric
-	offset := (page - 1) * pageSize
-	err := query.Order("bucket_ts DESC").Offset(offset).Limit(pageSize).Find(&metrics).Error
-	if err != nil {
-		return nil, 0, err
-	}
-
-	rows := make([]PerfMetricRow, len(metrics))
-	for i, m := range metrics {
-		rows[i] = PerfMetricRow{
-			ModelName:      m.ModelName,
-			Group:          m.Group,
-			BucketTs:       m.BucketTs,
-			RequestCount:   m.RequestCount,
-			SuccessCount:   m.SuccessCount,
-			TotalLatencyMs: m.TotalLatencyMs,
-			TtftSumMs:      m.TtftSumMs,
-			TtftCount:      m.TtftCount,
-			OutputTokens:   m.OutputTokens,
-			GenerationMs:   m.GenerationMs,
-		}
-	}
-	return rows, total, nil
-}
-
 func GetPerfMetrics(modelName string, group string, startTs int64, endTs int64) ([]PerfMetric, error) {
 	var metrics []PerfMetric
 	query := DB.Model(&PerfMetric{}).

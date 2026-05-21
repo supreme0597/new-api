@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { getLeaderboard, getLeaderboardVendors, getModelPerformanceDetail } from '../api'
+import { getLeaderboard, getLeaderboardVendors } from '../api'
 import type { LeaderboardTimeRange } from '../types'
 
 export function useLeaderboard(params: {
@@ -32,17 +32,5 @@ export function useLeaderboardVendors() {
     queryKey: ['performance-leaderboard', 'vendors'],
     queryFn: getLeaderboardVendors,
     staleTime: 10 * 60 * 1000,
-  })
-}
-
-export function useModelPerformanceDetail(
-  modelName: string | null,
-  hours?: number
-) {
-  return useQuery({
-    queryKey: ['model-performance-detail', modelName, hours],
-    queryFn: () => getModelPerformanceDetail(modelName!, hours),
-    enabled: !!modelName,
-    staleTime: 2 * 60 * 1000,
   })
 }
