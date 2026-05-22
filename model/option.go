@@ -216,6 +216,15 @@ func SyncOptions(frequency int) {
 	}
 }
 
+func seedOptionIfEmpty(key string, value string) {
+	var option Option
+	if err := DB.Where(commonKeyCol+" = ?", key).First(&option).Error; err == nil {
+		return // already exists
+	}
+	option = Option{Key: key, Value: value}
+	DB.Create(&option)
+}
+
 func UpdateOption(key string, value string) error {
 	// Save to database first
 	option := Option{
