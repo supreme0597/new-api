@@ -32,7 +32,7 @@ import { MetricTooltip } from './metrics-legend'
 import { ModelDetailDialog } from './components/model-detail-dialog'
 import { ModelDetailsPerformance } from '@/features/pricing/components/model-details-performance'
 import type { PricingModel } from '@/features/pricing/types'
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
 import dayjs from '@/lib/dayjs'
 
 export type SortBy = 'score' | 'tps' | 'ttft'
@@ -44,6 +44,26 @@ export function PerformanceLeaderboard() {
   const { t } = useTranslation()
   const search = useSearch({ from: '/performance-leaderboard/' })
   const navigate = useNavigate()
+
+  // When navigating here without start_time/end_time in the URL,
+  // push default time range into the URL to keep the queryKey stable
+  // and prevent infinite request loops from dayjs() recomputing on each render.
+  const initializedRef = useRef(false)
+  useEffect(() => {
+    if (initializedRef.current) return
+    if (!search.start_time || !search.end_time) {
+      initializedRef.current = true
+      navigate({
+        replace: true,
+        to: '/performance-leaderboard',
+        search: (prev) => ({
+          ...prev,
+          start_time: prev.start_time ?? dayjs().subtract(5, 'minute').valueOf(),
+          end_time: prev.end_time ?? dayjs().valueOf(),
+        }),
+      })
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const vendorId = search.vendor_id ? Number(search.vendor_id) : undefined
   const hours = (search.hours as LeaderboardTimeRange) || 24
