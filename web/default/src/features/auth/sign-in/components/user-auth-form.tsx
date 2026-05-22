@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -76,6 +76,7 @@ export function UserAuthForm({
   const [isWeChatDialogOpen, setIsWeChatDialogOpen] = useState(false)
   const [isWeChatSubmitting, setIsWeChatSubmitting] = useState(false)
   const [ldapLogin, setLdapLogin] = useState(false)
+  const ldapAutoChecked = useRef(false)
   const legalConsentErrorMessage = t('Please agree to the legal terms first')
   const loginFailedMessage = t('Login failed')
 
@@ -117,6 +118,14 @@ export function UserAuthForm({
       .then(setPasskeySupported)
       .catch(() => setPasskeySupported(false))
   }, [])
+
+  // Auto-check LDAP login when LDAP is enabled, but only once on initial load
+  useEffect(() => {
+    if (ldapEnabled && !ldapAutoChecked.current) {
+      setLdapLogin(true)
+      ldapAutoChecked.current = true
+    }
+  }, [ldapEnabled])
 
   const form = useForm<z.infer<typeof loginFormSchema>>({
     resolver: zodResolver(loginFormSchema),
