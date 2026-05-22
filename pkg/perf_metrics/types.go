@@ -13,7 +13,7 @@ var DBFuncs struct {
 	UpsertPerfMetric      func(metric *PerfMetricData) error
 	DeleteBefore          func(cutoffTs int64) error
 	GetPerfMetrics        func(modelName string, group string, startTs int64, endTs int64) ([]PerfMetricRow, error)
-	GetPerfMetricsSummary func(startTs int64, endTs int64) ([]PerfMetricSummaryRow, error)
+	GetPerfMetricsSummary func(startTs int64, endTs int64, groups []string) ([]PerfMetricSummaryRow, error)
 }
 
 // PerfMetricData is the data needed for upserting a perf metric.

@@ -49,8 +49,8 @@ func RegisterPerfMetricsDB() {
 		return result, nil
 	}
 
-	perfmetrics.DBFuncs.GetPerfMetricsSummary = func(startTs int64, endTs int64) ([]perfmetrics.PerfMetricSummaryRow, error) {
-		rows, err := GetPerfMetricsSummaryAll(startTs, endTs)
+	perfmetrics.DBFuncs.GetPerfMetricsSummary = func(startTs int64, endTs int64, groups []string) ([]perfmetrics.PerfMetricSummaryRow, error) {
+		rows, err := GetPerfMetricsSummaryAll(startTs, endTs, groups)
 		if err != nil {
 			return nil, err
 		}
