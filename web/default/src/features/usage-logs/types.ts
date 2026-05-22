@@ -263,6 +263,7 @@ export interface GetLogsParams {
   username?: string
   token_name?: string
   model_name?: string
+  exact_model?: number
   start_timestamp?: number
   end_timestamp?: number
   channel?: number

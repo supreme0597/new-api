@@ -297,8 +297,10 @@ func migrateDB() error {
 	// 迁移：将 is_test_channel=1 的渠道的 owner_user_id 设为 -999
 	DB.Exec("UPDATE channels SET owner_user_id = -999 WHERE is_test_channel = 1 AND (owner_user_id IS NULL OR owner_user_id = 0)")
 
-	// Seed perf_metrics_setting.bucket_time default to "5min" if not set
-	seedOptionIfEmpty("perf_metrics_setting.bucket_time", "5min")
+	// Seed perf_metrics_setting.bucket_time default to "minute" if not set
+	seedOptionIfEmpty("perf_metrics_setting.bucket_time", "minute")
+	// Migrate existing "5min" bucket to "1min" for better leaderboard real-time coverage
+	upgradePerfMetricsBucketTime()
 
 	return nil
 }

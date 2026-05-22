@@ -225,6 +225,14 @@ func seedOptionIfEmpty(key string, value string) {
 	DB.Create(&option)
 }
 
+// upgradePerfMetricsBucketTime migrates existing "5min" bucket setting to "minute"
+// for better leaderboard real-time coverage (reduces invisible data gap from 5min to 1min).
+func upgradePerfMetricsBucketTime() {
+	key := "perf_metrics_setting.bucket_time"
+	DB.Model(&Option{}).Where(commonKeyCol+" = ? AND value = ?", key, "5min").
+		Update("value", "minute")
+}
+
 func UpdateOption(key string, value string) error {
 	// Save to database first
 	option := Option{

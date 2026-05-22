@@ -169,9 +169,9 @@ function SamplingLogsTableContent() {
         page_size: pageSize,
         start_time: Math.floor(appliedStart.getTime() / 1000),
         end_time: Math.floor(appliedEnd.getTime() / 1000),
-        model: appliedModel || undefined,
+        model_name: appliedModel || undefined,
         token_name: '模型测试',
-      } as any)
+      })
       if (!res?.success) {
         toast.error(res?.message || t('Failed to load records'))
         return { success: false, data: { items: [], total: 0 } }
