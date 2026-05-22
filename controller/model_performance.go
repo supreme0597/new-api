@@ -16,6 +16,8 @@ func GetModelPerformanceList(c *gin.Context) {
 	vendorId, _ := strconv.Atoi(c.DefaultQuery("vendor_id", "0"))
 	source := c.DefaultQuery("source", "")
 	hours, _ := strconv.Atoi(c.DefaultQuery("hours", "24"))
+	startTimeMs, _ := strconv.ParseInt(c.Query("start_time"), 10, 64)
+	endTimeMs, _ := strconv.ParseInt(c.Query("end_time"), 10, 64)
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
 	sortBy := c.DefaultQuery("sort_by", "score")
@@ -39,8 +41,16 @@ func GetModelPerformanceList(c *gin.Context) {
 	}
 
 	// 计算时间范围
-	endTs := time.Now().Unix()
-	startTs := endTs - int64(hours)*3600
+	var startTs, endTs int64
+	if startTimeMs > 0 && endTimeMs > 0 && endTimeMs > startTimeMs {
+		// 优先使用绝对时间（毫秒时间戳）
+		startTs = startTimeMs / 1000
+		endTs = endTimeMs / 1000
+	} else {
+		// 回退到 hours 相对时间（向后兼容）
+		endTs = time.Now().Unix()
+		startTs = endTs - int64(hours)*3600
+	}
 
 	items, err := model.GetLeaderboardData(startTs, endTs, vendorId, sortBy, sortOrder)
 	if err != nil {

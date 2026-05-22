@@ -5,6 +5,8 @@ import type { LeaderboardTimeRange } from '../types'
 export function useLeaderboard(params: {
   vendorId?: number
   hours?: LeaderboardTimeRange
+  startTime?: number
+  endTime?: number
   page?: number
   pageSize?: number
   sortBy?: string
@@ -16,6 +18,8 @@ export function useLeaderboard(params: {
       getLeaderboard({
         vendor_id: params.vendorId,
         hours: params.hours,
+        start_time: params.startTime,
+        end_time: params.endTime,
         page: params.page,
         pageSize: params.pageSize,
         sort_by: params.sortBy,

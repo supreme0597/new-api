@@ -19,3 +19,8 @@ export interface LeaderboardResponse {
 }
 
 export type LeaderboardTimeRange = 24 | 168 | 720 // 24h, 7d, 30d in hours
+
+export interface LeaderboardTimeFilter {
+  startTime?: number  // 毫秒时间戳
+  endTime?: number    // 毫秒时间戳
+}

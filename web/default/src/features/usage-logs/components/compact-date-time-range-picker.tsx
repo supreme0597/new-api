@@ -84,9 +84,17 @@ export function CompactDateTimeRangePicker({
     setOpen(false)
   }
 
-  const applyPreset = (kind: 'today' | '7d' | 'week' | '30d' | 'month') => {
+  const applyPreset = (kind: '5m' | '30m' | 'today' | '7d' | 'week' | '30d' | 'month') => {
     const now = dayjs()
     const presets = {
+      '5m': {
+        start: now.subtract(5, 'minute').toDate(),
+        end: now.toDate(),
+      },
+      '30m': {
+        start: now.subtract(30, 'minute').toDate(),
+        end: now.toDate(),
+      },
       today: {
         start: now.startOf('day').toDate(),
         end: now.endOf('day').toDate(),
@@ -167,6 +175,24 @@ export function CompactDateTimeRangePicker({
           </div>
 
           <div className='flex flex-wrap gap-1.5'>
+            <Button
+              type='button'
+              variant='secondary'
+              size='sm'
+              className='h-7 flex-1 px-2 text-xs'
+              onClick={() => applyPreset('5m')}
+            >
+              {t('5 Minutes')}
+            </Button>
+            <Button
+              type='button'
+              variant='secondary'
+              size='sm'
+              className='h-7 flex-1 px-2 text-xs'
+              onClick={() => applyPreset('30m')}
+            >
+              {t('30 Minutes')}
+            </Button>
             <Button
               type='button'
               variant='secondary'

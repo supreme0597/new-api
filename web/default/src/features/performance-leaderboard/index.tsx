@@ -25,6 +25,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
+import { CompactDateTimeRangePicker } from '@/features/usage-logs/components/compact-date-time-range-picker'
 import { useLeaderboard, useLeaderboardVendors } from './hooks/use-leaderboard'
 import type { LeaderboardTimeRange, LeaderboardItem } from './types'
 import { MetricTooltip } from './metrics-legend'
@@ -32,15 +33,10 @@ import { ModelDetailDialog } from './components/model-detail-dialog'
 import { ModelDetailsPerformance } from '@/features/pricing/components/model-details-performance'
 import type { PricingModel } from '@/features/pricing/types'
 import { useState, useMemo } from 'react'
+import dayjs from '@/lib/dayjs'
 
 export type SortBy = 'score' | 'tps' | 'ttft'
 export type SortOrder = 'asc' | 'desc'
-
-const TIME_RANGES: { value: LeaderboardTimeRange; labelKey: string }[] = [
-  { value: 24, labelKey: '24h' },
-  { value: 168, labelKey: '7d' },
-  { value: 720, labelKey: '30d' },
-]
 
 const PAGE_SIZE = 20
 
@@ -51,6 +47,11 @@ export function PerformanceLeaderboard() {
 
   const vendorId = search.vendor_id ? Number(search.vendor_id) : undefined
   const hours = (search.hours as LeaderboardTimeRange) || 24
+  const now = dayjs()
+  const defaultStartTime = now.subtract(5, 'minute').valueOf()
+  const defaultEndTime = now.valueOf()
+  const startTime = search.start_time ? Number(search.start_time) : defaultStartTime
+  const endTime = search.end_time ? Number(search.end_time) : defaultEndTime
   const page = search.page || 1
   const sortBy = (search.sort_by as SortBy) || 'score'
   const sortOrder = (search.sort_order as SortOrder) || 'desc'
@@ -58,6 +59,8 @@ export function PerformanceLeaderboard() {
   const leaderboardQuery = useLeaderboard({
     vendorId,
     hours,
+    startTime,
+    endTime,
     page,
     pageSize: PAGE_SIZE,
     sortBy,
@@ -79,12 +82,13 @@ export function PerformanceLeaderboard() {
     })
   }
 
-  const handleTimeRangeChange = (value: LeaderboardTimeRange) => {
+  const handleTimeRangeChange = (range: { start?: Date; end?: Date }) => {
     navigate({
       to: '/performance-leaderboard',
       search: (prev: Record<string, unknown>) => ({
         ...prev,
-        hours: value,
+        start_time: range.start?.getTime(),
+        end_time: range.end?.getTime(),
         page: 1,
       }),
     })
@@ -214,31 +218,12 @@ export function PerformanceLeaderboard() {
                 </SelectContent>
               </Select>
 
-              <div className='border-border/60 flex items-center border-b'>
-                {TIME_RANGES.map((tr) => {
-                  const isActive = hours === tr.value
-                  return (
-                    <button
-                      key={tr.value}
-                      type='button'
-                      onClick={() => handleTimeRangeChange(tr.value)}
-                      className={`relative -mb-px rounded-sm px-3 py-2 text-sm font-medium transition-colors ${
-                        isActive
-                          ? 'text-foreground'
-                          : 'text-muted-foreground hover:text-foreground'
-                      }`}
-                    >
-                      {t(tr.labelKey)}
-                      <span
-                        aria-hidden
-                        className={`bg-foreground absolute inset-x-3 -bottom-px h-[2px] rounded-full transition-opacity ${
-                          isActive ? 'opacity-100' : 'opacity-0'
-                        }`}
-                      />
-                    </button>
-                  )
-                })}
-              </div>
+              <CompactDateTimeRangePicker
+                start={startTime ? new Date(startTime) : undefined}
+                end={endTime ? new Date(endTime) : undefined}
+                onChange={handleTimeRangeChange}
+                className='w-full sm:w-[340px]'
+              />
             </div>
           </section>
 

@@ -12,6 +12,22 @@ import (
 )
 
 func SetApiRouter(router *gin.Engine) {
+	// 公开 API 路由（不受限流）
+	publicApiRouter := router.Group("/api")
+	publicApiRouter.Use(middleware.RouteTag("api"))
+	publicApiRouter.Use(gzip.Gzip(gzip.DefaultCompression))
+	publicApiRouter.Use(middleware.BodyStorageCleanup())
+	{
+		// 性能排行榜（公开只读接口）
+		modelPerformanceRoute := publicApiRouter.Group("/model-performance")
+		{
+			modelPerformanceRoute.GET("/list", controller.GetModelPerformanceList)
+			modelPerformanceRoute.GET("/vendors", controller.GetModelPerformanceVendors)
+			modelPerformanceRoute.GET("/sources", controller.GetModelPerformanceVendors)
+			modelPerformanceRoute.GET("/detail", controller.GetModelPerformanceDetail)
+		}
+	}
+
 	apiRouter := router.Group("/api")
 	apiRouter.Use(middleware.RouteTag("api"))
 	apiRouter.Use(gzip.Gzip(gzip.DefaultCompression))
@@ -267,14 +283,6 @@ func SetApiRouter(router *gin.Engine) {
 			channelRoute.POST("/upstream_updates/detect_all", middleware.AdminAuth(), controller.DetectAllChannelUpstreamModelUpdates)
 		}
 
-		// 性能排行榜（公开接口）
-		modelPerformanceRoute := apiRouter.Group("/model-performance")
-		{
-			modelPerformanceRoute.GET("/list", controller.GetModelPerformanceList)
-			modelPerformanceRoute.GET("/vendors", controller.GetModelPerformanceVendors)
-			modelPerformanceRoute.GET("/sources", controller.GetModelPerformanceVendors)
-			modelPerformanceRoute.GET("/detail", controller.GetModelPerformanceDetail)
-		}
 		// 性能采样管理（仅管理员）
 		modelPerformanceAdminRoute := apiRouter.Group("/model-performance")
 		modelPerformanceAdminRoute.Use(middleware.AdminAuth())
