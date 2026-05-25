@@ -58,6 +58,7 @@ export function ChannelsPrimaryButtons({ myChannelsOnly }: { myChannelsOnly?: bo
   const isAdmin = (useAuthStore((s) => s.auth.user?.role) ?? 0) >= 10
   const {
     setOpen,
+    setCurrentRow,
     enableTagMode,
     setEnableTagMode,
     idSort,
@@ -106,7 +107,13 @@ export function ChannelsPrimaryButtons({ myChannelsOnly }: { myChannelsOnly?: bo
         </div>
 
         {/* Create Channel */}
-        <Button onClick={() => setOpen('create-channel')} size='sm'>
+        <Button
+          onClick={() => {
+            setCurrentRow(null)
+            setOpen('create-channel')
+          }}
+          size='sm'
+        >
           <Plus className='h-4 w-4' />
           <span className='max-sm:hidden'>
             {myChannelsOnly ? t('Add My Channel') : t('Create Channel')}

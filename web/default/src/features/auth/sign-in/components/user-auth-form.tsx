@@ -84,6 +84,10 @@ export function UserAuthForm({
   const passkeyLoginEnabled = Boolean(
     status?.passkey_login ?? status?.data?.passkey_login
   )
+  const passwordLoginEnabled =
+    (status?.password_login_enabled ??
+      status?.data?.password_login_enabled ??
+      true) !== false
   const ldapEnabled = Boolean(
     status?.ldap_enabled ?? status?.data?.ldap_enabled
   )
@@ -104,6 +108,16 @@ export function UserAuthForm({
     !passkeySupported ||
     (requiresLegalConsent && !agreedToLegal)
   const hasWeChatLogin = Boolean(status?.wechat_login)
+  const hasOAuthLogin = Boolean(
+    status?.github_oauth ||
+    status?.discord_oauth ||
+    status?.oidc_enabled ||
+    status?.linuxdo_oauth ||
+    status?.telegram_oauth ||
+    (status?.custom_oauth_providers?.length ?? 0) > 0
+  )
+  const hasAlternativeLogin =
+    passkeyLoginEnabled || hasWeChatLogin || hasOAuthLogin
 
   useEffect(() => {
     if (requiresLegalConsent) {
@@ -290,6 +304,42 @@ export function UserAuthForm({
     }
   }
 
+  const alternativeLoginMethods = (
+    <>
+      {passkeyLoginEnabled && (
+        <div className='mt-2 space-y-1'>
+          <Button
+            type='button'
+            variant='outline'
+            disabled={passkeyButtonDisabled}
+            onClick={handlePasskeyLogin}
+            className='h-11 w-full justify-center gap-2 rounded-lg'
+          >
+            {isPasskeyLoading ? (
+              <Loader2 className='h-4 w-4 animate-spin' />
+            ) : (
+              <KeyRound className='h-4 w-4' />
+            )}
+            {t('Sign in with Passkey')}
+          </Button>
+          {!passkeySupported && (
+            <p className='text-muted-foreground text-xs'>
+              {t('Passkey is not supported on this device.')}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* OAuth Providers */}
+      <OAuthProviders
+        status={status}
+        disabled={isLoading || (requiresLegalConsent && !agreedToLegal)}
+        onWeChatLogin={hasWeChatLogin ? handleOpenWeChatDialog : undefined}
+        isWeChatLoading={isWeChatSubmitting}
+      />
+    </>
+  )
+
   return (
     <Form {...form}>
       <form
@@ -297,44 +347,51 @@ export function UserAuthForm({
         className={cn('grid gap-4', className)}
         {...props}
       >
-        {/* Username Field */}
-        <FormField
-          control={form.control}
-          name='username'
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>{t('Username or Email')}</FormLabel>
-              <FormControl>
-                <Input
-                  placeholder={t('Enter your username or email')}
-                  {...field}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+        {hasAlternativeLogin && alternativeLoginMethods}
 
-        {/* Password Field */}
-        <FormField
-          control={form.control}
-          name='password'
-          render={({ field }) => (
-            <FormItem className='relative'>
-              <FormLabel>{t('Password')}</FormLabel>
-              <FormControl>
-                <PasswordInput placeholder={t('Enter password')} {...field} />
-              </FormControl>
-              <FormMessage />
-              <Link
-                to='/forgot-password'
-                className='text-muted-foreground absolute end-0 -top-0.5 z-10 text-sm font-medium hover:opacity-75'
-              >
-                {t('Forgot password?')}
-              </Link>
-            </FormItem>
-          )}
-        />
+        {passwordLoginEnabled && (
+          <>
+            {/* Username Field */}
+            <FormField
+              control={form.control}
+              name='username'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('Username or Email')}</FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder={t('Enter your username or email')}
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* Password Field */}
+            <FormField
+              control={form.control}
+              name='password'
+              render={({ field }) => (
+                <FormItem className='relative'>
+                  <FormLabel>{t('Password')}</FormLabel>
+                  <FormControl>
+                    <PasswordInput
+                      placeholder={t('Enter password')}
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                  <Link
+                    to='/forgot-password'
+                    className='text-muted-foreground absolute end-0 -top-0.5 z-10 text-sm font-medium hover:opacity-75'
+                  >
+                    {t('Forgot password?')}
+                  </Link>
+                </FormItem>
+              )}
+            />
 
         {/* LDAP Login Checkbox */}
         {ldapEnabled && (
@@ -363,14 +420,16 @@ export function UserAuthForm({
           {t('Sign in')}
         </Button>
 
-        {/* Turnstile */}
-        {isTurnstileEnabled && (
-          <div className='mt-2'>
-            <Turnstile
-              siteKey={turnstileSiteKey}
-              onVerify={setTurnstileToken}
-            />
-          </div>
+            {/* Turnstile */}
+            {isTurnstileEnabled && (
+              <div className='mt-2'>
+                <Turnstile
+                  siteKey={turnstileSiteKey}
+                  onVerify={setTurnstileToken}
+                />
+              </div>
+            )}
+          </>
         )}
 
         <LegalConsent
@@ -380,37 +439,7 @@ export function UserAuthForm({
           className='mt-1'
         />
 
-        {passkeyLoginEnabled && (
-          <div className='mt-2 space-y-1'>
-            <Button
-              type='button'
-              variant='outline'
-              disabled={passkeyButtonDisabled}
-              onClick={handlePasskeyLogin}
-              className='h-11 w-full justify-center gap-2 rounded-lg'
-            >
-              {isPasskeyLoading ? (
-                <Loader2 className='h-4 w-4 animate-spin' />
-              ) : (
-                <KeyRound className='h-4 w-4' />
-              )}
-              {t('Sign in with Passkey')}
-            </Button>
-            {!passkeySupported && (
-              <p className='text-muted-foreground text-xs'>
-                {t('Passkey is not supported on this device.')}
-              </p>
-            )}
-          </div>
-        )}
-
-        {/* OAuth Providers */}
-        <OAuthProviders
-          status={status}
-          disabled={isLoading || (requiresLegalConsent && !agreedToLegal)}
-          onWeChatLogin={hasWeChatLogin ? handleOpenWeChatDialog : undefined}
-          isWeChatLoading={isWeChatSubmitting}
-        />
+        {!hasAlternativeLogin && alternativeLoginMethods}
       </form>
 
       {hasWeChatLogin && (
