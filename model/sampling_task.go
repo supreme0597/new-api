@@ -14,6 +14,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/pkg/perf_metrics"
 	"github.com/QuantumNous/new-api/setting"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 )
 
 // SamplingConfig 采样配置（轻量级容器，仅用于传递 prompt 和 maxTokens）
@@ -463,7 +464,7 @@ func RunSamplingTask() error {
 						CompletionTokens: result.CompletionTokens,
 						UseTimeSeconds:   int(result.LatencyMs / 1000),
 						IsStream:         true,
-						Other:            map[string]interface{}{"sampling": true, "tps": result.Tps, "ttft": result.TtftMs},
+						Other:            buildSamplingLogOther(ch, model, result),
 					})
 
 					perfmetrics.Record(perfmetrics.Sample{
@@ -607,6 +608,55 @@ func sampleModelPerformance(channel *Channel, modelName string, config *Sampling
 		PromptTokens:     promptTokens,
 		CompletionTokens: completionTokens,
 	}, nil
+}
+
+// buildSamplingLogOther builds the standard log other map for sampling results,
+// matching the format produced by GenerateTextOtherInfo for normal relay logs.
+func buildSamplingLogOther(ch *Channel, modelName string, result *SamplingResult) map[string]interface{} {
+	// Look up pricing data
+	modelRatio, hasModelRatio, _ := ratio_setting.GetModelRatio(modelName)
+	completionRatio := ratio_setting.GetCompletionRatio(modelName)
+	groupRatio := ratio_setting.GetGroupRatio(ch.Group)
+	modelPrice, hasModelPrice := ratio_setting.GetModelPrice(modelName, false)
+	cacheRatio, _ := ratio_setting.GetCacheRatio(modelName)
+
+	// Compute effective model_price: use model price if set, else -1 (ratio-based billing)
+	effectiveModelPrice := float64(-1)
+	if hasModelPrice && modelPrice >= 0 {
+		effectiveModelPrice = modelPrice
+	} else if !hasModelRatio {
+		// No ratio or price configured — still record so the log is visible
+		effectiveModelPrice = 0
+	}
+
+	// Resolve upstream model name for mapping detection
+	upstreamModel := resolveUpstreamModel(ch, modelName)
+	isModelMapped := upstreamModel != modelName
+
+	other := map[string]interface{}{
+		"frt":                float64(result.TtftMs),
+		"model_ratio":        modelRatio,
+		"group_ratio":        groupRatio,
+		"completion_ratio":   completionRatio,
+		"cache_tokens":       0,
+		"cache_ratio":        cacheRatio,
+		"model_price":        effectiveModelPrice,
+		"user_group_ratio":   float64(-1),
+		"request_path":       "/v1/chat/completions",
+		"request_conversion": []string{"OpenAI Compatible"},
+		"stream_status": map[string]interface{}{
+			"end_reason": "done",
+			"status":     "ok",
+		},
+		"admin_info": map[string]interface{}{
+			"use_channel": []int{},
+		},
+	}
+	if isModelMapped {
+		other["is_model_mapped"] = true
+		other["upstream_model_name"] = upstreamModel
+	}
+	return other
 }
 
 // getSamplingConfigFromOptions 从 OptionMap 读取采样配置
