@@ -2103,6 +2103,7 @@
     "Inspect requests, errors, and billing details": "Inspect requests, errors, and billing details",
     "Inspect user prompts": "Inspect user prompts",
     "Instance": "Instance",
+    "Insufficient balance": "Insufficient balance",
     "Integrations": "Integrations",
     "Inter-group overrides": "Inter-group overrides",
     "Inter-group ratio overrides": "Inter-group ratio overrides",
@@ -2874,6 +2875,7 @@
     "Override rate limits for specific groups. Format: [window(min), maxRequests, maxSuccess].": "Override rate limits for specific groups. Format: [window(min), maxRequests, maxSuccess].",
     "Override request headers": "Override request headers",
     "Override request headers (JSON format)": "Override request headers (JSON format)",
+    "Override request parameters": "Override request parameters",
     "Override request parameters (JSON format)": "Override request parameters (JSON format)",
     "Override request parameters. Cannot override": "Override request parameters. Cannot override",
     "Override request parameters. Cannot override stream parameter.": "Override request parameters. Cannot override stream parameter.",
@@ -2951,6 +2953,7 @@
     "Path:": "Path:",
     "Pay": "Pay",
     "Pay-as-you-go with real-time usage monitoring": "Pay-as-you-go with real-time usage monitoring",
+    "Pay with Balance": "Pay with Balance",
     "Payment": "Payment",
     "Payment aggregator mode — onboard with your own registered company (offshore entity). Built for Enterprise.": "Payment aggregator mode — onboard with your own registered company (offshore entity). Built for Enterprise.",
     "Payment Channel": "Payment Channel",
@@ -3119,6 +3122,7 @@
     "preset.lavender-dream": "Lavender Dream",
     "preset.ocean-breeze": "Ocean Breeze",
     "preset.rose-garden": "Rose Garden",
+    "preset.simple-large": "Simple Large-font",
     "preset.sunset-glow": "Sunset Glow",
     "preset.underground": "Underground",
     "Press Enter or comma to add tags": "Press Enter or comma to add tags",
@@ -3904,6 +3908,7 @@
     "Subscription First": "Subscription First",
     "Subscription Management": "Subscription Management",
     "Subscription Only": "Subscription Only",
+    "Subscription purchased successfully": "Subscription purchased successfully",
     "Subscription plan creation and changes are locked until the administrator confirms compliance terms in Payment Gateway settings.": "Subscription plan creation and changes are locked until the administrator confirms compliance terms in Payment Gateway settings.",
     "Subscription Plans": "Subscription Plans",
     "Subscription plans do NOT use the bound Product — each plan has its own dedicated Pancake product, set in the Subscriptions admin (or auto-minted via the \"+ Create\" button there).": "Subscription plans do NOT use the bound Product — each plan has its own dedicated Pancake product, set in the Subscriptions admin (or auto-minted via the \"+ Create\" button there).",
@@ -3924,7 +3929,7 @@
     "SunoAPI": "SunoAPI",
     "Sunset Glow": "Sunset Glow",
     "Super Admin": "Super Admin",
-    "Super admin can switch between public and test channels": "Super admin can switch between public and test channels",
+    "Super Large": "Super Large",
     "Support for high concurrency with automatic load balancing": "Support for high concurrency with automatic load balancing",
     "Supported Applications": "Supported Applications",
     "Supported Imagine Models": "Supported Imagine Models",
@@ -4682,6 +4687,7 @@
     "Zhipu V4": "Zhipu V4",
     "Zoom": "Zoom",
     "5 Minutes": "5 Minutes",
-    "30 Minutes": "30 Minutes"
+    "30 Minutes": "30 Minutes",
+    "Super admin can switch between public and test channels": "Super admin can switch between public and test channels"
   }
 }
