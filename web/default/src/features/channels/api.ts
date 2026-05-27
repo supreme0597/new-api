@@ -17,7 +17,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { api, type ApiRequestConfig } from '@/lib/api'
-import { getGroups as getUserGroups } from '@/features/users/api'
 import type {
   AddChannelRequest,
   BatchDeleteParams,
@@ -628,8 +627,24 @@ export async function getChannelOwners(): Promise<{
 
 /**
  * Get all available groups (re-exported from users API for convenience)
+ * Note: Uses /api/user/groups which is accessible to all authenticated users
  */
-export const getGroups = getUserGroups
+export async function getGroups(): Promise<{
+  success: boolean
+  message?: string
+  data?: string[]
+}> {
+  const res = await api.get('/api/user/groups')
+  // Adapter: Convert map keys to string array to match original API format
+  // The user groups API returns map[string]map[string]interface{}
+  // We extract just the group names for compatibility
+  const groupMap = res.data?.data || {}
+  const groupNames = Object.keys(groupMap)
+  return {
+    ...res.data,
+    data: groupNames,
+  }
+}
 
 // ============================================================================
 // Prefill Groups (Model Groups)

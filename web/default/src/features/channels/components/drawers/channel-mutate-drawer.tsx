@@ -125,6 +125,8 @@ import {
   MODEL_FETCHABLE_TYPES,
 } from '../../constants'
 import { useChannelMutateForm } from '../../hooks/use-channel-mutate-form'
+import { ROLE } from '@/lib/roles'
+import { useAuthStore } from '@/stores/auth-store'
 import {
   CHANNEL_FORM_DEFAULT_VALUES,
   channelFormSchema,
@@ -279,6 +281,7 @@ export function ChannelMutateDrawer({
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const currentUser = useAuthStore((s) => s.auth.user)
+  const isAdmin = (currentUser?.role ?? 0) >= ROLE.ADMIN
   const isSuperAdmin = (currentUser?.role ?? 0) >= 100
   const { setOpen } = useChannels()
   const [fetchModelsDialogOpen, setFetchModelsDialogOpen] = useState(false)
@@ -327,10 +330,11 @@ export function ChannelMutateDrawer({
     queryFn: getAllModels,
   })
 
-  // Fetch prefill model groups
+  // Fetch prefill model groups (only for admin users)
   const { data: prefillGroupsData } = useQuery({
     queryKey: ['prefill_groups', 'model'],
     queryFn: () => getPrefillGroups('model'),
+    enabled: isAdmin,
   })
 
   const { copyToClipboard } = useCopyToClipboard()
