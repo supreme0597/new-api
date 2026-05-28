@@ -1,5 +1,6 @@
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
+import { useAuthStore } from '@/stores/auth-store'
 import { Clock, Zap, CheckCircle, BarChart3, ExternalLink, ArrowUp, ArrowDown, ChevronsUpDown, ChevronRight, FileText } from 'lucide-react'
 import { PublicLayout } from '@/components/layout'
 import { PageTransition } from '@/components/page-transition'
@@ -137,7 +138,9 @@ export function PerformanceLeaderboard() {
 
   const totalPages = data ? Math.ceil(data.total / PAGE_SIZE) : 0
 
-  // Sampling detail dialog state (for success rate column)
+  const isAdmin = (useAuthStore((s) => s.auth.user?.role) ?? 0) >= 10
+
+  // Sampling detail dialog state (for success rate column, admin only)
   const [detailDialogOpen, setDetailDialogOpen] = useState(false)
   const [selectedModel, setSelectedModel] = useState<string | null>(null)
 
@@ -264,7 +267,7 @@ export function PerformanceLeaderboard() {
                 items={data.list} 
                 tpsBenchmark={data.tpsBenchmark} 
                 ttftBenchmark={data.ttftBenchmark} 
-                onRowClick={handleOpenDetail}
+                onRowClick={isAdmin ? handleOpenDetail : undefined}
                 onModelClick={handleOpenPerfDetail}
                 sortBy={sortBy}
                 sortOrder={sortOrder}
@@ -480,20 +483,24 @@ function LeaderboardTable({
                   />
                 </td>
                 <td
-                  className='px-4 py-3 text-right font-mono cursor-pointer hover:bg-muted/40 transition-colors'
+                  className={`px-4 py-3 text-right font-mono ${onRowClick ? 'cursor-pointer hover:bg-muted/40 transition-colors' : ''}`}
                   onClick={() => onRowClick?.(item.model_name)}
                 >
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className='inline-flex items-center gap-1'>
-                        {item.success_rate.toFixed(1)}%
-                        <FileText className='h-3 w-3 text-muted-foreground/50' />
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>{t('Click to view call details')}</p>
-                    </TooltipContent>
-                  </Tooltip>
+                  {onRowClick ? (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className='inline-flex items-center gap-1'>
+                          {item.success_rate.toFixed(1)}%
+                          <FileText className='h-3 w-3 text-muted-foreground/50' />
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>{t('Click to view call details')}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  ) : (
+                    <span>{item.success_rate.toFixed(1)}%</span>
+                  )}
                 </td>
                 <td className='px-4 py-3 text-right font-mono'>
                   <MetricValue
