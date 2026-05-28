@@ -169,9 +169,9 @@ function LogTableContent({
   })
 
   return (
-    <div className='space-y-4'>
-      {/* Filter bar */}
-      <div className='flex flex-wrap items-end gap-2'>
+    <div className='flex flex-col flex-1 min-h-0'>
+      {/* Filter bar – fixed height */}
+      <div className='flex-shrink-0 px-6 pt-6 pb-3 flex flex-wrap items-end gap-2'>
         <div className='flex flex-col gap-1'>
           <label className='text-xs text-muted-foreground'>
             {t('Start')}
@@ -199,63 +199,68 @@ function LogTableContent({
         </Button>
       </div>
 
-      {/* Table */}
-      <div className='rounded-md border'>
-        <Table>
-          <TableHeader>
-            {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id}>
-                {headerGroup.headers.map((header) => (
-                  <TableHead key={header.id}>
-                    {header.isPlaceholder
-                      ? null
-                      : flexRender(
-                          header.column.columnDef.header,
-                          header.getContext()
-                        )}
-                  </TableHead>
-                ))}
-              </TableRow>
-            ))}
-          </TableHeader>
-          <TableBody>
-            {isLoading || isFetching ? (
-              <TableRow>
-                <TableCell
-                  colSpan={columns.length}
-                  className='h-24 text-center'
-                >
-                  {t('Loading')}...
-                </TableCell>
-              </TableRow>
-            ) : table.getRowModel().rows.length ? (
-              table.getRowModel().rows.map((row) => (
-                <TableRow key={row.id}>
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id}>
-                      {flexRender(
-                        cell.column.columnDef.cell,
-                        cell.getContext()
-                      )}
-                    </TableCell>
+      {/* Table – scrollable middle */}
+      <div className='flex-1 min-h-0 overflow-auto px-6'>
+        <div className='rounded-md border'>
+          <Table>
+            <TableHeader>
+              {table.getHeaderGroups().map((headerGroup) => (
+                <TableRow key={headerGroup.id}>
+                  {headerGroup.headers.map((header) => (
+                    <TableHead key={header.id}>
+                      {header.isPlaceholder
+                        ? null
+                        : flexRender(
+                            header.column.columnDef.header,
+                            header.getContext()
+                          )}
+                    </TableHead>
                   ))}
                 </TableRow>
-              ))
-            ) : (
-              <TableRow>
-                <TableCell
-                  colSpan={columns.length}
-                  className='h-24 text-center'
-                >
-                  {t('No results')}
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
+              ))}
+            </TableHeader>
+            <TableBody>
+              {isLoading || isFetching ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={columns.length}
+                    className='h-24 text-center'
+                  >
+                    {t('Loading')}...
+                  </TableCell>
+                </TableRow>
+              ) : table.getRowModel().rows.length ? (
+                table.getRowModel().rows.map((row) => (
+                  <TableRow key={row.id}>
+                    {row.getVisibleCells().map((cell) => (
+                      <TableCell key={cell.id}>
+                        {flexRender(
+                          cell.column.columnDef.cell,
+                          cell.getContext()
+                        )}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell
+                    colSpan={columns.length}
+                    className='h-24 text-center'
+                  >
+                    {t('No results')}
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
       </div>
 
-      <DataTablePagination table={table} />
+      {/* Pagination – fixed height */}
+      <div className='flex-shrink-0 px-6 pt-3 pb-6 border-t border-border/50'>
+        <DataTablePagination table={table} />
+      </div>
     </div>
   )
 }
@@ -292,7 +297,7 @@ export function ModelDetailDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className='p-6 overflow-auto'>
+        <div className='flex flex-col flex-1 min-h-0'>
           <UsageLogsProvider>
             <LogTableContent modelName={modelName} hours={hours} />
           </UsageLogsProvider>
