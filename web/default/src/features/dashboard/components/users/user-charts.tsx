@@ -64,7 +64,17 @@ const USER_CHARTS: {
 
 const TOP_USER_LIMIT_OPTIONS = [5, 10, 20, 50]
 
-export function UserCharts({ metric = 'quota', defaultDays, hideTimeRangePresets = false }: { metric?: UserChartMetric; defaultDays?: number; hideTimeRangePresets?: boolean }) {
+export function UserCharts({
+  metric = 'quota',
+  defaultDays,
+  hideTimeRangePresets = false,
+  vendor
+}: {
+  metric?: UserChartMetric
+  defaultDays?: number
+  hideTimeRangePresets?: boolean
+  vendor?: string
+}) {
   const { t } = useTranslation()
   const { resolvedTheme } = useTheme()
   const { customization } = useThemeCustomization()
@@ -137,8 +147,13 @@ export function UserCharts({ metric = 'quota', defaultDays, hideTimeRangePresets
   }, [resolvedTheme])
 
   const { data: userData, isLoading } = useQuery({
-    queryKey: ['dashboard', 'user-quota', timeRange],
-    queryFn: () => getUserQuotaDataByUsers(timeRange),
+    queryKey: ['dashboard', 'user-quota', timeRange, vendor],
+    queryFn: () =>
+      getUserQuotaDataByUsers({
+        start_timestamp: timeRange.start_timestamp,
+        end_timestamp: timeRange.end_timestamp,
+        vendor
+      }),
     select: (res) => (res.success ? res.data : []),
     staleTime: 60_000,
   })

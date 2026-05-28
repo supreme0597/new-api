@@ -24,7 +24,6 @@ import { useChartTheme } from '@/lib/use-chart-theme'
 import { VCHART_OPTION } from '@/lib/vchart'
 import { formatShare, formatTokens } from '../lib/format'
 import type { RankingPeriod, VendorRanking, VendorShareSeries } from '../types'
-import { VendorLink } from './entity-links'
 
 const PERIOD_DESCRIPTIONS: Record<RankingPeriod, string> = {
   today: 'Token share by model author across the last 24 hours',
@@ -92,6 +91,8 @@ type MarketShareSectionProps = {
   history: VendorShareSeries
   rows: VendorRanking[]
   period: RankingPeriod
+  selectedVendor?: string | null
+  onVendorClick?: (vendor: string) => void
 }
 
 /**
@@ -259,9 +260,19 @@ export function MarketShareSection(props: MarketShareSectionProps) {
           </div>
         ) : (
           <div className='grid grid-cols-1 gap-x-8 px-5 pt-1 pb-4 md:grid-cols-2'>
-            <VendorList rows={left} colourMap={colourMap} />
+            <VendorList
+              rows={left}
+              colourMap={colourMap}
+              selectedVendor={props.selectedVendor}
+              onVendorClick={props.onVendorClick}
+            />
             {right.length > 0 && (
-              <VendorList rows={right} colourMap={colourMap} />
+              <VendorList
+                rows={right}
+                colourMap={colourMap}
+                selectedVendor={props.selectedVendor}
+                onVendorClick={props.onVendorClick}
+              />
             )}
           </div>
         )}
@@ -273,37 +284,49 @@ export function MarketShareSection(props: MarketShareSectionProps) {
 function VendorList(props: {
   rows: VendorRanking[]
   colourMap: Record<string, string>
+  selectedVendor?: string | null
+  onVendorClick?: (vendor: string) => void
 }) {
   return (
     <ul>
-      {props.rows.map((vendor) => (
-        <li key={vendor.vendor} className='flex items-center gap-3 py-2.5'>
-          <span className='text-muted-foreground/80 w-6 shrink-0 text-right font-mono text-xs tabular-nums'>
-            {vendor.rank}.
-          </span>
-          <span
-            aria-hidden
-            className='size-2.5 shrink-0 rounded-full'
-            style={{
-              backgroundColor: props.colourMap[vendor.vendor] ?? '#94a3b8',
-            }}
-          />
-          <VendorLink
-            vendor={vendor.vendor}
-            className='text-foreground min-w-0 flex-1 truncate text-sm font-medium'
-          >
-            {vendor.vendor}
-          </VendorLink>
-          <div className='shrink-0 text-right'>
-            <div className='text-foreground font-mono text-sm font-semibold tabular-nums'>
-              {formatTokens(vendor.total_tokens)}
-            </div>
-            <div className='text-muted-foreground/80 font-mono text-[11px] tabular-nums'>
-              {formatShare(vendor.share)}
-            </div>
-          </div>
-        </li>
-      ))}
+      {props.rows.map((vendor) => {
+        const isSelected = props.selectedVendor === vendor.vendor
+        return (
+          <li key={vendor.vendor}>
+            <button
+              type='button'
+              onClick={() => props.onVendorClick?.(vendor.vendor)}
+              className={`flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left transition-colors ${
+                isSelected
+                  ? 'bg-primary/10 ring-1 ring-primary/20'
+                  : 'hover:bg-muted/50'
+              }`}
+            >
+              <span className='text-muted-foreground/80 w-6 shrink-0 text-right font-mono text-xs tabular-nums'>
+                {vendor.rank}.
+              </span>
+              <span
+                aria-hidden
+                className='size-2.5 shrink-0 rounded-full'
+                style={{
+                  backgroundColor: props.colourMap[vendor.vendor] ?? '#94a3b8',
+                }}
+              />
+              <span className='text-foreground min-w-0 flex-1 truncate text-sm font-medium'>
+                {vendor.vendor}
+              </span>
+              <div className='shrink-0 text-right'>
+                <div className='text-foreground font-mono text-sm font-semibold tabular-nums'>
+                  {formatTokens(vendor.total_tokens)}
+                </div>
+                <div className='text-muted-foreground/80 font-mono text-[11px] tabular-nums'>
+                  {formatShare(vendor.share)}
+                </div>
+              </div>
+            </button>
+          </li>
+        )
+      })}
     </ul>
   )
 }

@@ -54,6 +54,7 @@ export function Rankings() {
   const isAdmin = (auth.user?.role ?? 0) >= ROLE.ADMIN
 
   const [userMetric, setUserMetric] = useState<UserChartMetric>('token_used')
+  const [selectedVendor, setSelectedVendor] = useState<string | null>(null)
 
   const period: RankingPeriod = VALID_PERIODS.includes(
     search.period as RankingPeriod
@@ -119,6 +120,8 @@ export function Rankings() {
                 history={snapshot.vendor_share_history}
                 rows={snapshot.vendors}
                 period={period}
+                selectedVendor={selectedVendor}
+                onVendorClick={(vendor) => setSelectedVendor(prev => prev === vendor ? null : vendor)}
               />
 
               <PulseSection
@@ -131,6 +134,16 @@ export function Rankings() {
                   <h2 className='text-lg font-semibold'>
                     {t('User Statistics')}
                   </h2>
+                  {selectedVendor && (
+                    <button
+                      type='button'
+                      onClick={() => setSelectedVendor(null)}
+                      className='inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary hover:bg-primary/20 transition-colors'
+                    >
+                      <span>{selectedVendor}</span>
+                      <span className='text-primary/60 hover:text-primary'>&times;</span>
+                    </button>
+                  )}
                   <div className='flex rounded-lg border p-0.5'>
                     {(
                       ['token_used', 'count'] as UserChartMetric[]
@@ -152,7 +165,12 @@ export function Rankings() {
                     ))}
                   </div>
                 </div>
-                <UserCharts metric={userMetric} defaultDays={PERIOD_TO_DAYS[period]} hideTimeRangePresets />
+                <UserCharts
+                  metric={userMetric}
+                  defaultDays={PERIOD_TO_DAYS[period]}
+                  hideTimeRangePresets
+                  vendor={selectedVendor ?? undefined}
+                />
               </div>
             </>
           )}

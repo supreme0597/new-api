@@ -115,14 +115,39 @@ func GetQuotaDataByUserId(userId int, startTime int64, endTime int64) (quotaData
 	return quotaDatas, err
 }
 
-func GetQuotaDataGroupByUser(startTime int64, endTime int64) (quotaData []*QuotaData, err error) {
+// GetQuotaDataGroupByUser 按用户分组查询配额数据，支持按厂商过滤
+func GetQuotaDataGroupByUser(startTime int64, endTime int64, vendor string) (quotaData []*QuotaData, err error) {
 	var quotaDatas []*QuotaData
-	err = DB.Table("quota_data").
+
+	// 构建基础查询
+	query := DB.Table("quota_data").
 		Select("username, created_at, sum(count) as count, sum(quota) as quota, sum(token_used) as token_used").
-		Where("created_at >= ? and created_at <= ?", startTime, endTime).
-		Group("username, created_at").
-		Find(&quotaDatas).Error
+		Where("created_at >= ? and created_at <= ?", startTime, endTime)
+
+	// 如果指定了厂商，使用子查询过滤 model_name
+	if vendor != "" {
+		// 子查询：获取该厂商对应的所有 model_name
+		subQuery := DB.Table("models").
+			Select("models.model_name").
+			Joins("JOIN vendors ON models.vendor_id = vendors.id").
+			Where("vendors.name = ?", vendor)
+
+		query = query.Where("quota_data.model_name IN (?)", subQuery)
+	}
+
+	err = query.Group("username, created_at").Find(&quotaDatas).Error
 	return quotaDatas, err
+}
+
+// GetVendorModelNames 获取指定厂商的所有模型名称（用于前端过滤）
+func GetVendorModelNames(vendor string) ([]string, error) {
+	var modelNames []string
+	err := DB.Table("models").
+		Select("models.model_name").
+		Joins("JOIN vendors ON models.vendor_id = vendors.id").
+		Where("vendors.name = ?", vendor).
+		Pluck("models.model_name", &modelNames).Error
+	return modelNames, err
 }
 
 func GetAllQuotaDates(startTime int64, endTime int64, username string) (quotaData []*QuotaData, err error) {
