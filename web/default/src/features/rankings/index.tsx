@@ -50,9 +50,6 @@ export function Rankings() {
   const search = useSearch({ from: '/rankings/' })
   const navigate = useNavigate()
 
-  const { auth } = useAuthStore()
-  const isAdmin = (auth.user?.role ?? 0) >= ROLE.ADMIN
-
   const [userMetric, setUserMetric] = useState<UserChartMetric>('token_used')
   const [selectedVendor, setSelectedVendor] = useState<string | null>(null)
 
@@ -70,11 +67,6 @@ export function Rankings() {
       to: '/rankings',
       search: (prev) => ({ ...prev, period: next }),
     })
-  }
-
-  if (!isAdmin) {
-    navigate({ to: '/' })
-    return null
   }
 
   return (
