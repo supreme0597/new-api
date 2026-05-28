@@ -262,7 +262,7 @@ export function UserCharts({
                 <div className='text-sm font-semibold'>{t(chart.labelKey)}</div>
               </div>
 
-              <div className='p-1.5 sm:p-2' style={{ height: `${Math.max((spec?.data?.[0]?.values?.length ?? topUserLimit) * 40, 300)}px` }}>
+              <div className='p-1.5 sm:p-2' style={{ height: `${chart.value === 'rank' ? Math.max((spec?.data?.[0]?.values?.length ?? topUserLimit) * 40, 300) : 300}px` }}>
                 {isLoading ? (
                   <Skeleton className='h-full w-full' />
                 ) : (
