@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { Link } from '@tanstack/react-router'
 import { ArrowRight } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { useStatus } from '@/hooks/use-status'
 import { Button } from '@/components/ui/button'
 
 interface HeroButtonsProps {
@@ -30,6 +31,7 @@ interface HeroButtonsProps {
  */
 export function HeroButtons({ isAuthenticated }: HeroButtonsProps) {
   const { t } = useTranslation()
+  const { status } = useStatus()
   if (isAuthenticated) {
     return (
       <Button size='lg' render={<Link to='/dashboard' />}>
@@ -40,7 +42,7 @@ export function HeroButtons({ isAuthenticated }: HeroButtonsProps) {
 
   return (
     <>
-      <Button size='lg' render={<Link to='/sign-up' />}>
+      <Button size='lg' render={<Link to={status?.register_enabled === false ? '/sign-in' : '/sign-up'} />}>
         {t('Get Started')}
         <ArrowRight className='ml-2 h-5 w-5' />
       </Button>
