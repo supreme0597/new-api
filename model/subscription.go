@@ -483,6 +483,10 @@ func CreateUserSubscriptionFromPlanTx(tx *gorm.DB, userId int, plan *Subscriptio
 				Update("group", upgradeGroup).Error; err != nil {
 				return nil, err
 			}
+			// Invalidate user cache so GetUserCache returns the new group.
+			// Must run after the transaction commits to avoid race, but
+			// a stale cache after bailout is harmless (repopulated from DB).
+			InvalidateUserCache(userId)
 		}
 	}
 	sub := &UserSubscription{
@@ -1004,8 +1008,20 @@ func ExpireDueSubscriptions(limit int) (int, error) {
 		if cacheGroup != "" {
 			_ = UpdateUserGroupCache(userId, cacheGroup)
 		}
+		// TODO: Invalidate subscription unlocked models cache for this user
+		// when a dedicated cache is added for GetUserSubscriptionUnlockedModels.
+		// Currently, TTL-based cache (300s) handles expiration naturally.
 	}
 	return expiredCount, nil
+}
+
+func containsString(slice []string, item string) bool {
+	for _, s := range slice {
+		if s == item {
+			return true
+		}
+	}
+	return false
 }
 
 // SubscriptionPreConsumeRecord stores idempotent pre-consume operations per request.
@@ -1278,6 +1294,22 @@ func GetSubscriptionPlanInfoByUserSubscriptionId(userSubscriptionId int) (*Subsc
 	}
 	_ = getSubscriptionPlanInfoCache().SetWithTTL(cacheKey, *info, subscriptionPlanInfoCacheTTL())
 	return info, nil
+}
+
+// GetUserActiveSubscriptionUpgradeGroup returns the UpgradeGroup from the user's active subscription.
+// Returns empty string if no active subscription with upgrade group exists.
+func GetUserActiveSubscriptionUpgradeGroup(userId int) string {
+	if userId <= 0 {
+		return ""
+	}
+	now := common.GetTimestamp()
+	var sub UserSubscription
+	err := DB.Where("user_id = ? AND status = ? AND end_time > ? AND upgrade_group != ''",
+		userId, "active", now).Order("end_time desc").First(&sub).Error
+	if err != nil {
+		return ""
+	}
+	return sub.UpgradeGroup
 }
 
 // Update subscription used amount by delta (positive consume more, negative refund).

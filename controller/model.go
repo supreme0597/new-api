@@ -190,7 +190,7 @@ func getModelListGroups(c *gin.Context) (modelListGroups, error) {
 		return modelListGroups{
 			userGroup:   userGroup,
 			tokenGroup:  tokenGroup,
-			ownerGroups: service.GetUserAutoGroup(userGroup),
+			ownerGroups: service.GetUserAutoGroup(userGroup, c.GetInt("id")),
 		}, nil
 	}
 
@@ -246,19 +246,7 @@ func ListModels(c *gin.Context, modelType int) {
 		}
 	} else {
 		userId := c.GetInt("id")
-		var models []string
-		if groups.tokenGroup == "auto" {
-			for _, autoGroup := range ownerGroups {
-				groupModels := model.GetGroupEnabledModelsForUser(autoGroup, userId)
-				for _, g := range groupModels {
-					if !common.StringsContains(models, g) {
-						models = append(models, g)
-					}
-				}
-			}
-		} else {
-			models = model.GetGroupEnabledModelsForUser(ownerGroups[0], userId)
-		}
+		models := model.GetUserVisibleModels(userId)
 		for _, modelName := range models {
 			if !acceptUnsetRatioModel {
 				if !helper.HasModelBillingConfig(modelName) {
@@ -334,7 +322,7 @@ func EnabledListModels(c *gin.Context) {
 	userId := c.GetInt("id")
 	c.JSON(200, gin.H{
 		"success": true,
-		"data":    model.GetEnabledModelsForUser(userId),
+		"data":    model.GetUserVisibleModels(userId),
 	})
 }
 

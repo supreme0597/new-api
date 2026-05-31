@@ -7,6 +7,8 @@ import (
 	"sync"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/setting"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 
 	"github.com/samber/lo"
 	"gorm.io/gorm"
@@ -95,14 +97,71 @@ func GetEnabledModels() []string {
 	return models
 }
 
+func getUserGroup(userId int) (string, error) {
+	if userId <= 0 {
+		return "", errors.New("invalid userId")
+	}
+	var group string
+	if err := DB.Model(&User{}).Where("id = ?", userId).Select(commonGroupCol).Find(&group).Error; err != nil {
+		return "", err
+	}
+	return group, nil
+}
+
+func getUserUsableGroups(userGroup string) map[string]string {
+	groups := setting.GetUserUsableGroupsCopy()
+	if userGroup != "" {
+		specialSettings, b := ratio_setting.GetGroupRatioSetting().GroupSpecialUsableGroup.Get(userGroup)
+		if b {
+			for specialGroup, desc := range specialSettings {
+				if strings.HasPrefix(specialGroup, "-:") {
+					groupToRemove := strings.TrimPrefix(specialGroup, "-:")
+					delete(groups, groupToRemove)
+				} else if strings.HasPrefix(specialGroup, "+:") {
+					groupToAdd := strings.TrimPrefix(specialGroup, "+:")
+					groups[groupToAdd] = desc
+				} else {
+					groups[specialGroup] = desc
+				}
+			}
+		}
+		if _, ok := groups[userGroup]; !ok {
+			groups[userGroup] = "用户分组"
+		}
+	}
+	return groups
+}
+
 func GetEnabledModelsForUser(userId int) []string {
+	if userId <= 0 {
+		return []string{}
+	}
+
+	var role int
+	DB.Model(&User{}).Where("id = ?", userId).Select("role").First(&role)
+	if role == common.RoleRootUser {
+		return GetEnabledModels()
+	}
+
+	group, err := getUserGroup(userId)
+	if err != nil {
+		return []string{}
+	}
+
+	groups := getUserUsableGroups(group)
 	var models []string
-	applyAbilityChannelOwnerScope(DB.Table("abilities").
-		Joins("left join channels on abilities.channel_id = channels.id").
-		Where("abilities.enabled = ?", true).
-		Where("(channels.owner_user_id IS NULL OR channels.owner_user_id != -999)"), userId).
-		Distinct("abilities.model").Pluck("abilities.model", &models)
+	for g := range groups {
+		for _, m := range GetGroupEnabledModelsForUser(g, userId) {
+			if !common.StringsContains(models, m) {
+				models = append(models, m)
+			}
+		}
+	}
 	return models
+}
+
+func GetUserVisibleModels(userId int) []string {
+	return GetEnabledModelsForUser(userId)
 }
 
 func GetAllEnableAbilities() []Ability {
