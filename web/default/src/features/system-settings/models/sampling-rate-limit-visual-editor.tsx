@@ -29,7 +29,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { getGroups } from '@/features/channels/api'
+import { getAdminGroups } from '@/features/channels/api'
 import { safeJsonParseWithValidation } from '../utils/json-parser'
 import { isObjectRecord } from '../utils/json-validators'
 import {
@@ -54,7 +54,7 @@ export function SamplingRateLimitVisualEditor({
 
   const { data: groupsData } = useQuery({
     queryKey: ['groups'],
-    queryFn: getGroups,
+    queryFn: getAdminGroups,
   })
   const groups = useMemo(
     () => (groupsData?.data as string[]) || [],
