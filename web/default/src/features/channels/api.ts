@@ -626,18 +626,30 @@ export async function getChannelOwners(): Promise<{
 // ============================================================================
 
 /**
- * Get all available groups (re-exported from users API for convenience)
- * Note: Uses /api/user/groups which is accessible to all authenticated users
+ * Get ALL groups — admin-only endpoint (/api/group/).
+ * Used by channel management page and channel create/edit form.
  */
-export async function getGroups(): Promise<{
+export async function getAdminGroups(): Promise<{
+  success: boolean
+  message?: string
+  data?: string[]
+}> {
+  const res = await api.get('/api/group/')
+  return res.data
+}
+
+/**
+ * Get user-visible groups — user endpoint (/api/user/groups).
+ * Used by "My Channels" page filter (returns groups the user can access).
+ */
+export async function getUserGroups(): Promise<{
   success: boolean
   message?: string
   data?: string[]
 }> {
   const res = await api.get('/api/user/groups')
-  // Adapter: Convert map keys to string array to match original API format
   // The user groups API returns map[string]map[string]interface{}
-  // We extract just the group names for compatibility
+  // Extract just the group names for compatibility
   const groupMap = res.data?.data || {}
   const groupNames = Object.keys(groupMap)
   return {

@@ -111,7 +111,7 @@ import {
   getAllModels,
   getChannel,
   getChannelKey,
-  getGroups,
+  getAdminGroups,
   getPrefillGroups,
   refreshCodexCredential,
 } from '../../api'
@@ -321,13 +321,15 @@ export function ChannelMutateDrawer({
   // Fetch available groups
   const { data: groupsData, isLoading: isLoadingGroups } = useQuery({
     queryKey: ['groups'],
-    queryFn: getGroups,
+    queryFn: getAdminGroups,
+    enabled: open,
   })
 
   // Fetch all available models
   const { data: allModelsData } = useQuery({
     queryKey: ['channel_models'],
     queryFn: getAllModels,
+    enabled: open,
   })
 
   // Fetch prefill model groups (only for admin users)

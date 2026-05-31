@@ -41,7 +41,7 @@ import {
   DISABLED_ROW_MOBILE,
   DataTablePage,
 } from '@/components/data-table'
-import { getChannels, searchChannels, getGroups, getChannelOwners } from '../api'
+import { getChannels, searchChannels, getAdminGroups, getUserGroups, getChannelOwners } from '../api'
 import {
   DEFAULT_PAGE_SIZE,
   CHANNEL_STATUS,
@@ -189,8 +189,8 @@ export function ChannelsTable({ myChannelsOnly, routeId }: { myChannelsOnly?: bo
 
   // Fetch groups for filter
   const { data: groupsData } = useQuery({
-    queryKey: ['groups'],
-    queryFn: getGroups,
+    queryKey: ['groups', myChannelsOnly],
+    queryFn: myChannelsOnly ? getUserGroups : getAdminGroups,
   })
 
   // Fetch channel owners for filter
