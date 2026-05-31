@@ -35,10 +35,4 @@ data/
 .test
 token_estimator_test.go
 skills-lock.json
-
-
-.workbuddy/
-*/.workbuddy/*
-
-.sisyphus
-docs
+.playwright-mcp
