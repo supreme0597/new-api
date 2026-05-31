@@ -139,6 +139,67 @@ func ApplyChannelViewScope(query *gorm.DB, userId int, isAdmin bool) *gorm.DB {
 	return query.Where("owner_user_id IS NULL OR owner_user_id = ?", userId)
 }
 
+// ApplyChannelViewScopeWithSubscription 在 ApplyChannelViewScope 基础上，
+// 对公共渠道增加分组可见性过滤：公共渠道仅在用户可用分组范围内可见。
+// 如果用户有活跃订阅的升级分组（upgradeGroup != ""），额外展示该分组下的渠道。
+func ApplyChannelViewScopeWithSubscription(query *gorm.DB, userId int, isAdmin bool, upgradeGroup string, userUsableGroups map[string]string) *gorm.DB {
+	if isAdmin {
+		return query
+	}
+
+	usableGroupNames := make([]string, 0, len(userUsableGroups))
+	for g := range userUsableGroups {
+		usableGroupNames = append(usableGroupNames, g)
+	}
+
+	// Build WHERE conditions as OR clauses
+	conditions := make([]string, 0, 3)
+	args := make([]interface{}, 0, 3)
+
+	// 1. Own channels: always visible
+	conditions = append(conditions, "owner_user_id = ?")
+	args = append(args, userId)
+
+	// 2. Public channels: only visible if channel's group is in user's usable groups
+	if publicCond, publicArgs := channelGroupsAnyMatchCondition(usableGroupNames); publicCond != "" {
+		conditions = append(conditions, "(owner_user_id IS NULL AND "+publicCond+")")
+		args = append(args, publicArgs...)
+	}
+
+	// 3. Subscription upgrade group: always visible regardless of ownership
+	if upgradeGroup != "" {
+		conditions = append(conditions, "("+channelGroupFilterCondition()+")")
+		args = append(args, channelGroupFilterPattern(upgradeGroup))
+	}
+
+	return query.Where(strings.Join(conditions, " OR "), args...)
+}
+
+// applyChannelViewScopeWithGroups 为普通用户添加查看权限过滤（不含订阅）。
+// 公共渠道仅在用户可用分组范围内可见。
+func applyChannelViewScopeWithGroups(query *gorm.DB, userId int, isAdmin bool, userUsableGroups map[string]string) *gorm.DB {
+	if isAdmin {
+		return query
+	}
+
+	usableGroupNames := make([]string, 0, len(userUsableGroups))
+	for g := range userUsableGroups {
+		usableGroupNames = append(usableGroupNames, g)
+	}
+
+	// Own channels: always visible
+	conditions := []string{"owner_user_id = ?"}
+	args := []interface{}{userId}
+
+	// Public channels: only visible if channel's group is in user's usable groups
+	if publicCond, publicArgs := channelGroupsAnyMatchCondition(usableGroupNames); publicCond != "" {
+		conditions = append(conditions, "(owner_user_id IS NULL AND "+publicCond+")")
+		args = append(args, publicArgs...)
+	}
+
+	return query.Where(strings.Join(conditions, " OR "), args...)
+}
+
 // ApplyChannelScopeFilter 为 GORM 查询添加 scope 过滤（public/private/test）
 func ApplyChannelScopeFilter(query *gorm.DB, scope string) *gorm.DB {
 	switch scope {
@@ -264,6 +325,23 @@ func ApplyChannelGroupFilter(query *gorm.DB, group string) *gorm.DB {
 		return query
 	}
 	return query.Where(channelGroupFilterCondition(), channelGroupFilterPattern(group))
+}
+
+// channelGroupsAnyMatchCondition builds a SQL condition that matches channels
+// whose group field contains ANY of the given group names.
+// Returns ("", nil) if groups is empty.
+func channelGroupsAnyMatchCondition(groups []string) (string, []interface{}) {
+	if len(groups) == 0 {
+		return "", nil
+	}
+	cond := channelGroupFilterCondition()
+	parts := make([]string, 0, len(groups))
+	args := make([]interface{}, 0, len(groups))
+	for _, g := range groups {
+		parts = append(parts, cond)
+		args = append(args, channelGroupFilterPattern(g))
+	}
+	return "(" + strings.Join(parts, " OR ") + ")", args
 }
 
 // Value implements driver.Valuer interface
@@ -514,7 +592,7 @@ func SearchChannels(keyword string, group string, model string, idSort bool, sor
 	return channels, nil
 }
 
-func SearchChannelsForActor(keyword string, group string, model string, idSort bool, userId int, isAdmin bool, scope string) ([]*Channel, error) {
+func SearchChannelsForActor(keyword string, group string, model string, idSort bool, userId int, isAdmin bool, scope string, userUsableGroups map[string]string) ([]*Channel, error) {
 	var channels []*Channel
 	modelsCol := "`models`"
 	if common.UsingPostgreSQL {
@@ -528,7 +606,7 @@ func SearchChannelsForActor(keyword string, group string, model string, idSort b
 	if idSort {
 		order = "id desc"
 	}
-	baseQuery := ApplyChannelViewScope(DB.Model(&Channel{}).Omit("key"), userId, isAdmin)
+	baseQuery := applyChannelViewScopeWithGroups(DB.Model(&Channel{}).Omit("key"), userId, isAdmin, userUsableGroups)
 	baseQuery = ApplyChannelScopeFilter(baseQuery, scope)
 	var whereClause string
 	var args []interface{}

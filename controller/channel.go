@@ -170,6 +170,11 @@ func GetAllChannels(c *gin.Context) {
 	modelTagFilter := c.Query("model_tag")
 	// model filter
 	modelFilter := c.Query("model")
+	// 获取用户活跃订阅的升级分组，用于在渠道列表中展示订阅解锁的渠道
+	subscriptionUpgradeGroup := model.GetUserActiveSubscriptionUpgradeGroup(userId)
+	// 获取用户可用分组，用于公共渠道的分组可见性过滤
+	userGroup := c.GetString("user_group")
+	userUsableGroups := service.GetUserUsableGroups(userGroup)
 	if enableTagMode {
 		tags, err := model.GetPaginatedChannelTags(buildChannelListQuery(groupFilter, statusFilter, typeFilter), pageInfo.GetStartIdx(), pageInfo.GetPageSize())
 		if err != nil {
@@ -189,7 +194,7 @@ func GetAllChannels(c *gin.Context) {
 			}
 			var tagChannels []*model.Channel
 			query := buildChannelListQuery(groupFilter, statusFilter, typeFilter).Where("tag = ?", *tag)
-			query = model.ApplyChannelViewScope(query, userId, isAdmin)
+			query = model.ApplyChannelViewScopeWithSubscription(query, userId, isAdmin, subscriptionUpgradeGroup, userUsableGroups)
 			query = model.ApplyChannelScopeFilter(query, scopeFilter)
 			err := sortOptions.Apply(query).
 				Omit("key").
@@ -217,7 +222,7 @@ func GetAllChannels(c *gin.Context) {
 		total, _ = model.CountAllTags()
 	} else {
 		baseQuery := model.DB.Model(&model.Channel{})
-		baseQuery = model.ApplyChannelViewScope(baseQuery, userId, isAdmin)
+		baseQuery = model.ApplyChannelViewScopeWithSubscription(baseQuery, userId, isAdmin, subscriptionUpgradeGroup, userUsableGroups)
 		baseQuery = model.ApplyChannelScopeFilter(baseQuery, scopeFilter)
 		baseQuery = model.ApplyChannelGroupFilter(baseQuery, groupFilter)
 		if typeFilter >= 0 {
@@ -258,7 +263,7 @@ func GetAllChannels(c *gin.Context) {
 	}
 
 	countQuery := model.DB.Model(&model.Channel{})
-	countQuery = model.ApplyChannelViewScope(countQuery, userId, isAdmin)
+	countQuery = model.ApplyChannelViewScopeWithSubscription(countQuery, userId, isAdmin, subscriptionUpgradeGroup, userUsableGroups)
 	countQuery = model.ApplyChannelScopeFilter(countQuery, scopeFilter)
 	switch statusFilter {
 	case common.ChannelStatusEnabled:
@@ -369,6 +374,9 @@ func SearchChannels(c *gin.Context) {
 	sortOptions := model.NewChannelSortOptions(c.Query("sort_by"), c.Query("sort_order"), idSort)
 	enableTagMode, _ := strconv.ParseBool(c.Query("tag_mode"))
 	channelData := make([]*model.Channel, 0)
+	// 获取用户可用分组，用于公共渠道的分组可见性过滤
+	userGroup := c.GetString("user_group")
+	userUsableGroups := service.GetUserUsableGroups(userGroup)
 	if enableTagMode {
 		tags, err := model.SearchTags(keyword, group, modelKeyword, idSort)
 		if err != nil {
@@ -406,7 +414,7 @@ func SearchChannels(c *gin.Context) {
 			}
 		}
 	} else {
-		channels, err := model.SearchChannelsForActor(keyword, group, modelKeyword, idSort, userId, isAdmin, scopeFilter)
+		channels, err := model.SearchChannelsForActor(keyword, group, modelKeyword, idSort, userId, isAdmin, scopeFilter, userUsableGroups)
 		if err != nil {
 			c.JSON(http.StatusOK, gin.H{
 				"success": false,
