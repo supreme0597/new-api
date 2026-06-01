@@ -647,7 +647,7 @@ export async function getUserGroups(): Promise<{
   message?: string
   data?: string[]
 }> {
-  const res = await api.get('/api/user/groups')
+  const res = await api.get('/api/user/self/groups')
   // The user groups API returns map[string]map[string]interface{}
   // Extract just the group names for compatibility
   const groupMap = res.data?.data || {}

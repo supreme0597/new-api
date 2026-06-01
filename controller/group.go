@@ -29,12 +29,31 @@ func GetUserGroups(c *gin.Context) {
 	userId := c.GetInt("id")
 	userGroup, _ = model.GetUserGroup(userId, false)
 	userUsableGroups := service.GetUserUsableGroups(userGroup)
+	// 如果有活跃订阅的升级分组，将其加入可用分组，使下拉框可选
+	var upgradeGroup string
+	if userId > 0 {
+		upgradeGroup = model.GetUserActiveSubscriptionUpgradeGroup(userId)
+	}
+	if upgradeGroup != "" {
+		if _, ok := userUsableGroups[upgradeGroup]; !ok {
+			userUsableGroups[upgradeGroup] = setting.GetUsableGroupDescription(upgradeGroup)
+		}
+	}
 	for groupName, _ := range ratio_setting.GetGroupRatioCopy() {
 		// UserUsableGroups contains the groups that the user can use
 		if desc, ok := userUsableGroups[groupName]; ok {
 			usableGroups[groupName] = map[string]interface{}{
 				"ratio": service.GetUserGroupRatio(userGroup, groupName),
 				"desc":  desc,
+			}
+		}
+	}
+	// 如果升级分组在 GetGroupRatioCopy 中没有配置比率，兜底加入
+	if upgradeGroup != "" {
+		if _, ok := usableGroups[upgradeGroup]; !ok {
+			usableGroups[upgradeGroup] = map[string]interface{}{
+				"ratio": service.GetUserGroupRatio(userGroup, upgradeGroup),
+				"desc":  setting.GetUsableGroupDescription(upgradeGroup),
 			}
 		}
 	}
