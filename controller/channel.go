@@ -243,6 +243,13 @@ func GetAllChannels(c *gin.Context) {
 			baseQuery = baseQuery.Where("models LIKE ?", "%"+modelFilter+"%")
 		}
 
+		// 统计总数
+		if err := baseQuery.Count(&total).Error; err != nil {
+			common.SysError("failed to count channels: " + err.Error())
+			c.JSON(http.StatusOK, gin.H{"success": false, "message": "获取渠道数量失败，请稍后重试"})
+			return
+		}
+
 		err := sortOptions.Apply(baseQuery).
 			Limit(pageInfo.GetPageSize()).
 			Offset(pageInfo.GetStartIdx()).
@@ -265,11 +272,24 @@ func GetAllChannels(c *gin.Context) {
 	countQuery := model.DB.Model(&model.Channel{})
 	countQuery = model.ApplyChannelViewScopeWithSubscription(countQuery, userId, isAdmin, subscriptionUpgradeGroup, userUsableGroups)
 	countQuery = model.ApplyChannelScopeFilter(countQuery, scopeFilter)
+	countQuery = model.ApplyChannelGroupFilter(countQuery, groupFilter)
+	if typeFilter >= 0 {
+		countQuery = countQuery.Where("type = ?", typeFilter)
+	}
+	if ownerFilter > 0 {
+		countQuery = countQuery.Where("owner_user_id = ?", ownerFilter)
+	}
 	switch statusFilter {
 	case common.ChannelStatusEnabled:
 		countQuery = countQuery.Where("status = ?", common.ChannelStatusEnabled)
 	case 0:
 		countQuery = countQuery.Where("status != ?", common.ChannelStatusEnabled)
+	}
+	if modelTagFilter != "" {
+		countQuery = countQuery.Where("tag = ?", modelTagFilter)
+	}
+	if modelFilter != "" {
+		countQuery = countQuery.Where("models LIKE ?", "%"+modelFilter+"%")
 	}
 	var results []struct {
 		Type  int64
