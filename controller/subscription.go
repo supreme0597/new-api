@@ -157,8 +157,8 @@ func AdminCreateSubscriptionPlan(c *gin.Context) {
 		common.ApiErrorMsg(c, "价格不能为负数")
 		return
 	}
-	if req.Plan.PriceAmount > 9999 {
-		common.ApiErrorMsg(c, "价格不能超过9999")
+	if req.Plan.PriceAmount > 2000000 {
+		common.ApiErrorMsg(c, "价格不能超过2000000")
 		return
 	}
 	if req.Plan.Currency == "" {
@@ -226,8 +226,8 @@ func AdminUpdateSubscriptionPlan(c *gin.Context) {
 		common.ApiErrorMsg(c, "价格不能为负数")
 		return
 	}
-	if req.Plan.PriceAmount > 9999 {
-		common.ApiErrorMsg(c, "价格不能超过9999")
+	if req.Plan.PriceAmount > 2000000 {
+		common.ApiErrorMsg(c, "价格不能超过2000000")
 		return
 	}
 	req.Plan.Id = id

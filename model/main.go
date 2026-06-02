@@ -549,7 +549,7 @@ func migrateSubscriptionPlanPriceAmount() {
 		} else if dataType == "numeric" {
 			return // Already decimal/numeric
 		}
-		alterSQL = fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s TYPE decimal(10,6) USING %s::decimal(10,6)`,
+		alterSQL = fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s TYPE decimal(14,2) USING %s::decimal(14,2)`,
 			tableName, columnName, columnName)
 	} else if common.UsingMySQL {
 		// MySQL: Check if already decimal
@@ -561,7 +561,7 @@ func migrateSubscriptionPlanPriceAmount() {
 		} else if strings.HasPrefix(strings.ToLower(columnType), "decimal") {
 			return // Already decimal
 		}
-		alterSQL = fmt.Sprintf("ALTER TABLE %s MODIFY COLUMN %s decimal(10,6) NOT NULL DEFAULT 0",
+		alterSQL = fmt.Sprintf("ALTER TABLE %s MODIFY COLUMN %s decimal(14,2) NOT NULL DEFAULT 0",
 			tableName, columnName)
 	} else {
 		return
@@ -571,7 +571,7 @@ func migrateSubscriptionPlanPriceAmount() {
 		if err := DB.Exec(alterSQL).Error; err != nil {
 			common.SysLog(fmt.Sprintf("Warning: failed to migrate %s.%s to decimal: %v", tableName, columnName, err))
 		} else {
-			common.SysLog(fmt.Sprintf("Successfully migrated %s.%s to decimal(10,6)", tableName, columnName))
+			common.SysLog(fmt.Sprintf("Successfully migrated %s.%s to decimal(14,2)", tableName, columnName))
 		}
 	}
 }
