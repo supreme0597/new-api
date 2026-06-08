@@ -417,7 +417,7 @@ func GetModelRatio(name string) (float64, bool, string) {
 			}
 			//return 0, true, name
 		}
-		return 37.5, operation_setting.SelfUseModeEnabled, name
+		return 1, operation_setting.SelfUseModeEnabled, name
 	}
 	return ratio, true, name
 }
