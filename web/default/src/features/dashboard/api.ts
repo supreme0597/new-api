@@ -46,11 +46,12 @@ export async function getUserQuotaDates(
   return res.data
 }
 
-// Get user quota data grouped by users with optional vendor filtering
+// Get user quota data grouped by users with optional vendor and group filtering
 export async function getUserQuotaDataByUsers(params: {
   start_timestamp: number
   end_timestamp: number
   vendor?: string
+  group?: string
 }) {
   const res = await api.get<{ success: boolean; data: QuotaDataItem[] }>(
     '/api/data/users',

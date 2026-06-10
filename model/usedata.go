@@ -115,14 +115,14 @@ func GetQuotaDataByUserId(userId int, startTime int64, endTime int64) (quotaData
 	return quotaDatas, err
 }
 
-// GetQuotaDataGroupByUser 按用户分组查询配额数据，支持按厂商过滤
-func GetQuotaDataGroupByUser(startTime int64, endTime int64, vendor string) (quotaData []*QuotaData, err error) {
+// GetQuotaDataGroupByUser 按用户分组查询配额数据，支持按厂商和用户分组过滤
+func GetQuotaDataGroupByUser(startTime int64, endTime int64, vendor string, group string) (quotaData []*QuotaData, err error) {
 	var quotaDatas []*QuotaData
 
 	// 构建基础查询
 	query := DB.Table("quota_data").
-		Select("username, created_at, sum(count) as count, sum(quota) as quota, sum(token_used) as token_used").
-		Where("created_at >= ? and created_at <= ?", startTime, endTime)
+		Select("quota_data.username, quota_data.created_at, sum(quota_data.count) as count, sum(quota_data.quota) as quota, sum(quota_data.token_used) as token_used").
+		Where("quota_data.created_at >= ? and quota_data.created_at <= ?", startTime, endTime)
 
 	// 如果指定了厂商，使用子查询过滤 model_name
 	if vendor != "" {
@@ -135,7 +135,13 @@ func GetQuotaDataGroupByUser(startTime int64, endTime int64, vendor string) (quo
 		query = query.Where("quota_data.model_name IN (?)", subQuery)
 	}
 
-	err = query.Group("username, created_at").Find(&quotaDatas).Error
+	// 如果指定了用户分组，JOIN users 表按 group 过滤
+	if group != "" {
+		query = query.Joins("JOIN users ON quota_data.user_id = users.id").
+			Where("users."+commonGroupCol+" = ?", group)
+	}
+
+	err = query.Group("quota_data.username, quota_data.created_at").Find(&quotaDatas).Error
 	return quotaDatas, err
 }
 

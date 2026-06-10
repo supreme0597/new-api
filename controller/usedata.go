@@ -31,7 +31,8 @@ func GetQuotaDatesByUser(c *gin.Context) {
 	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
 	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
 	vendor := c.Query("vendor") // 按厂商过滤
-	dates, err := model.GetQuotaDataGroupByUser(startTimestamp, endTimestamp, vendor)
+	group := c.Query("group")   // 按用户分组过滤
+	dates, err := model.GetQuotaDataGroupByUser(startTimestamp, endTimestamp, vendor, group)
 	if err != nil {
 		common.ApiError(c, err)
 		return

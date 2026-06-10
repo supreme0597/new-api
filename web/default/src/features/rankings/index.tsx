@@ -19,11 +19,21 @@ For commercial licensing, please contact support@quantumnous.com
 import { useState } from 'react'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
+import { useQuery } from '@tanstack/react-query'
 import { Skeleton } from '@/components/ui/skeleton'
 import { PublicLayout } from '@/components/layout'
 import { PageTransition } from '@/components/page-transition'
 import { useAuthStore } from '@/stores/auth-store'
 import { ROLE } from '@/lib/roles'
+import { api } from '@/lib/api'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { UserCharts } from '@/features/dashboard/components/users/user-charts'
 import type { UserChartMetric } from '@/features/dashboard/lib'
 import {
@@ -52,6 +62,17 @@ export function Rankings() {
 
   const [userMetric, setUserMetric] = useState<UserChartMetric>('token_used')
   const [selectedVendor, setSelectedVendor] = useState<string | null>(null)
+  const [selectedGroup, setSelectedGroup] = useState<string | null>(null)
+
+  const { data: groupsData } = useQuery({
+    queryKey: ['groups'],
+    queryFn: async () => {
+      const res = await api.get<{ success: boolean; data: string[] }>('/api/group/')
+      return res.data.data ?? []
+    },
+    staleTime: 120_000,
+  })
+  const groups = groupsData ?? []
 
   const period: RankingPeriod = VALID_PERIODS.includes(
     search.period as RankingPeriod
@@ -122,7 +143,7 @@ export function Rankings() {
               />
 
               <div className='space-y-4'>
-                <div className='flex items-center gap-2'>
+                <div className='flex flex-wrap items-center gap-2'>
                   <h2 className='text-lg font-semibold'>
                     {t('User Statistics')}
                   </h2>
@@ -156,12 +177,30 @@ export function Rankings() {
                       </button>
                     ))}
                   </div>
+                  {/* Group filter */}
+                  <Select
+                    value={selectedGroup ?? ''}
+                    onValueChange={(value) => setSelectedGroup(value || null)}
+                  >
+                    <SelectTrigger className='h-7 text-xs'>
+                      <SelectValue placeholder={t('All Groups')} />
+                    </SelectTrigger>
+                    <SelectContent align='end'>
+                      <SelectGroup>
+                        <SelectItem value=''>{t('All Groups')}</SelectItem>
+                        {groups.map((g) => (
+                          <SelectItem key={g} value={g}>{g}</SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
                 </div>
                 <UserCharts
                   metric={userMetric}
                   defaultDays={PERIOD_TO_DAYS[period]}
                   hideTimeRangePresets
                   vendor={selectedVendor ?? undefined}
+                  group={selectedGroup ?? undefined}
                 />
               </div>
             </>

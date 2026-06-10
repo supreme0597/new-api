@@ -68,12 +68,14 @@ export function UserCharts({
   metric = 'quota',
   defaultDays,
   hideTimeRangePresets = false,
-  vendor
+  vendor,
+  group
 }: {
   metric?: UserChartMetric
   defaultDays?: number
   hideTimeRangePresets?: boolean
   vendor?: string
+  group?: string
 }) {
   const { t } = useTranslation()
   const { resolvedTheme } = useTheme()
@@ -147,12 +149,13 @@ export function UserCharts({
   }, [resolvedTheme])
 
   const { data: userData, isLoading } = useQuery({
-    queryKey: ['dashboard', 'user-quota', timeRange, vendor],
+    queryKey: ['dashboard', 'user-quota', timeRange, vendor, group],
     queryFn: () =>
       getUserQuotaDataByUsers({
         start_timestamp: timeRange.start_timestamp,
         end_timestamp: timeRange.end_timestamp,
-        vendor
+        vendor,
+        group
       }),
     select: (res) => (res.success ? res.data : []),
     staleTime: 60_000,
