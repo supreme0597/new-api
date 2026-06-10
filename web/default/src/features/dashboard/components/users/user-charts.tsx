@@ -19,7 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { useEffect, useMemo, useState, useRef, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { VChart } from '@visactor/react-vchart'
-import { Users, Loader2 } from 'lucide-react'
+import { Users, Loader2, ArrowUpDown } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { getRollingDateRange, type TimeGranularity } from '@/lib/time'
 import { VCHART_OPTION } from '@/lib/vchart'
@@ -62,7 +62,7 @@ const USER_CHARTS: {
   },
 ]
 
-const TOP_USER_LIMIT_OPTIONS = [5, 10, 20, 50]
+const TOP_USER_LIMIT_OPTIONS = [5, 10, 20, 50, 100]
 
 export function UserCharts({
   metric = 'quota',
@@ -92,6 +92,7 @@ export function UserCharts({
     defaultDays ?? getDefaultDays(timeGranularity)
   )
   const [topUserLimit, setTopUserLimit] = useState(10)
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
   const [timeRange, setTimeRange] = useState(() => {
     const days = defaultDays ?? getDefaultDays(timeGranularity)
     const { start, end } = getRollingDateRange(days)
@@ -149,13 +150,15 @@ export function UserCharts({
   }, [resolvedTheme])
 
   const { data: userData, isLoading } = useQuery({
-    queryKey: ['dashboard', 'user-quota', timeRange, vendor, group],
+    queryKey: ['dashboard', 'user-quota', timeRange, vendor, group, sortDirection],
     queryFn: () =>
       getUserQuotaDataByUsers({
         start_timestamp: timeRange.start_timestamp,
         end_timestamp: timeRange.end_timestamp,
         vendor,
-        group
+        group,
+        include_all: true,
+        sort_direction: sortDirection,
       }),
     select: (res) => (res.success ? res.data : []),
     staleTime: 60_000,
@@ -169,7 +172,8 @@ export function UserCharts({
         t,
         topUserLimit,
         customization.preset,
-        metric
+        metric,
+        sortDirection
       ),
     [
       userData,
@@ -180,6 +184,7 @@ export function UserCharts({
       customization.preset,
       metric,
       customization.radius,
+      sortDirection,
     ]
   )
 
@@ -245,6 +250,24 @@ export function UserCharts({
             ))}
           </TabsList>
         </Tabs>
+
+        <button
+          type='button'
+          onClick={() =>
+            setSortDirection((prev) => (prev === 'desc' ? 'asc' : 'desc'))
+          }
+          className='inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors shrink-0'
+          title={
+            sortDirection === 'desc'
+              ? t('Sorted descending')
+              : t('Sorted ascending')
+          }
+        >
+          <ArrowUpDown className='size-3.5' />
+          <span>
+            {sortDirection === 'desc' ? t('Desc') : t('Asc')}
+          </span>
+        </button>
 
         {isLoading && (
           <Loader2 className='text-muted-foreground size-4 animate-spin' />

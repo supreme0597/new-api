@@ -741,7 +741,8 @@ export function processUserChartData(
   t?: TFunction,
   limit = 10,
   themeKey?: string,
-  metric: UserChartMetric = 'quota'
+  metric: UserChartMetric = 'quota',
+  sortDir: 'asc' | 'desc' = 'desc'
 ): ProcessedUserChartData {
   const tt: TFunction = t ?? ((x) => x)
   const { config } = getCurrencyDisplay()
@@ -820,7 +821,9 @@ export function processUserChartData(
   })
 
   const sorted = Array.from(userMetricTotal.entries()).sort(
-    (a, b) => b[1] - a[1]
+    sortDir === 'asc'
+      ? (a, b) => a[1] - b[1]
+      : (a, b) => b[1] - a[1]
   )
   const topUsers = sorted.slice(0, limit).map(([u]) => u)
   const topUserSet = new Set(topUsers)
@@ -843,6 +846,11 @@ export function processUserChartData(
     {}
   )
 
+  // 过滤掉零用量用户，趋势图只显示有实际数据的用户
+  const trendUserSet = new Set(
+    topUsers.filter((u) => (userMetricTotal.get(u) ?? 0) > 0)
+  )
+
   const timeUserMap = new Map<string, Map<string, number>>()
   const allTimePoints = new Set<string>()
 
@@ -851,13 +859,18 @@ export function processUserChartData(
     const timeKey = formatChartTime(ts, timeGranularity)
     allTimePoints.add(timeKey)
     const user = item.username || 'unknown'
-    if (!topUserSet.has(user)) return
+    if (!trendUserSet.has(user)) return
     if (!timeUserMap.has(timeKey)) timeUserMap.set(timeKey, new Map())
     const map = timeUserMap.get(timeKey)!
     map.set(user, (map.get(user) || 0) + getMetricValue(item))
   })
 
   const sortedTimePoints = Array.from(allTimePoints).sort()
+  const trendUsers = Array.from(trendUserSet)
+  // 保持趋势图中的用户顺序与排名一致
+  trendUsers.sort(
+    (a, b) => topUsers.indexOf(a) - topUsers.indexOf(b)
+  )
   const trendValues: Array<{
     Time: string
     User: string
@@ -866,7 +879,7 @@ export function processUserChartData(
   }> = []
 
   sortedTimePoints.forEach((time) => {
-    topUsers.forEach((user) => {
+    trendUsers.forEach((user) => {
       const q = timeUserMap.get(time)?.get(user) || 0
       trendValues.push({
         Time: time,

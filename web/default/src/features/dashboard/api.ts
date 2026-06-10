@@ -52,6 +52,8 @@ export async function getUserQuotaDataByUsers(params: {
   end_timestamp: number
   vendor?: string
   group?: string
+  include_all?: boolean
+  sort_direction?: 'asc' | 'desc'
 }) {
   const res = await api.get<{ success: boolean; data: QuotaDataItem[] }>(
     '/api/data/users',

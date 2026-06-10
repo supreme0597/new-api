@@ -116,10 +116,41 @@ func GetQuotaDataByUserId(userId int, startTime int64, endTime int64) (quotaData
 }
 
 // GetQuotaDataGroupByUser 按用户分组查询配额数据，支持按厂商和用户分组过滤
-func GetQuotaDataGroupByUser(startTime int64, endTime int64, vendor string, group string) (quotaData []*QuotaData, err error) {
+// includeAll: 为 true 时，LEFT JOIN users 表，包含未使用过的用户（额度为 0）
+func GetQuotaDataGroupByUser(startTime int64, endTime int64, vendor string, group string, includeAll bool) (quotaData []*QuotaData, err error) {
 	var quotaDatas []*QuotaData
 
-	// 构建基础查询
+	if includeAll {
+		// 构建 quota_data 子查询（聚合时间序列）
+		subQuery := DB.Table("quota_data").
+			Select("username, created_at, sum(count) as count, sum(quota) as quota, sum(token_used) as token_used").
+			Where("quota_data.created_at >= ? and quota_data.created_at <= ?", startTime, endTime)
+
+		if vendor != "" {
+			vendorSubQuery := DB.Table("models").
+				Select("models.model_name").
+				Joins("JOIN vendors ON models.vendor_id = vendors.id").
+				Where("vendors.name = ?", vendor)
+			subQuery = subQuery.Where("quota_data.model_name IN (?)", vendorSubQuery)
+		}
+
+		subQuery = subQuery.Group("quota_data.username, quota_data.created_at")
+
+		// LEFT JOIN users 表，使未使用过的用户也出现在结果中
+		query := DB.Table("users").
+			Select("COALESCE(qd.username, users.username) as username, COALESCE(qd.created_at, ?) as created_at, COALESCE(qd.count, 0) as count, COALESCE(qd.quota, 0) as quota, COALESCE(qd.token_used, 0) as token_used", endTime).
+			Joins("LEFT JOIN (?) qd ON users.username = qd.username", subQuery).
+			Where("users.deleted_at IS NULL")
+
+		if group != "" {
+			query = query.Where("users."+commonGroupCol+" = ?", group)
+		}
+
+		err = query.Find(&quotaDatas).Error
+		return quotaDatas, err
+	}
+
+	// 构建基础查询（原逻辑）
 	query := DB.Table("quota_data").
 		Select("quota_data.username, quota_data.created_at, sum(quota_data.count) as count, sum(quota_data.quota) as quota, sum(quota_data.token_used) as token_used").
 		Where("quota_data.created_at >= ? and quota_data.created_at <= ?", startTime, endTime)
