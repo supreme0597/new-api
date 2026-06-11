@@ -3,7 +3,6 @@ package service
 import (
 	"strings"
 
-	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 )
@@ -43,7 +42,7 @@ func GroupInUserUsableGroups(userGroup, groupName string) bool {
 }
 
 // GetUserAutoGroup 根据用户分组获取自动分组设置
-func GetUserAutoGroup(userGroup string, userId int) []string {
+func GetUserAutoGroup(userGroup string) []string {
 	groups := GetUserUsableGroups(userGroup)
 	autoGroups := make([]string, 0)
 	for _, group := range setting.GetAutoGroups() {
@@ -51,29 +50,7 @@ func GetUserAutoGroup(userGroup string, userId int) []string {
 			autoGroups = append(autoGroups, group)
 		}
 	}
-	// If user has an active subscription with an upgrade group, include it
-	// so auto-token expansion covers subscription-upgraded groups
-	if userId > 0 {
-		upgradeGroup := model.GetUserActiveSubscriptionUpgradeGroup(userId)
-		if upgradeGroup != "" {
-			// Only add if it's in the user's usable groups
-			if _, ok := groups[upgradeGroup]; ok {
-				if !contains(autoGroups, upgradeGroup) {
-					autoGroups = append(autoGroups, upgradeGroup)
-				}
-			}
-		}
-	}
 	return autoGroups
-}
-
-func contains(slice []string, item string) bool {
-	for _, s := range slice {
-		if s == item {
-			return true
-		}
-	}
-	return false
 }
 
 // GetUserGroupRatio 获取用户使用某个分组的倍率

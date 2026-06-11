@@ -1309,22 +1309,6 @@ func GetSubscriptionPlanInfoByUserSubscriptionId(userSubscriptionId int) (*Subsc
 	return info, nil
 }
 
-// GetUserActiveSubscriptionUpgradeGroup returns the UpgradeGroup from the user's active subscription.
-// Returns empty string if no active subscription with upgrade group exists.
-func GetUserActiveSubscriptionUpgradeGroup(userId int) string {
-	if userId <= 0 {
-		return ""
-	}
-	now := common.GetTimestamp()
-	var sub UserSubscription
-	err := DB.Where("user_id = ? AND status = ? AND end_time > ? AND upgrade_group != ''",
-		userId, "active", now).Order("end_time desc").First(&sub).Error
-	if err != nil {
-		return ""
-	}
-	return sub.UpgradeGroup
-}
-
 // Update subscription used amount by delta (positive consume more, negative refund).
 func PostConsumeUserSubscriptionDelta(userSubscriptionId int, delta int64) error {
 	if userSubscriptionId <= 0 {

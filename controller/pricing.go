@@ -34,8 +34,17 @@ func filterPricingByUsableGroups(pricing []model.Pricing, usableGroup map[string
 }
 
 func GetPricing(c *gin.Context) {
-	pricing := model.GetPricing()
 	userId, exists := c.Get("id")
+	uid := 0
+	if exists {
+		uid = userId.(int)
+	}
+	var pricing []model.Pricing
+	if exists {
+		pricing = model.GetPricingForUser(uid)
+	} else {
+		pricing = model.GetPricing()
+	}
 
 	usableGroup := map[string]string{}
 	groupRatio := map[string]float64{}
@@ -44,7 +53,7 @@ func GetPricing(c *gin.Context) {
 	}
 	var group string
 	if exists {
-		user, err := model.GetUserCache(userId.(int))
+		user, err := model.GetUserCache(uid)
 		if err == nil {
 			group = user.Group
 			for g := range groupRatio {
@@ -73,7 +82,7 @@ func GetPricing(c *gin.Context) {
 		"group_ratio":        groupRatio,
 		"usable_group":       usableGroup,
 		"supported_endpoint": model.GetSupportedEndpointMap(),
-		"auto_groups":        service.GetUserAutoGroup(group, userId.(int)),
+		"auto_groups":        service.GetUserAutoGroup(group),
 		"pricing_version":    "a42d372ccf0b5dd13ecf71203521f9d2",
 	})
 }

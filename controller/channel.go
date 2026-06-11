@@ -170,8 +170,6 @@ func GetAllChannels(c *gin.Context) {
 	modelTagFilter := c.Query("model_tag")
 	// model filter
 	modelFilter := c.Query("model")
-	// 获取用户活跃订阅的升级分组，用于在渠道列表中展示订阅解锁的渠道
-	subscriptionUpgradeGroup := model.GetUserActiveSubscriptionUpgradeGroup(userId)
 	// 获取用户可用分组，用于公共渠道的分组可见性过滤
 	userGroup := c.GetString("user_group")
 	userUsableGroups := service.GetUserUsableGroups(userGroup)
@@ -194,7 +192,7 @@ func GetAllChannels(c *gin.Context) {
 			}
 			var tagChannels []*model.Channel
 			query := buildChannelListQuery(groupFilter, statusFilter, typeFilter).Where("tag = ?", *tag)
-			query = model.ApplyChannelViewScopeWithSubscription(query, userId, isAdmin, subscriptionUpgradeGroup, userUsableGroups)
+			query = model.ApplyChannelViewScopeWithGroups(query, userId, isAdmin, userUsableGroups)
 			query = model.ApplyChannelScopeFilter(query, scopeFilter)
 			err := sortOptions.Apply(query).
 				Omit("key").
@@ -222,7 +220,7 @@ func GetAllChannels(c *gin.Context) {
 		total, _ = model.CountAllTags()
 	} else {
 		baseQuery := model.DB.Model(&model.Channel{})
-		baseQuery = model.ApplyChannelViewScopeWithSubscription(baseQuery, userId, isAdmin, subscriptionUpgradeGroup, userUsableGroups)
+		baseQuery = model.ApplyChannelViewScopeWithGroups(baseQuery, userId, isAdmin, userUsableGroups)
 		baseQuery = model.ApplyChannelScopeFilter(baseQuery, scopeFilter)
 		baseQuery = model.ApplyChannelGroupFilter(baseQuery, groupFilter)
 		if typeFilter >= 0 {
@@ -270,7 +268,7 @@ func GetAllChannels(c *gin.Context) {
 	}
 
 	countQuery := model.DB.Model(&model.Channel{})
-	countQuery = model.ApplyChannelViewScopeWithSubscription(countQuery, userId, isAdmin, subscriptionUpgradeGroup, userUsableGroups)
+	countQuery = model.ApplyChannelViewScopeWithGroups(countQuery, userId, isAdmin, userUsableGroups)
 	countQuery = model.ApplyChannelScopeFilter(countQuery, scopeFilter)
 	countQuery = model.ApplyChannelGroupFilter(countQuery, groupFilter)
 	if typeFilter >= 0 {
@@ -1072,9 +1070,10 @@ func UpdateChannel(c *gin.Context) {
 	}
 
 	sanitizeChannelPayloadForActor(c, &channel.Channel)
-	if !isAdminActor(c) {
-		channel.OwnerUserId = originChannel.OwnerUserId
-	}
+	// Editing must never change ownership. Always restore OwnerUserId from
+	// the original channel, regardless of actor role, to prevent a super
+	// admin's edit from overwriting the original owner's id.
+	channel.OwnerUserId = originChannel.OwnerUserId
 	// Always copy the original ChannelInfo so that fields like IsMultiKey and MultiKeySize are retained.
 	channel.ChannelInfo = originChannel.ChannelInfo
 

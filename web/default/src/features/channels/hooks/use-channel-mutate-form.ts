@@ -71,8 +71,30 @@ export function useChannelMutateForm(props: UseChannelMutateFormParams) {
       const currentUserId = currentUser?.id
       const isSuperAdmin = (currentUser?.role ?? 0) >= 100
 
-      // Resolve owner_user_id from channelType for private/test channel support
+      // Resolve owner_user_id from channelType for private/test channel support.
+      // On EDIT, preserve the original channel's owner to prevent ownership change
+      // (e.g. when a super admin edits a private channel owned by a regular user).
       const resolveOwnerId = () => {
+        if (props.isEditing && props.currentRow) {
+          const originalOwnerId = props.currentRow.owner_user_id
+          // For test channels (-999), preserve test ownership across edits.
+          if (originalOwnerId === -999) return -999
+          // For private channels, keep the original owner; do not overwrite
+          // with the currently logged-in user's id.
+          if (originalOwnerId != null) return originalOwnerId
+          // Originally public (owner_user_id === null). If admin is converting
+          // to private, use the admin's id; if staying public, return null.
+          const channelTypeValue = data.channelType as
+            | 'public'
+            | 'private'
+            | 'test'
+            | undefined
+          if (channelTypeValue === 'private') {
+            return resolveOwnerUserId('private', currentUserId)
+          }
+          return null
+        }
+        // Create path: derive from selected channel type.
         const channelTypeValue = data.channelType as
           | 'public'
           | 'private'

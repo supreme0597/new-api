@@ -112,7 +112,7 @@ func Distribute() func(c *gin.Context) {
 					if err == nil && preferred != nil && preferred.Status == common.ChannelStatusEnabled && model.CanActorViewChannel(preferred, currentUserId, false) {
 						if usingGroup == "auto" {
 							userGroup := common.GetContextKeyString(c, constant.ContextKeyUserGroup)
-							autoGroups := service.GetUserAutoGroup(userGroup, currentUserId)
+							autoGroups := service.GetUserAutoGroup(userGroup)
 							for _, g := range autoGroups {
 								if model.IsChannelEnabledForGroupModel(g, modelRequest.Model, preferred.Id) {
 									selectGroup = g
