@@ -1164,38 +1164,48 @@ export function ChannelMutateDrawer({
                       <FormField
                         control={form.control}
                         name='channelType'
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>{t('Channel Type')}</FormLabel>
-                            <FormControl>
-                              <Select
-                                value={field.value || 'public'}
-                                onValueChange={field.onChange}
-                              >
-                                <SelectTrigger>
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectGroup>
-                                    <SelectItem value='public'>
-                                      {t('Public')}
-                                    </SelectItem>
-                                    <SelectItem value='private'>
-                                      {t('Private')}
-                                    </SelectItem>
-                                    <SelectItem value='test'>
-                                      {t('Test')}
-                                    </SelectItem>
-                                  </SelectGroup>
-                                </SelectContent>
-                              </Select>
-                            </FormControl>
-                            <FormDescription className='text-xs'>
-                              {t('Super admin can switch between public and test channels')}
-                            </FormDescription>
-                            <FormMessage />
-                          </FormItem>
-                        )}
+                        render={({ field }) => {
+                          const isPrivateChannel =
+                            currentRow?.owner_user_id != null &&
+                            currentRow?.owner_user_id !== -999
+                          return (
+                            <FormItem>
+                              <FormLabel>{t('Channel Type')}</FormLabel>
+                              {isPrivateChannel ? (
+                                <p className='text-muted-foreground text-sm py-2'>
+                                  {t('Private')}
+                                </p>
+                              ) : (
+                                <>
+                                  <FormControl>
+                                    <Select
+                                      value={field.value || 'public'}
+                                      onValueChange={field.onChange}
+                                    >
+                                      <SelectTrigger>
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectGroup>
+                                          <SelectItem value='public'>
+                                            {t('Public')}
+                                          </SelectItem>
+                                          <SelectItem value='test'>
+                                            {t('Test')}
+                                          </SelectItem>
+                                        </SelectGroup>
+                                      </SelectContent>
+                                    </Select>
+                                  </FormControl>
+                                  <FormDescription className='text-xs'>
+                                    {t('Super admin can switch between public and test channels')}
+                                  </FormDescription>
+                                </>
+                              )}
+                              <FormMessage />
+                            </FormItem>
+                          )
+                        }}
                       />
                     )}
 

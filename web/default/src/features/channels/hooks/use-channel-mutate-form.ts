@@ -77,22 +77,17 @@ export function useChannelMutateForm(props: UseChannelMutateFormParams) {
       const resolveOwnerId = () => {
         if (props.isEditing && props.currentRow) {
           const originalOwnerId = props.currentRow.owner_user_id
-          // For test channels (-999), preserve test ownership across edits.
-          if (originalOwnerId === -999) return -999
-          // For private channels, keep the original owner; do not overwrite
-          // with the currently logged-in user's id.
-          if (originalOwnerId != null) return originalOwnerId
-          // Originally public (owner_user_id === null). If admin is converting
-          // to private, use the admin's id; if staying public, return null.
+          // Private channel (>0): dropdown is disabled, preserve original owner.
+          if (originalOwnerId != null && originalOwnerId !== -999) return originalOwnerId
+          // Public or test channel: allow switching between public ↔ test.
           const channelTypeValue = data.channelType as
             | 'public'
-            | 'private'
             | 'test'
             | undefined
-          if (channelTypeValue === 'private') {
-            return resolveOwnerUserId('private', currentUserId)
-          }
-          return null
+          if (channelTypeValue === 'test') return -999
+          if (channelTypeValue === 'public') return null
+          // Fallback: preserve original value.
+          return originalOwnerId ?? null
         }
         // Create path: derive from selected channel type.
         const channelTypeValue = data.channelType as

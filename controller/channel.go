@@ -1069,11 +1069,19 @@ func UpdateChannel(c *gin.Context) {
 		return
 	}
 
+	// Save OwnerUserId from frontend request before sanitize modifies it
+	requestedOwnerUserId := channel.OwnerUserId
+
 	sanitizeChannelPayloadForActor(c, &channel.Channel)
-	// Editing must never change ownership. Always restore OwnerUserId from
-	// the original channel, regardless of actor role, to prevent a super
-	// admin's edit from overwriting the original owner's id.
-	channel.OwnerUserId = originChannel.OwnerUserId
+
+	if originChannel.IsPublicChannel() || originChannel.IsTestChannel() {
+		// Super admin can switch between public ↔ test.
+		// Allow the frontend-sent value through (sanitize may have overwritten it for non-root).
+		channel.OwnerUserId = requestedOwnerUserId
+	} else {
+		// Private channel: never change ownership.
+		channel.OwnerUserId = originChannel.OwnerUserId
+	}
 	// Always copy the original ChannelInfo so that fields like IsMultiKey and MultiKeySize are retained.
 	channel.ChannelInfo = originChannel.ChannelInfo
 
@@ -1167,6 +1175,13 @@ func UpdateChannel(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+
+	// GORM Updates() with struct skips nil pointer fields.
+	// If owner_user_id changed from test (-999) to nil (public), do an explicit update.
+	if channel.OwnerUserId == nil && originChannel.IsTestChannel() {
+		model.DB.Model(&model.Channel{}).Where("id = ?", channel.Id).UpdateColumn("owner_user_id", nil)
+	}
+
 	model.InitChannelCache()
 	service.ResetProxyClientCache()
 	channel.Key = ""
