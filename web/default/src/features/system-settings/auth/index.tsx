@@ -79,6 +79,7 @@ const defaultAuthSettings: AuthSettings = {
   'ldap.test_pass': '',
   'ldap.allowed_groups': '',
   'ldap.group_attribute': 'memberOf',
+  'ldap.enable_token_as_api_key': true,
 }
 
 export function AuthSettings() {

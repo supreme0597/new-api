@@ -27,6 +27,12 @@ func NewLdapTokenService() *LdapTokenService {
 // 5. 群组允许 → 创建用户+令牌
 // 6. 群组不允许 → 拒绝
 func (s *LdapTokenService) AuthenticateByEmployeeID(employeeID string) (*model.User, *model.Token, error) {
+	// 0. 检查是否允许工号作为 API Key
+	ldapSettings := system_setting.GetLDAPSettings()
+	if !ldapSettings.EnableTokenAsApiKey {
+		return nil, nil, fmt.Errorf("LDAP 工号令牌认证已被管理员禁用")
+	}
+
 	// 1. 先尝试查找令牌（不验证LDAP）
 	token, err := s.findTokenByKey(employeeID)
 	if err == nil && token != nil {

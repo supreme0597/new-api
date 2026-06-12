@@ -8,19 +8,20 @@ import (
 
 // LDAPSettings LDAP 配置结构（兼容 Yearning 格式）
 type LDAPSettings struct {
-	Enabled        bool   `json:"enabled"`         // 是否启用
-	Url            string `json:"url"`             // LDAP 服务器地址（含端口，如 ldap.example.com:389）
-	User           string `json:"user"`            // 绑定 DN（管理员账号）
-	Password       string `json:"password"`        // 绑定密码
-	Type           string `json:"type"`            // 搜索过滤器模板（如 "(employeeID=%s)" 或 "(sAMAccountName=%s)"）
-	Sc             string `json:"sc"`              // 搜索基准 DN（Base DN）
-	Ldaps          bool   `json:"ldaps"`           // 是否使用 LDAPS
-	SkipTLS        bool   `json:"skip_tls"`        // 跳过 TLS 证书验证
-	Map            string `json:"map"`             // 属性映射 JSON，如 {"real_name":"cn","email":"mail","department":"department"}
-	TestUser       string `json:"test_user"`       // 测试用户
-	TestPass       string `json:"test_pass"`       // 测试用户密码
-	AllowedGroups  string `json:"allowed_groups"`  // 允许的群组列表，用逗号分隔，如 "group1,group2,group3"
-	GroupAttribute string `json:"group_attribute"` // 群组属性名（如 memberOf, cn）
+	Enabled             bool   `json:"enabled"`                 // 是否启用
+	Url                 string `json:"url"`                     // LDAP 服务器地址（含端口，如 ldap.example.com:389）
+	User                string `json:"user"`                    // 绑定 DN（管理员账号）
+	Password            string `json:"password"`                // 绑定密码
+	Type                string `json:"type"`                    // 搜索过滤器模板（如 "(employeeID=%s)" 或 "(sAMAccountName=%s)"）
+	Sc                  string `json:"sc"`                      // 搜索基准 DN（Base DN）
+	Ldaps               bool   `json:"ldaps"`                   // 是否使用 LDAPS
+	SkipTLS             bool   `json:"skip_tls"`                // 跳过 TLS 证书验证
+	Map                 string `json:"map"`                     // 属性映射 JSON，如 {"real_name":"cn","email":"mail","department":"department"}
+	TestUser            string `json:"test_user"`               // 测试用户
+	TestPass            string `json:"test_pass"`               // 测试用户密码
+	AllowedGroups       string `json:"allowed_groups"`          // 允许的群组列表，用逗号分隔，如 "group1,group2,group3"
+	GroupAttribute      string `json:"group_attribute"`         // 群组属性名（如 memberOf, cn）
+	EnableTokenAsApiKey bool   `json:"enable_token_as_api_key"` // 是否允许工号作为 API Key 使用（默认 true）
 }
 
 // LDAPAttributeMap LDAP 属性映射
@@ -31,17 +32,18 @@ type LDAPAttributeMap struct {
 }
 
 var defaultLDAPSettings = LDAPSettings{
-	Enabled:        false,
-	Url:            "ldap.example.com:389",
-	User:           "",
-	Password:       "",
-	Type:           "(employeeID=%s)",
-	Sc:             "dc=example,dc=com",
-	Ldaps:          false,
-	SkipTLS:        false,
-	Map:            `{"real_name":"cn","email":"mail","department":"department"}`,
-	AllowedGroups:  "",
-	GroupAttribute: "memberOf",
+	Enabled:             false,
+	Url:                 "ldap.example.com:389",
+	User:                "",
+	Password:            "",
+	Type:                "(employeeID=%s)",
+	Sc:                  "dc=example,dc=com",
+	Ldaps:               false,
+	SkipTLS:             false,
+	Map:                 `{"real_name":"cn","email":"mail","department":"department"}`,
+	AllowedGroups:       "",
+	GroupAttribute:      "memberOf",
+	EnableTokenAsApiKey: true,
 }
 
 func init() {

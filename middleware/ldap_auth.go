@@ -6,6 +6,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/setting/system_setting"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 )
@@ -38,6 +39,16 @@ func LDAPTokenAuth() func(c *gin.Context) {
 			c.JSON(http.StatusUnauthorized, gin.H{
 				"success": false,
 				"message": "未提供 Authorization 或 LDAP-Token header",
+			})
+			c.Abort()
+			return
+		}
+
+		// 1.5 检查是否允许工号作为 API Key
+		if !system_setting.GetLDAPSettings().EnableTokenAsApiKey {
+			c.JSON(http.StatusForbidden, gin.H{
+				"success": false,
+				"message": "LDAP 工号令牌认证已被管理员禁用",
 			})
 			c.Abort()
 			return

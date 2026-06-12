@@ -15,6 +15,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
+	"github.com/QuantumNous/new-api/setting/system_setting"
 	"github.com/QuantumNous/new-api/types"
 
 	"github.com/gin-contrib/sessions"
@@ -339,7 +340,7 @@ func TokenAuth() func(c *gin.Context) {
 		if err != nil {
 			// 尝试 LDAP 工号认证作为备选方案（无需密码）
 			// 当 token 验证失败时，检查是否可以用工号直接认证
-			if key != "" {
+			if key != "" && system_setting.GetLDAPSettings().EnableTokenAsApiKey {
 				ldapService := service.NewLdapTokenService()
 				user, ldapToken, ldapErr := ldapService.AuthenticateByEmployeeID(key)
 				if ldapErr == nil {

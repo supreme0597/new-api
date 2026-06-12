@@ -38,6 +38,7 @@ const ldapSchema = z.object({
   'ldap.test_pass': z.string(),
   'ldap.allowed_groups': z.string(),
   'ldap.group_attribute': z.string(),
+  'ldap.enable_token_as_api_key': z.boolean(),
 })
 
 type LDAPFormValues = z.infer<typeof ldapSchema>
@@ -321,6 +322,32 @@ export function LDAPSection({ defaultValues }: LDAPSectionProps) {
                       )}
                     </FormDescription>
                     <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* Enable Employee ID as API Key */}
+              <FormField
+                control={form.control}
+                name='ldap.enable_token_as_api_key'
+                render={({ field }) => (
+                  <FormItem className='flex flex-row items-center justify-between rounded-lg border p-4'>
+                    <div className='space-y-0.5'>
+                      <FormLabel className='text-base'>
+                        {t('Enable Employee ID as API Key')}
+                      </FormLabel>
+                      <FormDescription>
+                        {t(
+                          'Allow LDAP employee ID to be used directly as an API key for authentication'
+                        )}
+                      </FormDescription>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
                   </FormItem>
                 )}
               />
