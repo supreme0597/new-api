@@ -292,13 +292,15 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
 
           <DropdownMenuSeparator />
 
-          {/* Copy Channel — available to all users */}
-          <DropdownMenuItem onClick={handleCopy}>
-            {t('Copy Channel')}
-            <DropdownMenuShortcut>
-              <Copy size={16} />
-            </DropdownMenuShortcut>
-          </DropdownMenuItem>
+          {/* Copy Channel — visible when channel is copyable or user is admin */}
+          {(channel.copyable === true || isAdmin) && (
+            <DropdownMenuItem onClick={handleCopy}>
+              {t('Copy Channel')}
+              <DropdownMenuShortcut>
+                <Copy size={16} />
+              </DropdownMenuShortcut>
+            </DropdownMenuItem>
+          )}
 
           {/* Manage Keys — only for own channels (or admin) */}
           {(isOwnChannel || isAdmin) && isMultiKey && (

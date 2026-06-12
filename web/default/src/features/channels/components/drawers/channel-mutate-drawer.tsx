@@ -1209,6 +1209,29 @@ export function ChannelMutateDrawer({
                       />
                     )}
 
+                    {(isSuperAdmin || (currentRow?.owner_user_id != null && currentRow?.owner_user_id > 0 && currentRow?.owner_user_id === currentUser?.id) || !isEditing) && (
+                      <FormField
+                        control={form.control}
+                        name='copyable'
+                        render={({ field }) => (
+                          <FormItem className={sideDrawerSwitchItemClassName()}>
+                            <div className='flex flex-col gap-0.5'>
+                              <FormLabel>{t('Allow Copy')}</FormLabel>
+                              <FormDescription className='text-xs'>
+                                {t('Allow other users to copy this channel')}
+                              </FormDescription>
+                            </div>
+                            <FormControl>
+                              <Switch
+                                checked={field.value}
+                                onCheckedChange={field.onChange}
+                              />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                    )}
+
                     {currentType === 1 && (
                       <FormField
                         control={form.control}

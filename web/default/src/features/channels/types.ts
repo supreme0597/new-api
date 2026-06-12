@@ -57,6 +57,7 @@ export const channelSchema = z.object({
   status_code_mapping: z.string().nullish(),
   priority: z.number().nullish(),
   auto_ban: z.number().nullish(),
+  copyable: z.boolean().default(true),
   other_info: z.string().default(''),
   tag: z.string().nullish(),
   setting: z.string().nullish(),

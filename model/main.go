@@ -296,6 +296,8 @@ func migrateDB() error {
 	}
 	// 迁移：将 is_test_channel=1 的渠道的 owner_user_id 设为 -999
 	DB.Exec("UPDATE channels SET owner_user_id = -999 WHERE is_test_channel = 1 AND (owner_user_id IS NULL OR owner_user_id = 0)")
+	// 迁移：将所有渠道的 copyable 设为 1（默认允许复制）
+	DB.Exec("UPDATE channels SET copyable = 1 WHERE copyable IS NULL")
 
 	// Seed perf_metrics_setting.bucket_time default to "minute" if not set
 	seedOptionIfEmpty("perf_metrics_setting.bucket_time", "minute")

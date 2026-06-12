@@ -1085,6 +1085,11 @@ func UpdateChannel(c *gin.Context) {
 	// Always copy the original ChannelInfo so that fields like IsMultiKey and MultiKeySize are retained.
 	channel.ChannelInfo = originChannel.ChannelInfo
 
+	// Preserve Copyable when not provided in request (nil = don't change)
+	if channel.Copyable == nil {
+		channel.Copyable = originChannel.Copyable
+	}
+
 	// If the request explicitly specifies a new MultiKeyMode, apply it on top of the original info.
 	if channel.MultiKeyMode != nil && *channel.MultiKeyMode != "" {
 		channel.ChannelInfo.MultiKeyMode = constant.MultiKeyMode(*channel.MultiKeyMode)
@@ -1401,10 +1406,19 @@ func CopyChannel(c *gin.Context) {
 		return
 	}
 
-	// Permission check: public channels can be copied by anyone, private channels need admin or owner
-	if origin.OwnerUserId != nil && !isAdmin && *origin.OwnerUserId != userId {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "无权操作该渠道"})
-		return
+	// Permission check:
+	// - admin/root: can copy any channel
+	// - non-admin: channel must have copyable=true
+	// - private channels additionally require owner or admin
+	if !isAdmin {
+		if origin.Copyable == nil || !*origin.Copyable {
+			c.JSON(http.StatusOK, gin.H{"success": false, "message": "该渠道不允许被复制"})
+			return
+		}
+		if origin.OwnerUserId != nil && *origin.OwnerUserId != userId {
+			c.JSON(http.StatusOK, gin.H{"success": false, "message": "无权操作该渠道"})
+			return
+		}
 	}
 
 	suffix := c.DefaultQuery("suffix", "_复制")
