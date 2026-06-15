@@ -30,7 +30,7 @@ export function Channels({ myChannelsOnly }: { myChannelsOnly?: boolean } = {}) 
   const routeId = pathname.startsWith('/my-channels') ? '/_authenticated/my-channels/' : '/_authenticated/channels/'
   return (
     <ChannelsProvider>
-      <SectionPageLayout>
+      <SectionPageLayout fixedContent>
         <SectionPageLayout.Title>
           {myChannelsOnly ? t('My Channels') : t('Channels')}
         </SectionPageLayout.Title>

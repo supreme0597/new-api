@@ -61,7 +61,6 @@ import {
 import ModelSelectModal from './ModelSelectModal';
 import SingleModelSelectModal from './SingleModelSelectModal';
 import OllamaModelModal from './OllamaModelModal';
-import CodexOAuthModal from './CodexOAuthModal';
 import ParamOverrideEditorModal from './ParamOverrideEditorModal';
 import JSONEditor from '../../../common/ui/JSONEditor';
 import SecureVerificationModal from '../../../common/modals/SecureVerificationModal';
@@ -338,7 +337,9 @@ const EditChannelModal = (props) => {
       return {
         tagLabel: t('不更改'),
         tagColor: 'grey',
-        preview: t('此项可选，用于覆盖请求参数。不支持覆盖 stream 参数'),
+        preview: t(
+          '此项可选，用于覆盖请求参数。不支持覆盖 stream 参数',
+        ),
       };
     }
     if (!verifyJSON(raw)) {
@@ -385,7 +386,6 @@ const EditChannelModal = (props) => {
   }, [inputs.param_override, t]);
   const [isIonetChannel, setIsIonetChannel] = useState(false);
   const [ionetMetadata, setIonetMetadata] = useState(null);
-  const [codexOAuthModalVisible, setCodexOAuthModalVisible] = useState(false);
   const [codexCredentialRefreshing, setCodexCredentialRefreshing] =
     useState(false);
   const [paramOverrideEditorVisible, setParamOverrideEditorVisible] =
@@ -1240,11 +1240,6 @@ const EditChannelModal = (props) => {
       console.error('Failed to view channel key:', error);
       showError(error.message || t('获取密钥失败'));
     }
-  };
-
-  const handleCodexOAuthGenerated = (key) => {
-    handleInputChange('key', key);
-    formatJsonField('key');
   };
 
   const handleRefreshCodexCredential = async () => {
@@ -3140,121 +3135,99 @@ const EditChannelModal = (props) => {
                                       )}
                                     </Text>
 
-                                    <Space wrap spacing='tight'>
+                                  <Space wrap spacing='tight'>
+                                    {isEdit && (
                                       <Button
                                         size='small'
                                         type='primary'
                                         theme='outline'
-                                        onClick={() =>
-                                          setCodexOAuthModalVisible(true)
-                                        }
+                                        onClick={handleRefreshCodexCredential}
+                                        loading={codexCredentialRefreshing}
                                         disabled={isIonetLocked}
                                       >
-                                        {t('Codex 授权')}
+                                        {t('刷新凭证')}
                                       </Button>
-                                      {isEdit && (
-                                        <Button
-                                          size='small'
-                                          type='primary'
-                                          theme='outline'
-                                          onClick={handleRefreshCodexCredential}
-                                          loading={codexCredentialRefreshing}
-                                          disabled={isIonetLocked}
-                                        >
-                                          {t('刷新凭证')}
-                                        </Button>
-                                      )}
+                                    )}
+                                    <Button
+                                      size='small'
+                                      type='primary'
+                                      theme='outline'
+                                      onClick={() => formatJsonField('key')}
+                                      disabled={isIonetLocked}
+                                    >
+                                      {t('格式化')}
+                                    </Button>
+                                    {isEdit && (
                                       <Button
                                         size='small'
                                         type='primary'
                                         theme='outline'
-                                        onClick={() => formatJsonField('key')}
+                                        onClick={handleShow2FAModal}
                                         disabled={isIonetLocked}
                                       >
-                                        {t('格式化')}
+                                        {t('查看密钥')}
                                       </Button>
-                                      {isEdit && (
-                                        <Button
-                                          size='small'
-                                          type='primary'
-                                          theme='outline'
-                                          onClick={handleShow2FAModal}
-                                          disabled={isIonetLocked}
-                                        >
-                                          {t('查看密钥')}
-                                        </Button>
-                                      )}
-                                      {batchExtra}
-                                    </Space>
-                                  </div>
-                                }
-                                autosize
-                                showClear
-                              />
-
-                              <CodexOAuthModal
-                                visible={codexOAuthModalVisible}
-                                onCancel={() =>
-                                  setCodexOAuthModalVisible(false)
-                                }
-                                onSuccess={handleCodexOAuthGenerated}
-                              />
-                            </>
-                          ) : inputs.type === 41 &&
-                            (inputs.vertex_key_type || 'json') === 'json' ? (
-                            <>
-                              {!batch && (
-                                <div className='flex items-center justify-between mb-3'>
-                                  <Text className='text-sm font-medium'>
-                                    {t('密钥输入方式')}
-                                  </Text>
-                                  <Space>
-                                    <Button
-                                      size='small'
-                                      type={
-                                        !useManualInput ? 'primary' : 'tertiary'
-                                      }
-                                      onClick={() => {
-                                        setUseManualInput(false);
-                                        // 切换到文件上传模式时清空手动输入的密钥
-                                        if (formApiRef.current) {
-                                          formApiRef.current.setValue(
-                                            'key',
-                                            '',
-                                          );
-                                        }
-                                        handleInputChange('key', '');
-                                      }}
-                                    >
-                                      {t('文件上传')}
-                                    </Button>
-                                    <Button
-                                      size='small'
-                                      type={
-                                        useManualInput ? 'primary' : 'tertiary'
-                                      }
-                                      onClick={() => {
-                                        setUseManualInput(true);
-                                        // 切换到手动输入模式时清空文件上传相关状态
-                                        setVertexKeys([]);
-                                        setVertexFileList([]);
-                                        if (formApiRef.current) {
-                                          formApiRef.current.setValue(
-                                            'vertex_files',
-                                            [],
-                                          );
-                                        }
-                                        setInputs((prev) => ({
-                                          ...prev,
-                                          vertex_files: [],
-                                        }));
-                                      }}
-                                    >
-                                      {t('手动输入')}
-                                    </Button>
+                                    )}
+                                    {batchExtra}
                                   </Space>
                                 </div>
-                              )}
+                              }
+                              autosize
+                              showClear
+                            />
+                          </>
+                        ) : inputs.type === 41 &&
+                          (inputs.vertex_key_type || 'json') === 'json' ? (
+                          <>
+                            {!batch && (
+                              <div className='flex items-center justify-between mb-3'>
+                                <Text className='text-sm font-medium'>
+                                  {t('密钥输入方式')}
+                                </Text>
+                                <Space>
+                                  <Button
+                                    size='small'
+                                    type={
+                                      !useManualInput ? 'primary' : 'tertiary'
+                                    }
+                                    onClick={() => {
+                                      setUseManualInput(false);
+                                      // 切换到文件上传模式时清空手动输入的密钥
+                                      if (formApiRef.current) {
+                                        formApiRef.current.setValue('key', '');
+                                      }
+                                      handleInputChange('key', '');
+                                    }}
+                                  >
+                                    {t('文件上传')}
+                                  </Button>
+                                  <Button
+                                    size='small'
+                                    type={
+                                      useManualInput ? 'primary' : 'tertiary'
+                                    }
+                                    onClick={() => {
+                                      setUseManualInput(true);
+                                      // 切换到手动输入模式时清空文件上传相关状态
+                                      setVertexKeys([]);
+                                      setVertexFileList([]);
+                                      if (formApiRef.current) {
+                                        formApiRef.current.setValue(
+                                          'vertex_files',
+                                          [],
+                                        );
+                                      }
+                                      setInputs((prev) => ({
+                                        ...prev,
+                                        vertex_files: [],
+                                      }));
+                                    }}
+                                  >
+                                    {t('手动输入')}
+                                  </Button>
+                                </Space>
+                              </div>
+                            )}
 
                               {batch && (
                                 <Banner

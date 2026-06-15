@@ -273,10 +273,6 @@ func SetApiRouter(router *gin.Engine) {
 			channelRoute.POST("/fix", middleware.AdminAuth(), controller.FixChannelsAbilities)
 			channelRoute.GET("/fetch_models/:id", middleware.UserAuth(), controller.FetchUpstreamModels)
 			channelRoute.POST("/fetch_models", middleware.UserAuth(), controller.FetchModels)
-			channelRoute.POST("/codex/oauth/start", middleware.AdminAuth(), controller.StartCodexOAuth)
-			channelRoute.POST("/codex/oauth/complete", middleware.AdminAuth(), controller.CompleteCodexOAuth)
-			channelRoute.POST("/:id/codex/oauth/start", middleware.AdminAuth(), controller.StartCodexOAuthForChannel)
-			channelRoute.POST("/:id/codex/oauth/complete", middleware.AdminAuth(), controller.CompleteCodexOAuthForChannel)
 			channelRoute.POST("/:id/codex/refresh", middleware.AdminAuth(), controller.RefreshCodexChannelCredential)
 			channelRoute.GET("/:id/codex/usage", middleware.AdminAuth(), controller.GetCodexChannelUsage)
 			channelRoute.POST("/ollama/pull", middleware.AdminAuth(), controller.OllamaPullModel)
@@ -300,6 +296,21 @@ func SetApiRouter(router *gin.Engine) {
 			modelPerformanceAdminRoute.POST("/refresh", controller.RefreshModelPerformance)
 			modelPerformanceAdminRoute.GET("/sampling-status", controller.GetSamplingTaskStatus)
 			modelPerformanceAdminRoute.POST("/stop", controller.StopSamplingTask)
+		}
+
+		channelFlowRoute := apiRouter.Group("/channel_flow")
+		channelFlowRoute.Use(middleware.AdminAuth())
+		{
+			channelFlowRoute.GET("/pools", controller.ListChannelFlowPools)
+			channelFlowRoute.POST("/pools", controller.CreateChannelFlowPool)
+			channelFlowRoute.GET("/pools/:id", controller.GetChannelFlowPool)
+			channelFlowRoute.PUT("/pools/:id", controller.UpdateChannelFlowPool)
+			channelFlowRoute.DELETE("/pools/:id", controller.DeleteChannelFlowPool)
+			channelFlowRoute.GET("/pools/:id/status", controller.GetChannelFlowPoolStatus)
+			channelFlowRoute.GET("/pools/:id/trend", controller.GetChannelFlowPoolTrend)
+			channelFlowRoute.GET("/pools/:id/bindings", controller.ListChannelFlowPoolBindings)
+			channelFlowRoute.POST("/pools/:id/bindings", controller.CreateChannelFlowPoolBinding)
+			channelFlowRoute.DELETE("/bindings/:id", controller.DeleteChannelFlowPoolBinding)
 		}
 
 		tokenRoute := apiRouter.Group("/token")

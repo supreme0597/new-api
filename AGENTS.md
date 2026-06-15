@@ -136,15 +136,10 @@ For request structs that are parsed from client JSON and then re-marshaled to up
 
 When working on tiered/dynamic billing (expression-based pricing), you MUST read `pkg/billingexpr/expr.md` first. It documents the design philosophy, expression language (variables, functions, examples), full system architecture (editor → storage → pre-consume → settlement → log display), token normalization rules (`p`/`c` auto-exclusion), quota conversion, and expression versioning. All code changes to the billing expression system must follow the patterns described in that document.
 
-## Known Issues
+### Rule 8: Pull Requests — Identify AI-Generated Contributions When Appropriate
 
-### AI Tool Artifacts in Repository
+When creating a pull request:
 
-The following files were committed by mistake and contain AI assistant working data. They should be cleaned up in a future maintenance pass:
-
-- `.workbuddy/` — WorkBuddy assistant memory and history files
-- `.learnings/` — AI learning notes (ERRORS.md, LEARNINGS.md)
-- `web/.workbuddy/`, `web/default/.workbuddy/`, `common/.workbuddy/` — Nested WorkBuddy directories
-- `.sisyphus/run-continuation/` — Sisyphus session data
-
-These files do not affect functionality but add noise to the repository.
+- First compare the current git user (`git config user.name` / `git config user.email`) with the repository's historical core developers (for example, the recurring top authors in `git log`). Do not change git config.
+- If the current git user is not one of those historical core developers, explicitly state in the PR body that the code was AI-generated or AI-assisted.
+- Always use the repository PR template at `.github/PULL_REQUEST_TEMPLATE.md` when drafting the PR title/body. Preserve the template structure and fill in the relevant sections instead of replacing it with an ad hoc format.

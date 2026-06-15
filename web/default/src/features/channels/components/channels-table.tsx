@@ -16,20 +16,15 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { getRouteApi } from '@tanstack/react-router'
 import {
-  getCoreRowModel,
-  useReactTable,
-  getExpandedRowModel,
   type OnChangeFn,
   type SortingState,
-  type VisibilityState,
-  type ExpandedState,
   type Row,
 } from '@tanstack/react-table'
-import { useDebounce, useMediaQuery } from '@/hooks'
+import { useMediaQuery } from '@/hooks'
 import { useTranslation } from 'react-i18next'
 import { Info } from 'lucide-react'
 import { getLobeIcon } from '@/lib/lobe-icon'
@@ -40,6 +35,8 @@ import {
   DISABLED_ROW_DESKTOP,
   DISABLED_ROW_MOBILE,
   DataTablePage,
+  useDebouncedColumnFilter,
+  useDataTable,
 } from '@/components/data-table'
 import { getChannels, searchChannels, getAdminGroups, getUserGroups, getChannelOwners } from '../api'
 import {
@@ -88,12 +85,6 @@ export function ChannelsTable({ myChannelsOnly, routeId }: { myChannelsOnly?: bo
 
   // Table state
   const [sorting, setSorting] = useState<SortingState>([])
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({
-    models: false,
-    tag: false,
-  })
-  const [rowSelection, setRowSelection] = useState({})
-  const [expanded, setExpanded] = useState<ExpandedState>({})
 
   // URL state management
   const {
@@ -125,39 +116,28 @@ export function ChannelsTable({ myChannelsOnly, routeId }: { myChannelsOnly?: bo
   // Extract filters from column filters
   const statusFilter =
     (columnFilters.find((f) => f.id === 'status')?.value as string[]) || []
-  const typeFilter =
-    (columnFilters.find((f) => f.id === 'type')?.value as string[]) || []
+  const typeFilter = useMemo(
+    () => (columnFilters.find((f) => f.id === 'type')?.value as string[]) || [],
+    [columnFilters]
+  )
   const groupFilter =
     (columnFilters.find((f) => f.id === 'group')?.value as string[]) || []
-  const modelFilterFromUrl =
-    (columnFilters.find((f) => f.id === 'model')?.value as string) || ''
   const scopeFilter =
     (columnFilters.find((f) => f.id === 'scope')?.value as string[]) || []
   const ownerFilter =
     (columnFilters.find((f) => f.id === 'owner_username')?.value as string[]) || []
-
-  // Local state for immediate input feedback
-  const [modelFilterInput, setModelFilterInput] = useState(modelFilterFromUrl)
-  const debouncedModelFilter = useDebounce(modelFilterInput, 500)
-
-  // Sync local input with URL when URL changes (e.g., from back/forward navigation)
-  useEffect(() => {
-    setModelFilterInput(modelFilterFromUrl)
-  }, [modelFilterFromUrl])
-
-  // Update URL when debounced value changes
-  useEffect(() => {
-    if (debouncedModelFilter !== modelFilterFromUrl) {
-      onColumnFiltersChange((prev) => {
-        const filtered = prev.filter((f) => f.id !== 'model')
-        return debouncedModelFilter
-          ? [...filtered, { id: 'model', value: debouncedModelFilter }]
-          : filtered
-      })
-    }
-  }, [debouncedModelFilter, modelFilterFromUrl, onColumnFiltersChange])
-
-  const modelFilter = modelFilterFromUrl
+  const {
+    value: modelFilter,
+    inputValue: modelFilterInput,
+    onChange: onModelFilterInputChange,
+    onCompositionStart: onModelFilterCompositionStart,
+    onCompositionEnd: onModelFilterCompositionEnd,
+    resetInput: resetModelFilterInput,
+  } = useDebouncedColumnFilter({
+    columnFilters,
+    columnId: 'model',
+    onColumnFiltersChange,
+  })
 
   // Determine whether to use search or regular list API
   const shouldSearch = Boolean(globalFilter?.trim() || modelFilter.trim())
@@ -299,40 +279,30 @@ export function ChannelsTable({ myChannelsOnly, routeId }: { myChannelsOnly?: bo
   const columns = useChannelsColumns()
 
   // React Table instance
-  const table = useReactTable({
+  const { table } = useDataTable({
     data: channels,
     columns,
-    pageCount: Math.ceil(totalCount / pagination.pageSize),
-    state: {
-      sorting,
-      columnFilters,
-      columnVisibility,
-      rowSelection,
-      pagination,
-      expanded,
-      globalFilter,
+    totalCount,
+    sorting,
+    initialColumnVisibility: {
+      models: false,
+      tag: false,
     },
+    columnFilters,
+    pagination,
+    globalFilter,
     enableRowSelection: (row: Row<Channel>) => !isTagAggregateRow(row.original),
-    onRowSelectionChange: setRowSelection,
     onSortingChange: handleSortingChange,
     onColumnFiltersChange,
-    onColumnVisibilityChange: setColumnVisibility,
     onPaginationChange,
-    onExpandedChange: setExpanded,
     onGlobalFilterChange,
-    getCoreRowModel: getCoreRowModel(),
-    getExpandedRowModel: getExpandedRowModel(),
     getSubRows: (row: Channel & { children?: Channel[] }) => row.children,
     manualPagination: true,
     manualSorting: true,
     manualFiltering: true,
+    withExpandedRowModel: true,
+    ensurePageInRange,
   })
-
-  // Ensure page is in range when total count changes
-  const pageCount = table.getPageCount()
-  useEffect(() => {
-    ensurePageInRange(pageCount)
-  }, [pageCount, ensurePageInRange])
 
   // Prepare filter options from existing channel types only.
   const typeFilterOptions = useMemo(() => {
@@ -418,111 +388,114 @@ export function ChannelsTable({ myChannelsOnly, routeId }: { myChannelsOnly?: bo
     return options
   }, [ownersData, t])
 
-  // Build filters list based on myChannelsOnly mode
-  const filters = myChannelsOnly
-    ? [
-        {
-          columnId: 'status',
-          title: t('Status'),
-          options: [...CHANNEL_STATUS_OPTIONS],
-          singleSelect: true,
-        },
-        {
-          columnId: 'type',
-          title: t('Type'),
-          options: typeFilterOptions,
-          singleSelect: true,
-        },
-        {
-          columnId: 'group',
-          title: t('Group'),
-          options: groupFilterOptions,
-          singleSelect: true,
-        },
-        {
-          columnId: 'scope',
-          title: t('Channel Type'),
-          options: [
-            { label: t('All'), value: 'all' },
-            { label: t('Public'), value: 'public' },
-            { label: t('Private'), value: 'private' },
-          ],
-          singleSelect: true,
-        },
-      ]
-    : [
-        {
-          columnId: 'status',
-          title: t('Status'),
-          options: [...CHANNEL_STATUS_OPTIONS],
-          singleSelect: true,
-        },
-        {
-          columnId: 'type',
-          title: t('Type'),
-          options: typeFilterOptions,
-          singleSelect: true,
-        },
-        {
-          columnId: 'group',
-          title: t('Group'),
-          options: groupFilterOptions,
-          singleSelect: true,
-        },
-        {
-          columnId: 'scope',
-          title: t('Channel Type'),
-          options: scopeFilterOptions,
-          singleSelect: true,
-        },
-        {
-          columnId: 'owner_username',
-          title: t('Owner'),
-          options: ownerFilterOptions,
-          singleSelect: true,
-        },
-      ]
-
   return (
     <>
-      {myChannelsOnly && (
+    {myChannelsOnly && (
         <div className='flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm text-blue-700 dark:border-blue-800 dark:bg-blue-950/50 dark:text-blue-300'>
-          <Info className='h-4 w-4 shrink-0' />
-          <span>{t('This view shows public channels and your private channels.')}</span>
+            <Info className='h-4 w-4 shrink-0' />
+            <span>{t('This view shows public channels and your private channels.')}</span>
         </div>
+    )}
+    <DataTablePage
+      table={table}
+      columns={columns}
+      isLoading={isLoading}
+      isFetching={isFetching}
+      emptyTitle={t('No Channels Found')}
+      emptyDescription={t(
+        'No channels available. Create your first channel to get started.'
       )}
-      <DataTablePage
-        table={table}
-        columns={columns}
-        isLoading={isLoading}
-        isFetching={isFetching}
-        emptyTitle={t('No Channels Found')}
-        emptyDescription={t(
-          'No channels available. Create your first channel to get started.'
-        )}
-        skeletonKeyPrefix='channel-skeleton'
-        applyHeaderSize
-        toolbarProps={{
-          searchPlaceholder: t('Filter by name, ID, or key...'),
-          additionalSearch: (
-            <Input
-              placeholder={t('Filter by model...')}
-              value={modelFilterInput}
-              onChange={(e) => setModelFilterInput(e.target.value)}
-              className='w-full sm:w-[150px] lg:w-[180px]'
-            />
-          ),
-          filters,
-        }}
-        getRowClassName={(row, { isMobile }) =>
-          isDisabledChannelRow(row.original)
-            ? isMobile
-              ? DISABLED_ROW_MOBILE
-              : DISABLED_ROW_DESKTOP
-            : undefined
-        }
-        bulkActions={!myChannelsOnly && <DataTableBulkActions table={table} />}
-      />
+      skeletonKeyPrefix='channel-skeleton'
+      applyHeaderSize
+      toolbarProps={{
+        searchPlaceholder: t('Filter by name, ID, or key...'),
+        searchDebounceMs: 500,
+        onReset: () => {
+          resetModelFilterInput()
+        },
+        additionalSearch: (
+          <Input
+            placeholder={t('Filter by model...')}
+            value={modelFilterInput}
+            onChange={onModelFilterInputChange}
+            onCompositionStart={onModelFilterCompositionStart}
+            onCompositionEnd={onModelFilterCompositionEnd}
+            className='w-full sm:w-[150px] lg:w-[180px]'
+          />
+        ),
+        filters: myChannelsOnly
+            ? [
+                {
+                    columnId: 'status',
+                    title: t('Status'),
+                    options: [...CHANNEL_STATUS_OPTIONS],
+                    singleSelect: true,
+                },
+                {
+                    columnId: 'type',
+                    title: t('Type'),
+                    options: typeFilterOptions,
+                    singleSelect: true,
+                },
+                {
+                    columnId: 'group',
+                    title: t('Group'),
+                    options: groupFilterOptions,
+                    singleSelect: true,
+                },
+                {
+                    columnId: 'scope',
+                    title: t('Channel Type'),
+                    options: [
+                        { label: t('All'), value: 'all' },
+                        { label: t('Public'), value: 'public' },
+                        { label: t('Private'), value: 'private' },
+                    ],
+                    singleSelect: true,
+                },
+            ]
+            : [
+                {
+                    columnId: 'status',
+                    title: t('Status'),
+                    options: [...CHANNEL_STATUS_OPTIONS],
+                    singleSelect: true,
+                },
+                {
+                    columnId: 'type',
+                    title: t('Type'),
+                    options: typeFilterOptions,
+                    singleSelect: true,
+                },
+                {
+                    columnId: 'group',
+                    title: t('Group'),
+                    options: groupFilterOptions,
+                    singleSelect: true,
+                },
+                {
+                    columnId: 'scope',
+                    title: t('Channel Type'),
+                    options: scopeFilterOptions,
+                    singleSelect: true,
+                },
+                {
+                    columnId: 'owner_username',
+                    title: t('Owner'),
+                    options: ownerFilterOptions,
+                    singleSelect: true,
+                },
+            ],
+      }}
+      getRowClassName={(row, { isMobile }) =>
+        isDisabledChannelRow(row.original)
+          ? isMobile
+            ? DISABLED_ROW_MOBILE
+            : DISABLED_ROW_DESKTOP
+          : undefined
+      }
+      bulkActions={!myChannelsOnly && <DataTableBulkActions table={table} />}
+    />
     </>
   )
 }
