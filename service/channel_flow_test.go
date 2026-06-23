@@ -11,6 +11,7 @@ import (
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/types"
 	"github.com/go-redis/redis/v8"
 	"github.com/stretchr/testify/require"
 )
@@ -242,6 +243,127 @@ func TestMemoryFlowBackendRejectsWhenPerUserQueueFull(t *testing.T) {
 	if decision == nil || decision.RejectCode != FlowDecisionRejectPerUserQueueFull {
 		t.Fatalf("unexpected decision: %+v", decision)
 	}
+}
+
+func TestMemoryFlowBackendUsesTokenIDFallbackForInflightLimit(t *testing.T) {
+	backend := NewMemoryFlowBackend()
+	pool := testFlowPool()
+	pool.MaxInflight = 3
+	pool.MaxInflightPerUser = 1
+	pool.MaxQueueSize = 0
+	pool.OnLimit = model.ChannelFlowOnLimitReject
+
+	guard1, _, err := backend.Acquire(context.Background(), AcquireRequest{
+		RequestID:      "token-fallback-inflight-1",
+		Pool:           pool,
+		UserID:         0,
+		TokenID:        42,
+		QueueTimeoutMs: pool.QueueTimeoutMs,
+	})
+	require.NoError(t, err)
+	defer guard1.Release(context.Background())
+
+	_, decision, err := backend.Acquire(context.Background(), AcquireRequest{
+		RequestID:      "token-fallback-inflight-2",
+		Pool:           pool,
+		UserID:         0,
+		TokenID:        42,
+		QueueTimeoutMs: pool.QueueTimeoutMs,
+	})
+	require.Error(t, err)
+	require.NotNil(t, decision)
+	require.Equal(t, FlowDecisionRejectPerUserInflightFull, decision.RejectCode)
+
+	guard2, decision2, err := backend.Acquire(context.Background(), AcquireRequest{
+		RequestID:      "token-fallback-inflight-other-token",
+		Pool:           pool,
+		UserID:         0,
+		TokenID:        43,
+		QueueTimeoutMs: pool.QueueTimeoutMs,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, guard2)
+	require.True(t, decision2.Admitted)
+	require.NoError(t, guard2.Release(context.Background()))
+}
+
+func TestMemoryFlowBackendUsesTokenIDFallbackForQueueLimit(t *testing.T) {
+	backend := NewMemoryFlowBackend()
+	pool := testFlowPool()
+	pool.MaxInflight = 1
+	pool.MaxQueueSize = 3
+	pool.MaxQueuePerUser = 1
+	pool.QueueTimeoutMs = 80
+
+	guard1, _, err := backend.Acquire(context.Background(), AcquireRequest{
+		RequestID:      "token-fallback-queue-running",
+		Pool:           pool,
+		UserID:         7,
+		QueueTimeoutMs: pool.QueueTimeoutMs,
+	})
+	require.NoError(t, err)
+	defer guard1.Release(context.Background())
+
+	waitCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	waitingResult := make(chan error, 1)
+	go func() {
+		_, _, err := backend.Acquire(waitCtx, AcquireRequest{
+			RequestID:      "token-fallback-queue-waiting",
+			Pool:           pool,
+			UserID:         0,
+			TokenID:        42,
+			QueueTimeoutMs: 1000,
+		})
+		waitingResult <- err
+	}()
+
+	eventuallyFlowStatus(t, backend, pool, func(status PoolStatus) bool {
+		return status.Running == 1 && status.Queued == 1
+	})
+
+	_, decision, err := backend.Acquire(context.Background(), AcquireRequest{
+		RequestID:      "token-fallback-queue-rejected",
+		Pool:           pool,
+		UserID:         0,
+		TokenID:        42,
+		QueueTimeoutMs: pool.QueueTimeoutMs,
+	})
+	require.Error(t, err)
+	require.NotNil(t, decision)
+	require.Equal(t, FlowDecisionRejectPerUserQueueFull, decision.RejectCode)
+
+	cancel()
+	select {
+	case <-waitingResult:
+	case <-time.After(time.Second):
+		t.Fatal("waiting token fallback request did not exit")
+	}
+}
+
+func TestFlowDecisionMetadataIncludesPerUserCounters(t *testing.T) {
+	decision := &AcquireDecision{
+		RejectCode:  FlowDecisionRejectPerUserInflightFull,
+		RunningNow:  3,
+		QueuedNow:   2,
+		UserRunning: 1,
+		UserQueued:  0,
+		UserLimit:   1,
+		SubjectType: "token_id",
+		SubjectID:   42,
+	}
+
+	apiErr := flowDecisionToAPIError(decision, fmt.Errorf("channel flow per-user inflight is full"))
+	require.NotNil(t, apiErr)
+	require.Equal(t, types.ErrorCodeChannelFlowPerUserInflightFull, apiErr.GetErrorCode())
+
+	var metadata map[string]any
+	require.NoError(t, common.Unmarshal(apiErr.Metadata, &metadata))
+	require.Equal(t, float64(1), metadata["user_running"])
+	require.Equal(t, float64(0), metadata["user_queued"])
+	require.Equal(t, float64(1), metadata["user_limit"])
+	require.Equal(t, "token_id", metadata["subject_type"])
+	require.Equal(t, float64(42), metadata["subject_id"])
 }
 
 func TestRedisLocalMemoryFallbackStatusUsesMemoryBackend(t *testing.T) {
@@ -933,6 +1055,101 @@ func TestRedisFlowBackendMaxInflightPerUser(t *testing.T) {
 	select {
 	case <-queuedCh:
 	case <-time.After(2 * time.Second):
+	}
+}
+
+func TestRedisFlowBackendUsesTokenIDFallbackForInflightLimit(t *testing.T) {
+	backend, pool, cleanup := newRedisFlowBackendForTest(t)
+	defer cleanup()
+	pool.MaxInflight = 3
+	pool.MaxInflightPerUser = 1
+	pool.MaxQueueSize = 0
+	pool.OnLimit = model.ChannelFlowOnLimitReject
+
+	guard1, _, err := backend.Acquire(context.Background(), AcquireRequest{
+		RequestID:      "redis-token-fallback-inflight-1",
+		Pool:           pool,
+		UserID:         0,
+		TokenID:        42,
+		QueueTimeoutMs: pool.QueueTimeoutMs,
+	})
+	require.NoError(t, err)
+	defer guard1.Release(context.Background())
+
+	_, decision, err := backend.Acquire(context.Background(), AcquireRequest{
+		RequestID:      "redis-token-fallback-inflight-2",
+		Pool:           pool,
+		UserID:         0,
+		TokenID:        42,
+		QueueTimeoutMs: pool.QueueTimeoutMs,
+	})
+	require.Error(t, err)
+	require.NotNil(t, decision)
+	require.Equal(t, FlowDecisionRejectPerUserInflightFull, decision.RejectCode)
+
+	guard2, decision2, err := backend.Acquire(context.Background(), AcquireRequest{
+		RequestID:      "redis-token-fallback-inflight-other-token",
+		Pool:           pool,
+		UserID:         0,
+		TokenID:        43,
+		QueueTimeoutMs: pool.QueueTimeoutMs,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, guard2)
+	require.True(t, decision2.Admitted)
+	require.NoError(t, guard2.Release(context.Background()))
+}
+
+func TestRedisFlowBackendUsesTokenIDFallbackForQueueLimit(t *testing.T) {
+	backend, pool, cleanup := newRedisFlowBackendForTest(t)
+	defer cleanup()
+	pool.MaxInflight = 1
+	pool.MaxQueueSize = 3
+	pool.MaxQueuePerUser = 1
+
+	guard1, _, err := backend.Acquire(context.Background(), AcquireRequest{
+		RequestID:      "redis-token-fallback-queue-running",
+		Pool:           pool,
+		UserID:         7,
+		QueueTimeoutMs: pool.QueueTimeoutMs,
+	})
+	require.NoError(t, err)
+	defer guard1.Release(context.Background())
+
+	waitCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	waitingResult := make(chan error, 1)
+	go func() {
+		_, _, err := backend.Acquire(waitCtx, AcquireRequest{
+			RequestID:      "redis-token-fallback-queue-waiting",
+			Pool:           pool,
+			UserID:         0,
+			TokenID:        42,
+			QueueTimeoutMs: 10000,
+		})
+		waitingResult <- err
+	}()
+
+	eventuallyFlowStatus(t, backend, pool, func(status PoolStatus) bool {
+		return status.Running == 1 && status.Queued == 1
+	})
+
+	_, decision, err := backend.Acquire(context.Background(), AcquireRequest{
+		RequestID:      "redis-token-fallback-queue-rejected",
+		Pool:           pool,
+		UserID:         0,
+		TokenID:        42,
+		QueueTimeoutMs: pool.QueueTimeoutMs,
+	})
+	require.Error(t, err)
+	require.NotNil(t, decision)
+	require.Equal(t, FlowDecisionRejectPerUserQueueFull, decision.RejectCode)
+
+	cancel()
+	select {
+	case <-waitingResult:
+	case <-time.After(2 * time.Second):
+		t.Fatal("waiting redis token fallback request did not exit")
 	}
 }
 
