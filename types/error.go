@@ -89,12 +89,14 @@ const (
 	// channel flow control errors
 	ErrorCodeChannelFlowQueueFull              ErrorCode = "channel_flow_queue_full"
 	ErrorCodeChannelFlowQueueTimeout           ErrorCode = "channel_flow_queue_timeout"
+	ErrorCodeChannelFlowClientCancelled        ErrorCode = "channel_flow_client_cancelled"
 	ErrorCodeChannelFlowContextExceeded        ErrorCode = "channel_flow_context_exceeded"
 	ErrorCodeChannelFlowDraining               ErrorCode = "channel_flow_draining"
 	ErrorCodeChannelFlowBackendUnavailable     ErrorCode = "channel_flow_backend_unavailable"
 	ErrorCodeChannelFlowConfigInvalid          ErrorCode = "channel_flow_config_invalid"
 	ErrorCodeChannelFlowBillingFailedAfterWait ErrorCode = "channel_flow_billing_failed_after_wait"
 	ErrorCodeChannelFlowPerUserQueueFull       ErrorCode = "channel_flow_per_user_queue_full"
+	ErrorCodeChannelFlowPerUserInflightFull    ErrorCode = "channel_flow_per_user_inflight_full"
 )
 
 type NewAPIError struct {

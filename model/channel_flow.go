@@ -50,9 +50,10 @@ type ChannelFlowPool struct {
 	PoolKey            string `json:"pool_key" gorm:"type:varchar(64);uniqueIndex"`
 	Name               string `json:"name" gorm:"type:varchar(128);index"`
 	Description        string `json:"description" gorm:"type:text"`
-	Enabled            bool   `json:"enabled" gorm:"default:true"`
+	Enabled            bool   `json:"enabled"`
 	Backend            string `json:"backend" gorm:"type:varchar(32);default:'memory'"`
 	MaxInflight        int    `json:"max_inflight" gorm:"default:0"`
+	MaxInflightPerUser int    `json:"max_inflight_per_user" gorm:"default:0"`
 	MaxQueueSize       int    `json:"max_queue_size" gorm:"default:0"`
 	MaxQueuePerUser    int    `json:"max_queue_per_user" gorm:"default:0"`
 	QueueTimeoutMs     int64  `json:"queue_timeout_ms" gorm:"bigint;default:120000"`
@@ -86,7 +87,7 @@ type ChannelFlowPoolBinding struct {
 	ChannelId     int    `json:"channel_id" gorm:"index"`
 	UpstreamModel string `json:"upstream_model" gorm:"type:varchar(191);default:''"`
 	MatchMode     string `json:"match_mode" gorm:"type:varchar(32);default:'channel'"`
-	Enabled       bool   `json:"enabled" gorm:"default:true"`
+	Enabled       bool   `json:"enabled"`
 	CreatedTime   int64  `json:"created_time" gorm:"bigint"`
 	UpdatedTime   int64  `json:"updated_time" gorm:"bigint"`
 }
@@ -189,8 +190,11 @@ func (p *ChannelFlowPool) Validate() error {
 	if p.Name == "" {
 		return fmt.Errorf("flow pool name cannot be empty")
 	}
-	if p.MaxInflight < 0 || p.MaxQueueSize < 0 || p.MaxQueuePerUser < 0 {
+	if p.MaxInflight < 0 || p.MaxInflightPerUser < 0 || p.MaxQueueSize < 0 || p.MaxQueuePerUser < 0 {
 		return fmt.Errorf("flow pool limits cannot be negative")
+	}
+	if p.MaxInflightPerUser > 0 && p.MaxInflight > 0 && p.MaxInflightPerUser > p.MaxInflight {
+		return fmt.Errorf("max_inflight_per_user cannot exceed max_inflight")
 	}
 	if p.MaxInflight == 0 && p.MaxContextTokens == 0 && p.MaxContextChars == 0 {
 		return fmt.Errorf("max_inflight or context limit must be configured")

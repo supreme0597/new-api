@@ -9,6 +9,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
@@ -21,11 +22,13 @@ import (
 )
 
 const (
-	FlowDecisionRejectQueueFull        = "queue_full"
-	FlowDecisionRejectQueueTimeout     = "queue_timeout"
-	FlowDecisionRejectContextExceeded  = "context_exceeded"
-	FlowDecisionRejectPerUserQueueFull = "per_user_queue_full"
-	FlowDecisionRejectBackendDisabled  = "backend_disabled"
+	FlowDecisionRejectQueueFull           = "queue_full"
+	FlowDecisionRejectQueueTimeout        = "queue_timeout"
+	FlowDecisionRejectClientCancelled     = "client_cancelled"
+	FlowDecisionRejectContextExceeded     = "context_exceeded"
+	FlowDecisionRejectPerUserQueueFull    = "per_user_queue_full"
+	FlowDecisionRejectPerUserInflightFull = "per_user_inflight_full"
+	FlowDecisionRejectBackendDisabled     = "backend_disabled"
 )
 
 type AcquireRequest struct {
@@ -69,6 +72,10 @@ type PoolStatus struct {
 	OldestWaitMs       int64  `json:"oldest_wait_ms"`
 	ConfigVersion      int64  `json:"config_version"`
 	LeaseRenewFailures int    `json:"lease_renew_failures"`
+	// WatchAttempts and TxConflicts are backend-global counters on the shared
+	// redisFlowBackend instance, not per-pool counters.
+	WatchAttempts int64 `json:"watch_attempts"`
+	TxConflicts   int64 `json:"tx_conflicts"`
 }
 
 type FlowBackend interface {
@@ -170,6 +177,51 @@ func ResolveChannelFlowPool(channelID int) (*model.ChannelFlowPoolBinding, *mode
 	return binding, pool, true, nil
 }
 
+func buildChannelFlowAcquireRequest(requestID string, pool model.ChannelFlowPool, channelID int, info *relaycommon.RelayInfo, now time.Time) AcquireRequest {
+	if now.IsZero() {
+		now = time.Now()
+	}
+	if requestID == "" {
+		requestID = common.GetUUID()
+	}
+	upstreamModel := ""
+	userID := 0
+	tokenID := 0
+	contextTokens := 0
+	if info != nil {
+		upstreamModel = info.OriginModelName
+		if info.ChannelMeta != nil && info.UpstreamModelName != "" {
+			upstreamModel = info.UpstreamModelName
+		}
+		userID = info.UserId
+		tokenID = info.TokenId
+		contextTokens = info.GetEstimatePromptTokens()
+	}
+	return AcquireRequest{
+		RequestID:      requestID,
+		Pool:           pool,
+		ChannelID:      channelID,
+		UpstreamModel:  upstreamModel,
+		UserID:         userID,
+		TokenID:        tokenID,
+		ContextTokens:  contextTokens,
+		ContextChars:   estimateChannelFlowContextChars(pool, info),
+		CreatedAtMs:    now.UnixMilli(),
+		QueueTimeoutMs: pool.QueueTimeoutMs,
+	}
+}
+
+func estimateChannelFlowContextChars(pool model.ChannelFlowPool, info *relaycommon.RelayInfo) int {
+	if pool.MaxContextChars <= 0 || info == nil || info.Request == nil {
+		return 0
+	}
+	meta := info.Request.GetTokenCountMeta()
+	if meta == nil || meta.CombineText == "" {
+		return 0
+	}
+	return utf8.RuneCountInString(meta.CombineText)
+}
+
 func AcquireChannelFlowGuard(c *gin.Context, channelID int, info *relaycommon.RelayInfo) (FlowGuard, *AcquireDecision, *types.NewAPIError) {
 	if c == nil || info == nil {
 		return nil, nil, nil
@@ -186,26 +238,12 @@ func AcquireChannelFlowGuard(c *gin.Context, channelID int, info *relaycommon.Re
 	} else if fallbackPool != nil {
 		pool = fallbackPool
 	}
-	upstreamModel := info.OriginModelName
-	if info.ChannelMeta != nil && info.UpstreamModelName != "" {
-		upstreamModel = info.UpstreamModelName
-	}
-	req := AcquireRequest{
-		RequestID:      c.GetString(common.RequestIdKey),
-		Pool:           *pool,
-		ChannelID:      channelID,
-		UpstreamModel:  upstreamModel,
-		UserID:         info.UserId,
-		TokenID:        info.TokenId,
-		ContextTokens:  info.GetEstimatePromptTokens(),
-		CreatedAtMs:    time.Now().UnixMilli(),
-		QueueTimeoutMs: pool.QueueTimeoutMs,
-	}
-	if req.RequestID == "" {
-		req.RequestID = common.GetUUID()
-	}
+	req := buildChannelFlowAcquireRequest(c.GetString(common.RequestIdKey), *pool, channelID, info, time.Now())
 	guard, decision, acquireErr := GetChannelFlowController().Acquire(c.Request.Context(), req)
 	if acquireErr != nil {
+		if shouldPassThroughChannelFlowFallback(req.Pool, decision, acquireErr) {
+			return nil, nil, nil
+		}
 		if passThrough, fallbackPool, apiErr := handleRedisFlowAcquireError(c.Request.Context(), *pool, decision, acquireErr); apiErr != nil || passThrough {
 			if apiErr != nil {
 				recordChannelFlowMetric(req, channelFlowEventTypeFromDecision(decision), decision, true, decisionWaitMs(decision), 0)
@@ -307,6 +345,9 @@ func channelFlowRenewInterval(pool model.ChannelFlowPool) time.Duration {
 func channelFlowEventTypeFromDecision(decision *AcquireDecision) string {
 	if decision == nil {
 		return model.ChannelFlowEventRejected
+	}
+	if decision.RejectCode == FlowDecisionRejectClientCancelled {
+		return model.ChannelFlowEventCancelled
 	}
 	if decision.RejectCode == FlowDecisionRejectQueueTimeout {
 		return model.ChannelFlowEventTimeout
@@ -456,6 +497,20 @@ func retryAfterSeconds(timeoutMs int64) int {
 	return seconds
 }
 
+func shouldPassThroughChannelFlowFallback(pool model.ChannelFlowPool, decision *AcquireDecision, err error) bool {
+	if err == nil || decision == nil || pool.OnLimit != model.ChannelFlowOnLimitFallback {
+		return false
+	}
+	switch decision.RejectCode {
+	case FlowDecisionRejectQueueFull,
+		FlowDecisionRejectPerUserQueueFull,
+		FlowDecisionRejectPerUserInflightFull:
+		return true
+	default:
+		return false
+	}
+}
+
 func flowDecisionToAPIError(decision *AcquireDecision, err error) *types.NewAPIError {
 	if err == nil {
 		err = fmt.Errorf("channel flow control rejected request")
@@ -466,11 +521,16 @@ func flowDecisionToAPIError(decision *AcquireDecision, err error) *types.NewAPIE
 		switch decision.RejectCode {
 		case FlowDecisionRejectQueueTimeout:
 			errorCode = types.ErrorCodeChannelFlowQueueTimeout
+		case FlowDecisionRejectClientCancelled:
+			errorCode = types.ErrorCodeChannelFlowClientCancelled
+			statusCode = http.StatusRequestTimeout
 		case FlowDecisionRejectContextExceeded:
 			errorCode = types.ErrorCodeChannelFlowContextExceeded
 			statusCode = http.StatusBadRequest
 		case FlowDecisionRejectPerUserQueueFull:
 			errorCode = types.ErrorCodeChannelFlowPerUserQueueFull
+		case FlowDecisionRejectPerUserInflightFull:
+			errorCode = types.ErrorCodeChannelFlowPerUserInflightFull
 		case FlowDecisionRejectBackendDisabled:
 			errorCode = types.ErrorCodeChannelFlowBackendUnavailable
 			statusCode = http.StatusServiceUnavailable
@@ -576,7 +636,14 @@ func (b *memoryFlowBackend) Acquire(ctx context.Context, req AcquireRequest) (Fl
 		slot.mu.Unlock()
 		return nil, decision, fmt.Errorf("request context tokens %d exceeds flow pool max_context_tokens %d", req.ContextTokens, req.Pool.MaxContextTokens)
 	}
-	if slot.hasCapacityLocked() && queued == 0 {
+	if req.Pool.MaxContextChars > 0 && req.ContextChars > req.Pool.MaxContextChars {
+		decision.RejectCode = FlowDecisionRejectContextExceeded
+		slot.mu.Unlock()
+		return nil, decision, fmt.Errorf("request context chars %d exceeds flow pool max_context_chars %d", req.ContextChars, req.Pool.MaxContextChars)
+	}
+	userInflightFull := req.Pool.MaxInflightPerUser > 0 && req.UserID > 0 &&
+		slot.userRunningLocked(req.UserID) >= req.Pool.MaxInflightPerUser
+	if slot.hasCapacityLocked() && queued == 0 && !userInflightFull {
 		request := slot.newRequestLocked(req, memoryFlowStateRunning, now)
 		request.dispatchedAt = now
 		slot.queue = append(slot.queue, request)
@@ -590,7 +657,11 @@ func (b *memoryFlowBackend) Acquire(ctx context.Context, req AcquireRequest) (Fl
 		return guard, decision, nil
 	}
 	if req.Pool.OnLimit != model.ChannelFlowOnLimitQueue {
-		decision.RejectCode = FlowDecisionRejectQueueFull
+		if userInflightFull {
+			decision.RejectCode = FlowDecisionRejectPerUserInflightFull
+		} else {
+			decision.RejectCode = FlowDecisionRejectQueueFull
+		}
 		slot.mu.Unlock()
 		return nil, decision, fmt.Errorf("channel flow pool is busy")
 	}
@@ -626,14 +697,14 @@ func (b *memoryFlowBackend) Acquire(ctx context.Context, req AcquireRequest) (Fl
 	defer timer.Stop()
 	select {
 	case <-ctx.Done():
-		waitedMs, runningNow, queuedNow := slot.cancelWaiting(request.id)
+		waitedMs, runningNow, queuedNow, _ := slot.cancelWaiting(request.id)
 		decision.WaitedMs = waitedMs
 		decision.RunningNow = runningNow
 		decision.QueuedNow = queuedNow
-		decision.RejectCode = FlowDecisionRejectQueueTimeout
+		decision.RejectCode = FlowDecisionRejectClientCancelled
 		return nil, decision, ctx.Err()
 	case <-timer.C:
-		waitedMs, runningNow, queuedNow := slot.cancelWaiting(request.id)
+		waitedMs, runningNow, queuedNow, _ := slot.cancelWaiting(request.id)
 		decision.WaitedMs = waitedMs
 		decision.RunningNow = runningNow
 		decision.QueuedNow = queuedNow
@@ -732,11 +803,28 @@ func (s *memoryFlowSlot) hasCapacityLocked() bool {
 	return running < s.config.MaxInflight
 }
 
+func (s *memoryFlowSlot) userRunningLocked(userID int) int {
+	if userID <= 0 || s.config.MaxInflightPerUser <= 0 {
+		return 0
+	}
+	count := 0
+	for _, req := range s.queue {
+		if req.userID == userID && req.state == memoryFlowStateRunning && !req.cancelled {
+			count++
+		}
+	}
+	return count
+}
+
 func (s *memoryFlowSlot) dispatchLocked(now time.Time) {
 	for s.hasCapacityLocked() {
 		dispatched := false
 		for _, req := range s.queue {
 			if req.state != memoryFlowStateWaiting || req.cancelled {
+				continue
+			}
+			if s.config.MaxInflightPerUser > 0 && req.userID > 0 &&
+				s.userRunningLocked(req.userID) >= s.config.MaxInflightPerUser {
 				continue
 			}
 			req.state = memoryFlowStateRunning
@@ -800,22 +888,29 @@ func (s *memoryFlowSlot) userWaitingLocked(userID int) int {
 	return count
 }
 
-func (s *memoryFlowSlot) cancelWaiting(requestID string) (waitedMs int64, runningNow int, queuedNow int) {
+func (s *memoryFlowSlot) cancelWaiting(requestID string) (waitedMs int64, runningNow int, queuedNow int, wasRunning bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	now := time.Now()
 	for _, req := range s.queue {
-		if req.id == requestID && req.state == memoryFlowStateWaiting && !req.cancelled {
-			req.cancelled = true
-			req.state = memoryFlowStateReleased
-			waitedMs = now.Sub(req.enqueuedAt).Milliseconds()
+		if req.id == requestID && !req.cancelled {
+			switch req.state {
+			case memoryFlowStateWaiting:
+				req.cancelled = true
+				req.state = memoryFlowStateReleased
+				waitedMs = now.Sub(req.enqueuedAt).Milliseconds()
+			case memoryFlowStateRunning:
+				req.state = memoryFlowStateReleased
+				req.cancelled = true
+				wasRunning = true
+			}
 			break
 		}
 	}
 	s.compactIfNeededLocked()
 	s.dispatchLocked(now)
 	runningNow, queuedNow, _ = s.statsLocked(now)
-	return waitedMs, runningNow, queuedNow
+	return waitedMs, runningNow, queuedNow, wasRunning
 }
 
 func (s *memoryFlowSlot) release(requestID string) error {
