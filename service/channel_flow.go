@@ -44,6 +44,16 @@ type AcquireRequest struct {
 	QueueTimeoutMs int64
 }
 
+func (req AcquireRequest) flowSubject() (string, int) {
+	if req.UserID > 0 {
+		return "user_id", req.UserID
+	}
+	if req.TokenID > 0 {
+		return "token_id", req.TokenID
+	}
+	return "", 0
+}
+
 type AcquireDecision struct {
 	Admitted      bool   `json:"admitted"`
 	Queued        bool   `json:"queued"`
@@ -53,6 +63,11 @@ type AcquireDecision struct {
 	RejectCode    string `json:"reject_code"`
 	RunningNow    int    `json:"running_now"`
 	QueuedNow     int    `json:"queued_now"`
+	UserRunning   int    `json:"user_running,omitempty"`
+	UserQueued    int    `json:"user_queued,omitempty"`
+	UserLimit     int    `json:"user_limit,omitempty"`
+	SubjectType   string `json:"subject_type,omitempty"`
+	SubjectID     int    `json:"subject_id,omitempty"`
 	RetryAfterS   int    `json:"retry_after_seconds"`
 	Backend       string `json:"backend"`
 	PoolKey       string `json:"pool_key"`
@@ -542,7 +557,7 @@ func flowDecisionToAPIError(decision *AcquireDecision, err error) *types.NewAPIE
 		Code:    errorCode,
 	}
 	if decision != nil {
-		metadata, marshalErr := common.Marshal(map[string]any{
+		metadata := map[string]any{
 			"pool_running":          decision.RunningNow,
 			"pool_queued":           decision.QueuedNow,
 			"queue_pos":             decision.QueuePos,
@@ -551,9 +566,17 @@ func flowDecisionToAPIError(decision *AcquireDecision, err error) *types.NewAPIE
 			"retry_after_seconds":   decision.RetryAfterS,
 			"channel_flow_backend":  decision.Backend,
 			"channel_flow_pool_key": decision.PoolKey,
-		})
+		}
+		if decision.SubjectType != "" && decision.SubjectID > 0 {
+			metadata["subject_type"] = decision.SubjectType
+			metadata["subject_id"] = decision.SubjectID
+			metadata["user_running"] = decision.UserRunning
+			metadata["user_queued"] = decision.UserQueued
+			metadata["user_limit"] = decision.UserLimit
+		}
+		metadataBytes, marshalErr := common.Marshal(metadata)
 		if marshalErr == nil {
-			openAIError.Metadata = metadata
+			openAIError.Metadata = metadataBytes
 		}
 	}
 	return types.WithOpenAIError(openAIError, statusCode, types.ErrOptionWithSkipRetry(), types.ErrOptionWithNoRecordErrorLog())
@@ -584,6 +607,8 @@ type memoryFlowRequest struct {
 	id            string
 	seq           int64
 	userID        int
+	subjectType   string
+	subjectID     int
 	channelID     int
 	upstreamModel string
 	state         memoryFlowRequestState
@@ -631,6 +656,8 @@ func (b *memoryFlowBackend) Acquire(ctx context.Context, req AcquireRequest) (Fl
 	running, queued, _ := slot.statsLocked(now)
 	decision.RunningNow = running
 	decision.QueuedNow = queued
+	subjectType, subjectID := req.flowSubject()
+	slot.applySubjectStatsLocked(decision, subjectType, subjectID, 0)
 	if req.Pool.MaxContextTokens > 0 && req.ContextTokens > req.Pool.MaxContextTokens {
 		decision.RejectCode = FlowDecisionRejectContextExceeded
 		slot.mu.Unlock()
@@ -641,8 +668,8 @@ func (b *memoryFlowBackend) Acquire(ctx context.Context, req AcquireRequest) (Fl
 		slot.mu.Unlock()
 		return nil, decision, fmt.Errorf("request context chars %d exceeds flow pool max_context_chars %d", req.ContextChars, req.Pool.MaxContextChars)
 	}
-	userInflightFull := req.Pool.MaxInflightPerUser > 0 && req.UserID > 0 &&
-		slot.userRunningLocked(req.UserID) >= req.Pool.MaxInflightPerUser
+	userInflightFull := req.Pool.MaxInflightPerUser > 0 && subjectID > 0 &&
+		slot.subjectRunningLocked(subjectType, subjectID) >= req.Pool.MaxInflightPerUser
 	if slot.hasCapacityLocked() && queued == 0 && !userInflightFull {
 		request := slot.newRequestLocked(req, memoryFlowStateRunning, now)
 		request.dispatchedAt = now
@@ -651,6 +678,7 @@ func (b *memoryFlowBackend) Acquire(ctx context.Context, req AcquireRequest) (Fl
 		decision.Admitted = true
 		decision.RunningNow = running
 		decision.QueuedNow = queued
+		slot.applySubjectStatsLocked(decision, subjectType, subjectID, 0)
 		decision.WaitedMs = 0
 		guard := &memoryFlowGuard{backend: b, slot: slot, poolKey: req.Pool.PoolKey, requestID: request.id}
 		slot.mu.Unlock()
@@ -659,6 +687,7 @@ func (b *memoryFlowBackend) Acquire(ctx context.Context, req AcquireRequest) (Fl
 	if req.Pool.OnLimit != model.ChannelFlowOnLimitQueue {
 		if userInflightFull {
 			decision.RejectCode = FlowDecisionRejectPerUserInflightFull
+			slot.applySubjectStatsLocked(decision, subjectType, subjectID, req.Pool.MaxInflightPerUser)
 		} else {
 			decision.RejectCode = FlowDecisionRejectQueueFull
 		}
@@ -670,8 +699,9 @@ func (b *memoryFlowBackend) Acquire(ctx context.Context, req AcquireRequest) (Fl
 		slot.mu.Unlock()
 		return nil, decision, fmt.Errorf("channel flow queue is full")
 	}
-	if req.Pool.MaxQueuePerUser > 0 && slot.userWaitingLocked(req.UserID) >= req.Pool.MaxQueuePerUser {
+	if req.Pool.MaxQueuePerUser > 0 && subjectID > 0 && slot.subjectWaitingLocked(subjectType, subjectID) >= req.Pool.MaxQueuePerUser {
 		decision.RejectCode = FlowDecisionRejectPerUserQueueFull
+		slot.applySubjectStatsLocked(decision, subjectType, subjectID, req.Pool.MaxQueuePerUser)
 		slot.mu.Unlock()
 		return nil, decision, fmt.Errorf("channel flow per-user queue is full")
 	}
@@ -686,6 +716,7 @@ func (b *memoryFlowBackend) Acquire(ctx context.Context, req AcquireRequest) (Fl
 	decision.QueuePos = slot.positionLocked(request.id)
 	decision.RunningNow = running
 	decision.QueuedNow = queued
+	slot.applySubjectStatsLocked(decision, subjectType, subjectID, 0)
 	slot.mu.Unlock()
 
 	if admittedAfterDispatch {
@@ -701,6 +732,8 @@ func (b *memoryFlowBackend) Acquire(ctx context.Context, req AcquireRequest) (Fl
 		decision.WaitedMs = waitedMs
 		decision.RunningNow = runningNow
 		decision.QueuedNow = queuedNow
+		decision.SubjectType = subjectType
+		decision.SubjectID = subjectID
 		decision.RejectCode = FlowDecisionRejectClientCancelled
 		return nil, decision, ctx.Err()
 	case <-timer.C:
@@ -708,6 +741,8 @@ func (b *memoryFlowBackend) Acquire(ctx context.Context, req AcquireRequest) (Fl
 		decision.WaitedMs = waitedMs
 		decision.RunningNow = runningNow
 		decision.QueuedNow = queuedNow
+		decision.SubjectType = subjectType
+		decision.SubjectID = subjectID
 		decision.RejectCode = FlowDecisionRejectQueueTimeout
 		return nil, decision, fmt.Errorf("channel flow queue timeout")
 	case <-request.notify:
@@ -723,6 +758,7 @@ func (b *memoryFlowBackend) Acquire(ctx context.Context, req AcquireRequest) (Fl
 		decision.RunningNow = running
 		decision.QueuedNow = queued
 		decision.QueuePos = 0
+		slot.applySubjectStatsLocked(decision, subjectType, subjectID, 0)
 		slot.mu.Unlock()
 		return &memoryFlowGuard{backend: b, slot: slot, poolKey: req.Pool.PoolKey, requestID: request.id}, decision, nil
 	}
@@ -778,10 +814,13 @@ func (b *memoryFlowBackend) getSlot(pool model.ChannelFlowPool) *memoryFlowSlot 
 
 func (s *memoryFlowSlot) newRequestLocked(req AcquireRequest, state memoryFlowRequestState, now time.Time) *memoryFlowRequest {
 	s.nextSeq++
+	subjectType, subjectID := req.flowSubject()
 	return &memoryFlowRequest{
 		id:            req.RequestID,
 		seq:           s.nextSeq,
 		userID:        req.UserID,
+		subjectType:   subjectType,
+		subjectID:     subjectID,
 		channelID:     req.ChannelID,
 		upstreamModel: req.UpstreamModel,
 		state:         state,
@@ -803,13 +842,13 @@ func (s *memoryFlowSlot) hasCapacityLocked() bool {
 	return running < s.config.MaxInflight
 }
 
-func (s *memoryFlowSlot) userRunningLocked(userID int) int {
-	if userID <= 0 || s.config.MaxInflightPerUser <= 0 {
+func (s *memoryFlowSlot) subjectRunningLocked(subjectType string, subjectID int) int {
+	if subjectType == "" || subjectID <= 0 {
 		return 0
 	}
 	count := 0
 	for _, req := range s.queue {
-		if req.userID == userID && req.state == memoryFlowStateRunning && !req.cancelled {
+		if req.subjectType == subjectType && req.subjectID == subjectID && req.state == memoryFlowStateRunning && !req.cancelled {
 			count++
 		}
 	}
@@ -823,8 +862,8 @@ func (s *memoryFlowSlot) dispatchLocked(now time.Time) {
 			if req.state != memoryFlowStateWaiting || req.cancelled {
 				continue
 			}
-			if s.config.MaxInflightPerUser > 0 && req.userID > 0 &&
-				s.userRunningLocked(req.userID) >= s.config.MaxInflightPerUser {
+			if s.config.MaxInflightPerUser > 0 && req.subjectID > 0 &&
+				s.subjectRunningLocked(req.subjectType, req.subjectID) >= s.config.MaxInflightPerUser {
 				continue
 			}
 			req.state = memoryFlowStateRunning
@@ -875,17 +914,28 @@ func (s *memoryFlowSlot) positionLocked(requestID string) int {
 	return 0
 }
 
-func (s *memoryFlowSlot) userWaitingLocked(userID int) int {
-	if userID <= 0 {
+func (s *memoryFlowSlot) subjectWaitingLocked(subjectType string, subjectID int) int {
+	if subjectType == "" || subjectID <= 0 {
 		return 0
 	}
 	count := 0
 	for _, req := range s.queue {
-		if req.userID == userID && req.state == memoryFlowStateWaiting && !req.cancelled {
+		if req.subjectType == subjectType && req.subjectID == subjectID && req.state == memoryFlowStateWaiting && !req.cancelled {
 			count++
 		}
 	}
 	return count
+}
+
+func (s *memoryFlowSlot) applySubjectStatsLocked(decision *AcquireDecision, subjectType string, subjectID int, limit int) {
+	if decision == nil || subjectType == "" || subjectID <= 0 {
+		return
+	}
+	decision.SubjectType = subjectType
+	decision.SubjectID = subjectID
+	decision.UserRunning = s.subjectRunningLocked(subjectType, subjectID)
+	decision.UserQueued = s.subjectWaitingLocked(subjectType, subjectID)
+	decision.UserLimit = limit
 }
 
 func (s *memoryFlowSlot) cancelWaiting(requestID string) (waitedMs int64, runningNow int, queuedNow int, wasRunning bool) {
