@@ -53,6 +53,14 @@ type Log struct {
 	RequestId         string `json:"request_id,omitempty" gorm:"type:varchar(64);index:idx_logs_request_id;default:''"`
 	UpstreamRequestId string `json:"upstream_request_id,omitempty" gorm:"type:varchar(128);index:idx_logs_upstream_request_id;default:''"`
 	Other             string `json:"other"`
+	RequestData       string `json:"request_data" gorm:"type:longtext"`  // 完整的请求+响应元数据 (JSON)
+	RequestBody       string `json:"request_body" gorm:"type:longtext"`  // 请求体原文
+	ResponseBody      string `json:"response_body" gorm:"type:longtext"` // 响应体原文
+}
+
+// GetLogGroupCol 返回日志表 group 列的数据库特定引用
+func GetLogGroupCol() string {
+	return logGroupCol
 }
 
 // don't use iota, avoid change log type value
@@ -290,9 +298,9 @@ type RecordConsumeLogParams struct {
 	Other            map[string]interface{} `json:"other"`
 }
 
-func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams) {
+func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams) (*Log, error) {
 	if !common.LogConsumeEnabled {
-		return
+		return nil, nil
 	}
 	logger.LogInfo(c, fmt.Sprintf("record consume log: userId=%d, params=%s", userId, common.GetJsonString(params)))
 	username := c.GetString("username")
@@ -335,12 +343,14 @@ func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams)
 	err := LOG_DB.Create(log).Error
 	if err != nil {
 		logger.LogError(c, "failed to record log: "+err.Error())
+		return nil, err
 	}
 	if common.DataExportEnabled {
 		gopool.Go(func() {
 			LogQuotaData(userId, username, params.ModelName, params.Quota, common.GetTimestamp(), params.PromptTokens+params.CompletionTokens)
 		})
 	}
+	return log, nil
 }
 
 type RecordTaskBillingLogParams struct {
@@ -439,7 +449,12 @@ func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName
 	if err != nil {
 		return nil, 0, err
 	}
-	err = tx.Order("logs.created_at desc, logs.id desc").Limit(num).Offset(startIdx).Find(&logs).Error
+
+	// 使用 Select() 避免查询 body 字段，提高性能
+	selectFields := "id, user_id, created_at, type, content, username, token_name, model_name, " +
+		"quota, prompt_tokens, completion_tokens, use_time, is_stream, channel_id, channel_name, " +
+		"token_id, " + logGroupCol + ", ip, request_id, upstream_request_id, other"
+	err = tx.Select(selectFields).Order("logs.created_at desc, logs.id desc").Limit(num).Offset(startIdx).Find(&logs).Error
 	if err != nil {
 		return nil, 0, err
 	}
@@ -523,7 +538,12 @@ func GetUserLogs(userId int, logType int, startTimestamp int64, endTimestamp int
 		common.SysError("failed to count user logs: " + err.Error())
 		return nil, 0, errors.New("查询日志失败")
 	}
-	err = tx.Order("logs.id desc").Limit(num).Offset(startIdx).Find(&logs).Error
+
+	// 使用 Select() 避免查询 body 字段，提高性能
+	selectFields := "id, user_id, created_at, type, content, username, token_name, model_name, " +
+		"quota, prompt_tokens, completion_tokens, use_time, is_stream, channel_id, channel_name, " +
+		"token_id, " + logGroupCol + ", ip, request_id, upstream_request_id, other"
+	err = tx.Select(selectFields).Order("logs.id desc").Limit(num).Offset(startIdx).Find(&logs).Error
 	if err != nil {
 		common.SysError("failed to search user logs: " + err.Error())
 		return nil, 0, errors.New("查询日志失败")

@@ -459,7 +459,7 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 		InjectTieredBillingInfo(other, relayInfo, tieredResult)
 	}
 
-	model.RecordConsumeLog(ctx, relayInfo.UserId, model.RecordConsumeLogParams{
+	log, err := model.RecordConsumeLog(ctx, relayInfo.UserId, model.RecordConsumeLogParams{
 		ChannelId:        relayInfo.ChannelId,
 		PromptTokens:     summary.PromptTokens,
 		CompletionTokens: summary.CompletionTokens,
@@ -473,7 +473,49 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 		Group:            relayInfo.UsingGroup,
 		Other:            other,
 	})
+	if err != nil {
+		logger.LogError(ctx, "failed to record consume log: "+err.Error())
+		return
+	}
+
+	// 异步写入日志详情数据（请求体/响应体）
+	if relayInfo.CapturedData != nil && operation_setting.GetLogDetailSetting().Enabled && log != nil {
+		copiedCtx := ctx.Copy()
+		gopool.Go(func() {
+			saveLogDetailBody(copiedCtx, relayInfo, log.Id)
+		})
+	}
+
 	gopool.Go(func() {
 		perfmetrics.RecordRelaySample(relayInfo, true, int64(summary.CompletionTokens))
 	})
+}
+
+// saveLogDetailBody 异步保存日志详情数据（请求体/响应体）
+func saveLogDetailBody(ctx *gin.Context, info *relaycommon.RelayInfo, logID int) {
+	setting := operation_setting.GetLogDetailSetting()
+	if !setting.Enabled || info.CapturedData == nil {
+		return
+	}
+
+	// 截断超大 body
+	requestBody := info.CapturedData.RequestBody
+	if len(requestBody) > setting.MaxBodySize {
+		requestBody = requestBody[:setting.MaxBodySize] + "... [truncated]"
+	}
+	responseBody := info.CapturedData.ResponseBody
+	if len(responseBody) > setting.MaxBodySize {
+		responseBody = responseBody[:setting.MaxBodySize] + "... [truncated]"
+	}
+
+	// 使用 LOG_DB（日志数据库），添加错误处理
+	if err := model.LOG_DB.Model(&model.Log{}).
+		Where("id = ?", logID).
+		Updates(map[string]interface{}{
+			"request_data":  info.CapturedData.RequestData,
+			"request_body":  requestBody,
+			"response_body": responseBody,
+		}).Error; err != nil {
+		logger.LogError(ctx, "failed to save log detail body: "+err.Error())
+	}
 }

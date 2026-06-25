@@ -27,6 +27,13 @@ type ThinkingContentInfo struct {
 	HasSentThinkingContent  bool
 }
 
+// CapturedRelayData 用于捕获 relay 过程中的请求和响应数据
+type CapturedRelayData struct {
+	RequestData  string // 完整请求+响应元数据 JSON
+	RequestBody  string // 请求体原文
+	ResponseBody string // 响应体原文（非流式直接保存，流式拼合）
+}
+
 const (
 	LastMessageTypeNone     = "none"
 	LastMessageTypeText     = "text"
@@ -178,6 +185,9 @@ type RelayInfo struct {
 	FinalRequestRelayFormat types.RelayFormat
 
 	StreamStatus *StreamStatus
+
+	// CapturedData 用于存储捕获的请求/响应体数据（日志详情存储）
+	CapturedData *CapturedRelayData
 
 	ThinkingContentInfo
 	TokenCountMeta
