@@ -480,6 +480,9 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 
 	// 异步写入日志详情数据（请求体/响应体）
 	if relayInfo.CapturedData != nil && operation_setting.GetLogDetailSetting().Enabled && log != nil {
+		// 保存元数据供 saveLogDetailBody 使用
+		relayInfo.CapturedData.RequestData = buildRequestMetadata(ctx, relayInfo)
+
 		copiedCtx := ctx.Copy()
 		gopool.Go(func() {
 			saveLogDetailBody(copiedCtx, relayInfo, log.Id)
@@ -491,6 +494,42 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 	})
 }
 
+// buildRequestMetadata 构建请求元数据 JSON（仅 metadata 部分，不含 headers/body）
+func buildRequestMetadata(ctx *gin.Context, relayInfo *relaycommon.RelayInfo) string {
+	latencyMs := int64(0)
+	if !relayInfo.StartTime.IsZero() {
+		latencyMs = time.Since(relayInfo.StartTime).Milliseconds()
+	}
+	requestId := ctx.GetString(common.RequestIdKey)
+	upstreamRequestId := ctx.GetString(common.UpstreamRequestIdKey)
+	meta := map[string]interface{}{
+		"request_id":          requestId,
+		"upstream_request_id": upstreamRequestId,
+		"latency_ms":          latencyMs,
+		"channel_id":          relayInfo.ChannelId,
+		"channel_type":        relayInfo.ChannelType,
+		"upstream_model_name": relayInfo.UpstreamModelName,
+		"is_stream":           relayInfo.IsStream,
+		"status_code":         ctx.GetInt("status_code"),
+	}
+	if relayInfo.FirstResponseTime.After(relayInfo.StartTime) {
+		meta["first_response_ms"] = relayInfo.FirstResponseTime.Sub(relayInfo.StartTime).Milliseconds()
+	}
+	metaBytes, err := common.Marshal(meta)
+	if err != nil {
+		return ""
+	}
+	return string(metaBytes)
+}
+
+// truncateBody 截断超大 body，返回截断后的字符串
+func truncateBody(body string, maxSize int) string {
+	if len(body) > maxSize {
+		return body[:maxSize] + "... [truncated]"
+	}
+	return body
+}
+
 // saveLogDetailBody 异步保存日志详情数据（请求体/响应体）
 func saveLogDetailBody(ctx *gin.Context, info *relaycommon.RelayInfo, logID int) {
 	setting := operation_setting.GetLogDetailSetting()
@@ -499,23 +538,81 @@ func saveLogDetailBody(ctx *gin.Context, info *relaycommon.RelayInfo, logID int)
 	}
 
 	// 截断超大 body
-	requestBody := info.CapturedData.RequestBody
-	if len(requestBody) > setting.MaxBodySize {
-		requestBody = requestBody[:setting.MaxBodySize] + "... [truncated]"
-	}
-	responseBody := info.CapturedData.ResponseBody
-	if len(responseBody) > setting.MaxBodySize {
-		responseBody = responseBody[:setting.MaxBodySize] + "... [truncated]"
+	requestBody := truncateBody(info.CapturedData.RequestBody, setting.MaxBodySize)
+	responseBody := truncateBody(info.CapturedData.ResponseBody, setting.MaxBodySize)
+
+	// 构建完整的 request_data JSON：元数据 + 请求 + 响应
+	completeData := buildCompleteRequestData(
+		info.CapturedData.RequestData,
+		info.CapturedData.RequestHeaders,
+		requestBody,
+		info.CapturedData.ResponseHeaders,
+		responseBody,
+	)
+
+	// 将请求头和请求体合并到 request_body 字段（保留向后兼容）
+	savedBody := requestBody
+	if len(info.CapturedData.RequestHeaders) > 0 {
+		entry := map[string]interface{}{
+			"headers": info.CapturedData.RequestHeaders,
+			"body":    requestBody,
+		}
+		if entryBytes, err := common.Marshal(entry); err == nil {
+			savedBody = string(entryBytes)
+		}
 	}
 
 	// 使用 LOG_DB（日志数据库），添加错误处理
 	if err := model.LOG_DB.Model(&model.Log{}).
 		Where("id = ?", logID).
 		Updates(map[string]interface{}{
-			"request_data":  info.CapturedData.RequestData,
-			"request_body":  requestBody,
+			"request_data":  completeData,
+			"request_body":  savedBody,
 			"response_body": responseBody,
 		}).Error; err != nil {
 		logger.LogError(ctx, "failed to save log detail body: "+err.Error())
 	}
+}
+
+// buildCompleteRequestData 构建完整的请求记录 JSON，包含元数据、请求头、请求体、响应头、响应体
+func buildCompleteRequestData(
+	metadataJSON string,
+	requestHeaders map[string]string,
+	requestBody string,
+	responseHeaders map[string]string,
+	responseBody string,
+) string {
+	// 解析元数据 JSON
+	var meta map[string]interface{}
+	if metadataJSON != "" {
+		if err := common.UnmarshalJsonStr(metadataJSON, &meta); err != nil {
+			meta = make(map[string]interface{})
+		}
+	} else {
+		meta = make(map[string]interface{})
+	}
+
+	// 添加请求信息
+	reqPart := map[string]interface{}{
+		"body": requestBody,
+	}
+	if len(requestHeaders) > 0 {
+		reqPart["headers"] = requestHeaders
+	}
+	meta["request"] = reqPart
+
+	// 添加响应信息
+	respPart := map[string]interface{}{
+		"body": responseBody,
+	}
+	if len(responseHeaders) > 0 {
+		respPart["headers"] = responseHeaders
+	}
+	meta["response"] = respPart
+
+	dataBytes, err := common.Marshal(meta)
+	if err != nil {
+		return metadataJSON
+	}
+	return string(dataBytes)
 }

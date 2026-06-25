@@ -29,9 +29,11 @@ type ThinkingContentInfo struct {
 
 // CapturedRelayData 用于捕获 relay 过程中的请求和响应数据
 type CapturedRelayData struct {
-	RequestData  string // 完整请求+响应元数据 JSON
-	RequestBody  string // 请求体原文
-	ResponseBody string // 响应体原文（非流式直接保存，流式拼合）
+	RequestData    string            // 完整请求+响应元数据 JSON
+	RequestHeaders map[string]string // 上游请求头
+	RequestBody    string            // 请求体原文
+	ResponseHeaders map[string]string // 上游响应头
+	ResponseBody   string            // 响应体原文（非流式直接保存，流式拼合）
 }
 
 const (

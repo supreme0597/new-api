@@ -42,6 +42,36 @@ func applyUpstreamContentLength(req *http.Request, info *common.RelayInfo) {
 	}
 }
 
+// captureUpstreamRequestHeaders 将最终的上游请求头保存到 CapturedData 中（日志详情存储）
+func captureUpstreamRequestHeaders(info *common.RelayInfo, headers http.Header) {
+	if info == nil || info.CapturedData == nil {
+		return
+	}
+	if !operation_setting.GetLogDetailSetting().Enabled {
+		return
+	}
+	h := make(map[string]string, len(headers))
+	for name, values := range headers {
+		h[name] = strings.Join(values, ", ")
+	}
+	info.CapturedData.RequestHeaders = h
+}
+
+// captureUpstreamResponseHeaders 将上游响应头保存到 CapturedData 中（日志详情存储）
+func captureUpstreamResponseHeaders(info *common.RelayInfo, headers http.Header) {
+	if info == nil || info.CapturedData == nil {
+		return
+	}
+	if !operation_setting.GetLogDetailSetting().Enabled {
+		return
+	}
+	h := make(map[string]string, len(headers))
+	for name, values := range headers {
+		h[name] = strings.Join(values, ", ")
+	}
+	info.CapturedData.ResponseHeaders = h
+}
+
 func SetupApiRequestHeader(info *common.RelayInfo, c *gin.Context, req *http.Header) {
 	if info.RelayMode == constant.RelayModeAudioTranscription || info.RelayMode == constant.RelayModeAudioTranslation {
 		// multipart/form-data
@@ -327,9 +357,13 @@ func DoApiRequest(a Adaptor, c *gin.Context, info *common.RelayInfo, requestBody
 		return nil, err
 	}
 	applyHeaderOverrideToRequest(req, headerOverride)
+	captureUpstreamRequestHeaders(info, req.Header)
 	resp, err := doRequest(c, req, info)
 	if err != nil {
 		return nil, fmt.Errorf("do request failed: %w", err)
+	}
+	if resp != nil {
+		captureUpstreamResponseHeaders(info, resp.Header)
 	}
 	return resp, nil
 }
@@ -359,9 +393,13 @@ func DoFormRequest(a Adaptor, c *gin.Context, info *common.RelayInfo, requestBod
 		return nil, err
 	}
 	applyHeaderOverrideToRequest(req, headerOverride)
+	captureUpstreamRequestHeaders(info, req.Header)
 	resp, err := doRequest(c, req, info)
 	if err != nil {
 		return nil, fmt.Errorf("do request failed: %w", err)
+	}
+	if resp != nil {
+		captureUpstreamResponseHeaders(info, resp.Header)
 	}
 	return resp, nil
 }

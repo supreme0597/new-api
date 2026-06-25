@@ -53,7 +53,7 @@ type Log struct {
 	RequestId         string `json:"request_id,omitempty" gorm:"type:varchar(64);index:idx_logs_request_id;default:''"`
 	UpstreamRequestId string `json:"upstream_request_id,omitempty" gorm:"type:varchar(128);index:idx_logs_upstream_request_id;default:''"`
 	Other             string `json:"other"`
-	RequestData       string `json:"request_data" gorm:"type:longtext"`  // 完整的请求+响应元数据 (JSON)
+	RequestData       string `json:"request_data" gorm:"type:longtext"`  // 完整请求记录 JSON（元数据+请求头+请求体+响应头+响应体）
 	RequestBody       string `json:"request_body" gorm:"type:longtext"`  // 请求体原文
 	ResponseBody      string `json:"response_body" gorm:"type:longtext"` // 响应体原文
 }
