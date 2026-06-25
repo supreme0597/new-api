@@ -1,6 +1,7 @@
 package service
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -592,9 +593,26 @@ func buildCompleteRequestData(
 		meta = make(map[string]interface{})
 	}
 
+	// 解析 requestBody/responseBody 为 json.RawMessage，避免序列化时双层编码
+	var reqBodyRaw, respBodyRaw json.RawMessage
+	if requestBody != "" {
+		if err := common.Unmarshal([]byte(requestBody), &reqBodyRaw); err != nil {
+			reqBodyRaw, _ = json.Marshal(requestBody)
+		}
+	} else {
+		reqBodyRaw = json.RawMessage("null")
+	}
+	if responseBody != "" {
+		if err := common.Unmarshal([]byte(responseBody), &respBodyRaw); err != nil {
+			respBodyRaw, _ = json.Marshal(responseBody)
+		}
+	} else {
+		respBodyRaw = json.RawMessage("null")
+	}
+
 	// 添加请求信息
 	reqPart := map[string]interface{}{
-		"body": requestBody,
+		"body": reqBodyRaw,
 	}
 	if len(requestHeaders) > 0 {
 		reqPart["headers"] = requestHeaders
@@ -603,7 +621,7 @@ func buildCompleteRequestData(
 
 	// 添加响应信息
 	respPart := map[string]interface{}{
-		"body": responseBody,
+		"body": respBodyRaw,
 	}
 	if len(responseHeaders) > 0 {
 		respPart["headers"] = responseHeaders
