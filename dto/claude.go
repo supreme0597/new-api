@@ -483,6 +483,35 @@ func (c *ClaudeRequest) ParseSystem() []ClaudeMediaMessage {
 	return mediaContent
 }
 
+// StripBillingHeader removes the x-anthropic-billing-header text block from
+// the system array. Claude Code injects this as the first system element for
+// Anthropic billing attribution, but when proxying through a third-party gateway
+// it should be stripped to avoid leaking client metadata.
+func (c *ClaudeRequest) StripBillingHeader() {
+	if c.System == nil {
+		return
+	}
+	// System can be string or []ClaudeMediaMessage; billing header only in array form
+	if c.IsStringSystem() {
+		return
+	}
+	system := c.ParseSystem()
+	if len(system) == 0 {
+		return
+	}
+
+	filtered := make([]ClaudeMediaMessage, 0, len(system))
+	for _, msg := range system {
+		if msg.Type == "text" && msg.Text != nil && strings.HasPrefix(*msg.Text, "x-anthropic-billing-header") {
+			continue
+		}
+		filtered = append(filtered, msg)
+	}
+	if len(filtered) != len(system) {
+		c.System = filtered
+	}
+}
+
 type ClaudeErrorWithStatusCode struct {
 	Error      types.ClaudeError `json:"error"`
 	StatusCode int               `json:"status_code"`
