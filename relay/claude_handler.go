@@ -49,13 +49,6 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 	}
 	adaptor.Init(info)
 
-	// When using a non-Claude adaptor (e.g., OpenAI channel with /v1/messages),
-	// set RelayMode to ChatCompletions so the OpenAI stream handler can capture
-	// response text into responseTextBuilder for logging.
-	if info.ApiType != constant.APITypeAnthropic && info.RelayMode == relayconstant.RelayModeUnknown {
-		info.RelayMode = relayconstant.RelayModeChatCompletions
-	}
-
 	if request.MaxTokens == nil || *request.MaxTokens == 0 {
 		defaultMaxTokens := uint(model_setting.GetClaudeSettings().GetDefaultMaxTokens(request.Model))
 		request.MaxTokens = &defaultMaxTokens
