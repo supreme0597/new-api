@@ -877,11 +877,18 @@ func ClaudeStreamHandler(c *gin.Context, resp *http.Response, info *relaycommon.
 		ResponseText: strings.Builder{},
 		Usage:        &dto.Usage{},
 	}
+	// 捕获流式响应体（日志详情存储）
+	var capturedDataBuilder strings.Builder
+	captureEnabled := info.CapturedData != nil
 	var err *types.NewAPIError
 	helper.StreamScannerHandler(c, resp, info, func(data string, sr *helper.StreamResult) {
 		err = HandleStreamResponseData(c, info, claudeInfo, data)
 		if err != nil {
 			sr.Stop(err)
+		}
+		if captureEnabled {
+			capturedDataBuilder.WriteString(data)
+			capturedDataBuilder.WriteString("\n")
 		}
 	})
 	if err != nil {
@@ -889,6 +896,12 @@ func ClaudeStreamHandler(c *gin.Context, resp *http.Response, info *relaycommon.
 	}
 
 	HandleStreamFinalResponse(c, info, claudeInfo)
+
+	// 保存流式响应体
+	if captureEnabled {
+		info.CapturedData.ResponseBody = capturedDataBuilder.String()
+	}
+
 	return claudeInfo.Usage, nil
 }
 
@@ -949,6 +962,10 @@ func ClaudeHandler(c *gin.Context, resp *http.Response, info *relaycommon.RelayI
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, types.NewError(err, types.ErrorCodeBadResponseBody)
+	}
+	// 捕获响应体（日志详情存储）
+	if info.CapturedData != nil {
+		info.CapturedData.ResponseBody = string(responseBody)
 	}
 	logger.LogDebug(c, "responseBody: %s", responseBody)
 	handleErr := HandleClaudeResponseData(c, info, claudeInfo, resp, responseBody)
