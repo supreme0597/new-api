@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { api } from '@/lib/api'
 import { buildQueryParams } from './lib/utils'
+import type { UsageLog } from './data/schema'
 import type {
   GetLogsParams,
   GetLogsResponse,
@@ -109,3 +110,23 @@ export const getAllTaskLogs = (params: GetTaskLogsParams) =>
 
 export const getUserTaskLogs = (params: GetTaskLogsParams) =>
   fetchLogs('/api/task', params, false)
+
+// ============================================================================
+// Log Detail API
+// ============================================================================
+
+/**
+ * Fetch single log detail (includes request/response bodies)
+ * Only called when user clicks request/response tab — lazy loaded
+ */
+export async function getLogDetail(
+  logId: number,
+  isAdmin: boolean
+): Promise<UsageLog | null> {
+  const path = isAdmin ? `/api/log/${logId}` : `/api/log/self/${logId}`
+  const res = await api.get(path)
+  if (res.data?.success) {
+    return res.data.data as UsageLog
+  }
+  return null
+}

@@ -381,3 +381,18 @@ export interface UserInfo {
   aff_quota?: number
   remark?: string
 }
+
+// ============================================================================
+// Log Detail Types
+// ============================================================================
+
+/**
+ * Parsed structure of the request_data field
+ */
+export interface RequestDataPayload {
+  request_headers?: Record<string, string>
+  response_headers?: Record<string, string>
+  status_code?: number
+  latency_ms?: number
+  [key: string]: unknown
+}

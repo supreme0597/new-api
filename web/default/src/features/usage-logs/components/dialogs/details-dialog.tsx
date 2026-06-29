@@ -30,7 +30,11 @@ import {
   UserCog,
   Info,
   LogIn,
+  ArrowDownToLine,
+  ArrowUpFromLine,
+  FileJson,
 } from 'lucide-react'
+import { useState, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { formatBillingCurrencyFromUSD } from '@/lib/currency'
 import { formatLogQuota, formatTokens, formatUseTime } from '@/lib/format'
@@ -39,10 +43,14 @@ import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Dialog } from '@/components/dialog'
 import { StatusBadge, type StatusBadgeProps } from '@/components/status-badge'
 import { DynamicPricingBreakdown } from '@/features/pricing/components/dynamic-pricing-breakdown'
 import type { UsageLog } from '../../data/schema'
+import { getLogDetail } from '../../api'
+import type { RequestDataPayload } from '../../types'
 import {
   parseLogOther,
   getParamOverrideActionLabel,
@@ -61,6 +69,8 @@ import {
   isTimingLogType,
 } from '../../lib/utils'
 import type { LogOtherData } from '../../types'
+import { HeadersTable } from './headers-table'
+import { JsonTreeView } from './json-tree-view'
 
 // Maps a channel-update changed-field token (as recorded by the backend audit)
 // to its i18n label key for display in the audit details.
@@ -412,6 +422,21 @@ export function DetailsDialog(props: DetailsDialogProps) {
   const other = parseLogOther(props.log.other)
   const typeConfig = getLogTypeConfig(props.log.type)
 
+  // Tab and detail data state
+  const [detailLog, setDetailLog] = useState<UsageLog | null>(null)
+  const [detailLoading, setDetailLoading] = useState(false)
+  const [activeTab, setActiveTab] = useState('overview')
+
+  // Lazy load detail data when switching to request/response tabs
+  useEffect(() => {
+    if (activeTab !== 'overview' && !detailLog && !detailLoading) {
+      setDetailLoading(true)
+      getLogDetail(props.log.id, props.isAdmin)
+        .then(setDetailLog)
+        .finally(() => setDetailLoading(false))
+    }
+  }, [activeTab, detailLog, detailLoading, props.log.id, props.isAdmin])
+
   const isViolation = isViolationFeeLog(other)
   const isRefund = props.log.type === 6
   const isConsume = props.log.type === 2
@@ -561,7 +586,16 @@ export function DetailsDialog(props: DetailsDialogProps) {
       contentHeight='min(72vh, 720px)'
       bodyClassName='space-y-4'
     >
-      <ScrollArea className='max-h-[70vh] min-w-0 overflow-hidden pr-2 max-sm:max-h-[calc(100dvh-7rem)] sm:pr-4'>
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList variant='line'>
+          <TabsTrigger value='overview'>{t('Overview')}</TabsTrigger>
+          <TabsTrigger value='request'>{t('Request')}</TabsTrigger>
+          <TabsTrigger value='response'>{t('Response')}</TabsTrigger>
+        </TabsList>
+
+        {/* Overview Tab — existing content */}
+        <TabsContent value='overview'>
+          <ScrollArea className='max-h-[70vh] min-w-0 overflow-hidden pr-2 max-sm:max-h-[calc(100dvh-7rem)] sm:pr-4'>
         <div className='w-full max-w-full min-w-0 space-y-2.5 overflow-hidden py-1 sm:space-y-3'>
           {/* Overview section - key identifiers */}
           <div className='min-w-0 space-y-1'>
@@ -1152,10 +1186,125 @@ export function DetailsDialog(props: DetailsDialogProps) {
           )}
         </div>
       </ScrollArea>
+        </TabsContent>
+
+        {/* Request Tab — new */}
+        <TabsContent value='request'>
+          <ScrollArea className='max-h-[70vh] min-w-0 overflow-hidden pr-2 max-sm:max-h-[calc(100dvh-7rem)] sm:pr-4'>
+            {detailLoading ? (
+              <div className='space-y-2'>
+                <Skeleton className='h-4 w-3/4' />
+                <Skeleton className='h-4 w-1/2' />
+                <Skeleton className='h-64 w-full' />
+              </div>
+            ) : (
+              <RequestTab log={detailLog ?? props.log} />
+            )}
+          </ScrollArea>
+        </TabsContent>
+
+        {/* Response Tab — new */}
+        <TabsContent value='response'>
+          <ScrollArea className='max-h-[70vh] min-w-0 overflow-hidden pr-2 max-sm:max-h-[calc(100dvh-7rem)] sm:pr-4'>
+            {detailLoading ? (
+              <div className='space-y-2'>
+                <Skeleton className='h-4 w-3/4' />
+                <Skeleton className='h-4 w-1/2' />
+                <Skeleton className='h-64 w-full' />
+              </div>
+            ) : (
+              <ResponseTab log={detailLog ?? props.log} />
+            )}
+          </ScrollArea>
+        </TabsContent>
+      </Tabs>
     </Dialog>
   )
 }
 
 function isDisplayableType(type: number): boolean {
   return [0, 2, 5, 6].includes(type)
+}
+
+function RequestTab({ log }: { log: UsageLog }) {
+  const { t } = useTranslation()
+  const requestData = useMemo(() => {
+    try {
+      return JSON.parse(log.request_data || '{}') as RequestDataPayload
+    } catch {
+      return {} as RequestDataPayload
+    }
+  }, [log.request_data])
+
+  return (
+    <div className='space-y-4'>
+      {requestData.request_headers && (
+        <DetailSection
+          icon={<ArrowDownToLine className='size-3.5' aria-hidden='true' />}
+          label={t('Request Headers')}
+        >
+          <HeadersTable headers={requestData.request_headers} />
+        </DetailSection>
+      )}
+      {log.request_body && (
+        <DetailSection
+          icon={<FileJson className='size-3.5' aria-hidden='true' />}
+          label={t('Request Body')}
+        >
+          <div className='max-h-[400px] overflow-y-auto rounded-md border bg-muted/30 p-3'>
+            <JsonTreeView data={log.request_body} maxHeight={400} />
+          </div>
+        </DetailSection>
+      )}
+    </div>
+  )
+}
+
+function ResponseTab({ log }: { log: UsageLog }) {
+  const { t } = useTranslation()
+  const requestData = useMemo(() => {
+    try {
+      return JSON.parse(log.request_data || '{}') as RequestDataPayload
+    } catch {
+      return {} as RequestDataPayload
+    }
+  }, [log.request_data])
+  const statusCode = requestData.status_code
+
+  return (
+    <div className='space-y-4'>
+      {statusCode != null && (
+        <DetailSection label={t('Status Code')}>
+          <StatusBadge
+            label={`${statusCode}`}
+            variant={
+              statusCode < 300
+                ? 'green'
+                : statusCode < 500
+                  ? 'yellow'
+                  : 'red'
+            }
+          />
+        </DetailSection>
+      )}
+      {requestData.response_headers && (
+        <DetailSection
+          icon={<ArrowUpFromLine className='size-3.5' aria-hidden='true' />}
+          label={t('Response Headers')}
+        >
+          <HeadersTable headers={requestData.response_headers} />
+        </DetailSection>
+      )}
+      {log.response_body && (
+        <DetailSection
+          icon={<FileJson className='size-3.5' aria-hidden='true' />}
+          label={t('Response Body')}
+        >
+          <div className='max-h-[400px] overflow-y-auto rounded-md border bg-muted/30 p-3'>
+            <JsonTreeView data={log.response_body} maxHeight={400} />
+          </div>
+        </DetailSection>
+      )}
+    </div>
+  )
 }

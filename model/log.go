@@ -75,7 +75,7 @@ const (
 	LogTypeLogin   = 7
 )
 
-func formatUserLogs(logs []*Log, startIdx int) {
+func FormatUserLogs(logs []*Log, startIdx int) {
 	for i := range logs {
 		logs[i].ChannelName = ""
 		var otherMap map[string]interface{}
@@ -95,7 +95,7 @@ func formatUserLogs(logs []*Log, startIdx int) {
 
 func GetLogByTokenId(tokenId int) (logs []*Log, err error) {
 	err = LOG_DB.Model(&Log{}).Where("token_id = ?", tokenId).Order("id desc").Limit(common.MaxRecentItems).Find(&logs).Error
-	formatUserLogs(logs, 0)
+	FormatUserLogs(logs, 0)
 	return logs, err
 }
 
@@ -502,6 +502,18 @@ func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName
 	return logs, total, err
 }
 
+func GetLogById(id int) (*Log, error) {
+	var log Log
+	err := LOG_DB.Where("id = ?", id).First(&log).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &log, nil
+}
+
 const logSearchCountLimit = 10000
 
 func GetUserLogs(userId int, logType int, startTimestamp int64, endTimestamp int64, modelName string, tokenName string, startIdx int, num int, group string, requestId string, upstreamRequestId string) (logs []*Log, total int64, err error) {
@@ -549,7 +561,7 @@ func GetUserLogs(userId int, logType int, startTimestamp int64, endTimestamp int
 		return nil, 0, errors.New("查询日志失败")
 	}
 
-	formatUserLogs(logs, startIdx)
+	FormatUserLogs(logs, startIdx)
 	return logs, total, err
 }
 

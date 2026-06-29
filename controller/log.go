@@ -71,6 +71,48 @@ func SearchUserLogs(c *gin.Context) {
 	})
 }
 
+func GetLogDetail(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"message": "无效的日志 ID",
+		})
+		return
+	}
+
+	log, err := model.GetLogById(id)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if log == nil {
+		c.JSON(http.StatusNotFound, gin.H{
+			"success": false,
+			"message": "日志不存在",
+		})
+		return
+	}
+
+	// 权限校验：普通用户只能查看自己的日志
+	userId := c.GetInt("id")
+	isAdmin := c.GetBool("is_admin")
+	if !isAdmin && log.UserId != userId {
+		c.JSON(http.StatusForbidden, gin.H{
+			"success": false,
+			"message": "无权查看该日志",
+		})
+		return
+	}
+
+	// 非管理员脱敏 admin_info 等字段
+	if !isAdmin {
+		model.FormatUserLogs([]*model.Log{log}, 0)
+	}
+
+	common.ApiSuccess(c, log)
+}
+
 func GetLogByKey(c *gin.Context) {
 	tokenId := c.GetInt("token_id")
 	if tokenId == 0 {
