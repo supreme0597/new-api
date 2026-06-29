@@ -154,10 +154,9 @@ function formatRatio(ratio: number | undefined): string {
 function BillingBreakdown(props: {
   log: UsageLog
   other: LogOtherData
-  isAdmin: boolean
 }) {
   const { t } = useTranslation()
-  const { log, other, isAdmin } = props
+  const { log, other } = props
   const isPerCall = isPerCallBilling(other.model_price)
   const isClaude = other.claude === true
   const isTieredExpr = other.billing_mode === 'tiered_expr'
@@ -316,7 +315,7 @@ function BillingBreakdown(props: {
     })
   }
 
-  if (isAdmin && other.admin_info) {
+  if (other.admin_info) {
     rows.push({
       label: t('Billing Source'),
       value: other.admin_info.local_count_tokens
@@ -462,10 +461,10 @@ export function DetailsDialog(props: DetailsDialogProps) {
   const hasAudioTokens = other?.ws || other?.audio
   const showTiming = isTimingLogType(props.log.type)
   const showAdminIp =
-    !!props.log.ip && (showTiming || (props.isAdmin && isTopup))
+    !!props.log.ip && (showTiming || isTopup)
   const adminInfo = other?.admin_info
   const topupAuditFields =
-    isTopup && props.isAdmin && adminInfo
+    isTopup && adminInfo
       ? ([
           adminInfo.payment_method && {
             label: t('Order Payment Method'),
@@ -493,13 +492,12 @@ export function DetailsDialog(props: DetailsDialogProps) {
           },
         ].filter(Boolean) as Array<{ label: string; value: string }>)
       : []
-  const showLegacyTopupWarning = isTopup && props.isAdmin && !adminInfo
+  const showLegacyTopupWarning = isTopup && !adminInfo
   const showTopupAuditSection =
     isTopup &&
-    props.isAdmin &&
     (topupAuditFields.length > 0 || showLegacyTopupWarning)
   const manageOperator = (() => {
-    if (!isManage || !props.isAdmin || !adminInfo) return null
+    if (!isManage || !adminInfo) return null
     const username = adminInfo.admin_username
     const id = adminInfo.admin_id
     const hasUsername = username != null && String(username).trim() !== ''
@@ -510,7 +508,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
     return `ID: ${id}`
   })()
   const authMethodLabel = (() => {
-    if (!isManage || !props.isAdmin || !adminInfo?.auth_method) return ''
+    if (!isManage || !adminInfo?.auth_method) return ''
     if (adminInfo.auth_method === 'access_token') return t('Access Token')
     if (adminInfo.auth_method === 'session') return t('Session')
     return String(adminInfo.auth_method)
@@ -519,12 +517,11 @@ export function DetailsDialog(props: DetailsDialogProps) {
   // Localized operation text rendered from the language-independent op
   // descriptor (shared by audit type=3 and login type=7).
   const operationText = renderAuditContent(other, t)
-  const auditRoute = isManage && props.isAdmin ? other?.audit_info : undefined
+  const auditRoute = isManage ? other?.audit_info : undefined
   // Channel update records which fields changed (stable field tokens); render
   // them with their localized labels for admins.
   const changedFieldTokens =
     isManage &&
-    props.isAdmin &&
     Array.isArray(other?.op?.params?.changed_fields)
       ? (other.op.params.changed_fields as string[])
       : []
@@ -532,7 +529,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
     .map((field) => t(CHANNEL_FIELD_LABELS[field] ?? field))
     .join(', ')
   const showManageAuditSection =
-    isManage && props.isAdmin && (operationText != null || auditRoute != null)
+    isManage && (operationText != null || auditRoute != null)
 
   // Login audit (type=7); visible to the log owner, not admin-only.
   const isLogin = props.log.type === 7
@@ -562,7 +559,6 @@ export function DetailsDialog(props: DetailsDialogProps) {
       ? t('Native format')
       : conversionChain.join(' -> ')
   const showConversion =
-    props.isAdmin &&
     props.log.type !== 6 &&
     (other?.request_path || conversionChain.length > 0)
 
@@ -624,7 +620,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
               />
             )}
 
-            {props.isAdmin && props.log.channel > 0 && (
+            {props.log.channel > 0 && (
               <DetailRow
                 label={t('Channel')}
                 value={
@@ -642,7 +638,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
               />
             )}
 
-            {channelChain && props.isAdmin && (
+            {channelChain && (
               <DetailRow label={t('Retry Chain')} value={channelChain} mono />
             )}
 
@@ -751,8 +747,8 @@ export function DetailsDialog(props: DetailsDialogProps) {
             </DetailSection>
           )}
 
-          {/* Reject reason (admin only) */}
-          {props.isAdmin && other?.reject_reason && (
+          {/* Reject reason */}
+          {other?.reject_reason && (
             <DetailSection
               icon={<AlertTriangle className='size-3.5' aria-hidden='true' />}
               label={t('Reject Reason')}
@@ -1010,7 +1006,6 @@ export function DetailsDialog(props: DetailsDialogProps) {
             <BillingBreakdown
               log={props.log}
               other={other}
-              isAdmin={props.isAdmin}
             />
           )}
 
@@ -1026,8 +1021,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
           )}
 
           {/* Admin billing mode indicator for non-consume */}
-          {props.isAdmin &&
-            !isConsume &&
+          {!isConsume &&
             props.log.type !== 6 &&
             other?.admin_info && (
               <DetailRow
@@ -1049,9 +1043,8 @@ export function DetailsDialog(props: DetailsDialogProps) {
               />
             )}
 
-          {/* Stream status details (admin only) */}
-          {props.isAdmin &&
-            other?.stream_status &&
+          {/* Stream status details */}
+          {other?.stream_status &&
             other.stream_status.status !== 'ok' && (
               <DetailSection label={t('Stream Status')}>
                 <DetailRow
@@ -1241,17 +1234,37 @@ function RequestTab({ log }: { log: UsageLog }) {
     }
   }, [log.request_data])
 
+  const parsedBody = useMemo(() => {
+    try {
+      return JSON.parse(log.request_body || '{}')
+    } catch {
+      return null
+    }
+  }, [log.request_body])
+
+  const bodyHeaders = parsedBody?.headers as Record<string, string> | undefined
+  const messages = parsedBody?.body?.messages
+  const headers = requestData.request_headers || bodyHeaders
+
   return (
     <div className='space-y-6'>
-      {requestData.request_headers && (
+      {headers && (
         <DetailSection
           icon={<ArrowDownToLine className='size-3.5' aria-hidden='true' />}
           label={t('Request Headers')}
         >
-          <HeadersTable headers={requestData.request_headers} />
+          <HeadersTable headers={headers} />
         </DetailSection>
       )}
-      {log.request_body && (
+      {messages && (
+        <DetailSection
+          icon={<FileJson className='size-3.5' aria-hidden='true' />}
+          label={t('Request Body')}
+        >
+          <JsonTreeView data={JSON.stringify(messages)} maxHeight={400} />
+        </DetailSection>
+      )}
+      {!headers && !messages && log.request_body && (
         <DetailSection
           icon={<FileJson className='size-3.5' aria-hidden='true' />}
           label={t('Request Body')}

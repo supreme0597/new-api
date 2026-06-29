@@ -94,22 +94,6 @@ func GetLogDetail(c *gin.Context) {
 		return
 	}
 
-	// 权限校验：普通用户只能查看自己的日志
-	userId := c.GetInt("id")
-	isAdmin := c.GetInt("role") >= common.RoleAdminUser
-	if !isAdmin && log.UserId != userId {
-		c.JSON(http.StatusForbidden, gin.H{
-			"success": false,
-			"message": "无权查看该日志",
-		})
-		return
-	}
-
-	// 非管理员脱敏 admin_info 等字段
-	if !isAdmin {
-		model.FormatLogsWithRenumber([]*model.Log{log}, 0, false)
-	}
-
 	common.ApiSuccess(c, log)
 }
 
