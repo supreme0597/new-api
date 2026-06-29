@@ -42,7 +42,6 @@ import { cn } from '@/lib/utils'
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Dialog } from '@/components/dialog'
@@ -607,8 +606,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
 
         {/* Overview Tab — existing content */}
         <TabsContent value='overview'>
-          <ScrollArea className='max-h-[70vh] min-w-0 overflow-hidden pr-2 max-sm:max-h-[calc(100dvh-7rem)] sm:pr-4'>
-        <div className='w-full max-w-full min-w-0 space-y-2.5 overflow-hidden py-1 sm:space-y-3'>
+          <div className='w-full max-w-full min-w-0 space-y-2.5 overflow-hidden py-1 sm:space-y-3'>
           {/* Overview section - key identifiers */}
           <div className='min-w-0 space-y-1'>
             {props.log.request_id && (
@@ -1197,13 +1195,11 @@ export function DetailsDialog(props: DetailsDialogProps) {
             </div>
           )}
         </div>
-      </ScrollArea>
         </TabsContent>
 
         {/* Request Tab — new */}
         <TabsContent value='request'>
-          <ScrollArea className='max-h-[70vh] min-w-0 overflow-hidden pr-2 max-sm:max-h-[calc(100dvh-7rem)] sm:pr-4'>
-            {detailLoading ? (
+          {detailLoading ? (
               <div className='space-y-2'>
                 <Skeleton className='h-4 w-3/4' />
                 <Skeleton className='h-4 w-1/2' />
@@ -1212,13 +1208,11 @@ export function DetailsDialog(props: DetailsDialogProps) {
             ) : (
               <RequestTab log={detailLog ?? props.log} />
             )}
-          </ScrollArea>
         </TabsContent>
 
         {/* Response Tab — new */}
         <TabsContent value='response'>
-          <ScrollArea className='max-h-[70vh] min-w-0 overflow-hidden pr-2 max-sm:max-h-[calc(100dvh-7rem)] sm:pr-4'>
-            {detailLoading ? (
+          {detailLoading ? (
               <div className='space-y-2'>
                 <Skeleton className='h-4 w-3/4' />
                 <Skeleton className='h-4 w-1/2' />
@@ -1227,7 +1221,6 @@ export function DetailsDialog(props: DetailsDialogProps) {
             ) : (
               <ResponseTab log={detailLog ?? props.log} />
             )}
-          </ScrollArea>
         </TabsContent>
       </Tabs>
     </Dialog>
@@ -1263,9 +1256,7 @@ function RequestTab({ log }: { log: UsageLog }) {
           icon={<FileJson className='size-3.5' aria-hidden='true' />}
           label={t('Request Body')}
         >
-          <div className='max-h-[400px] overflow-y-auto rounded-md border bg-muted/30 p-3'>
-            <JsonTreeView data={log.request_body} maxHeight={400} />
-          </div>
+          <JsonTreeView data={log.request_body} maxHeight={400} />
         </DetailSection>
       )}
     </div>
@@ -1312,9 +1303,7 @@ function ResponseTab({ log }: { log: UsageLog }) {
           icon={<FileJson className='size-3.5' aria-hidden='true' />}
           label={t('Response Body')}
         >
-          <div className='max-h-[400px] overflow-y-auto rounded-md border bg-muted/30 p-3'>
-            <JsonTreeView data={log.response_body} maxHeight={400} />
-          </div>
+          <JsonTreeView data={log.response_body} maxHeight={400} />
         </DetailSection>
       )}
     </div>
