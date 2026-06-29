@@ -34,7 +34,7 @@ import {
   ArrowUpFromLine,
   FileJson,
 } from 'lucide-react'
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { formatBillingCurrencyFromUSD } from '@/lib/currency'
 import { formatLogQuota, formatTokens, formatUseTime } from '@/lib/format'
@@ -426,16 +426,28 @@ export function DetailsDialog(props: DetailsDialogProps) {
   const [detailLog, setDetailLog] = useState<UsageLog | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [activeTab, setActiveTab] = useState('overview')
+  const detailFetchedRef = useRef(false)
 
   // Lazy load detail data when switching to request/response tabs
   useEffect(() => {
-    if (activeTab !== 'overview' && !detailLog && !detailLoading) {
+    if (activeTab !== 'overview' && !detailFetchedRef.current) {
+      detailFetchedRef.current = true
       setDetailLoading(true)
       getLogDetail(props.log.id, props.isAdmin)
         .then(setDetailLog)
+        .catch(() => setDetailLog(null))
         .finally(() => setDetailLoading(false))
     }
-  }, [activeTab, detailLog, detailLoading, props.log.id, props.isAdmin])
+  }, [activeTab, props.log.id, props.isAdmin])
+
+  // Reset detail fetch state when dialog opens for a different log
+  useEffect(() => {
+    if (props.open) {
+      detailFetchedRef.current = false
+      setDetailLog(null)
+      setActiveTab('overview')
+    }
+  }, [props.open, props.log.id])
 
   const isViolation = isViolationFeeLog(other)
   const isRefund = props.log.type === 6

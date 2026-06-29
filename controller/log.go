@@ -96,7 +96,7 @@ func GetLogDetail(c *gin.Context) {
 
 	// 权限校验：普通用户只能查看自己的日志
 	userId := c.GetInt("id")
-	isAdmin := c.GetBool("is_admin")
+	isAdmin := c.GetInt("role") >= common.RoleAdminUser
 	if !isAdmin && log.UserId != userId {
 		c.JSON(http.StatusForbidden, gin.H{
 			"success": false,
