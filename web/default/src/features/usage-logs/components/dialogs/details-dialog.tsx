@@ -1242,7 +1242,7 @@ function RequestTab({ log }: { log: UsageLog }) {
   }, [log.request_data])
 
   return (
-    <div className='space-y-4'>
+    <div className='space-y-6'>
       {requestData.request_headers && (
         <DetailSection
           icon={<ArrowDownToLine className='size-3.5' aria-hidden='true' />}
@@ -1275,7 +1275,7 @@ function ResponseTab({ log }: { log: UsageLog }) {
   const statusCode = requestData.status_code
 
   return (
-    <div className='space-y-4'>
+    <div className='space-y-6'>
       {statusCode != null && (
         <DetailSection label={t('Status Code')}>
           <StatusBadge

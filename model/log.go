@@ -76,6 +76,13 @@ const (
 )
 
 func FormatUserLogs(logs []*Log, startIdx int) {
+	FormatLogsWithRenumber(logs, startIdx, true)
+}
+
+// FormatLogsWithRenumber strips admin-only fields from logs.
+// When renumber is true, log IDs are reassigned sequentially starting from startIdx+1
+// (for list views). When false, original IDs are preserved (for single-log detail views).
+func FormatLogsWithRenumber(logs []*Log, startIdx int, renumber bool) {
 	for i := range logs {
 		logs[i].ChannelName = ""
 		var otherMap map[string]interface{}
@@ -89,7 +96,9 @@ func FormatUserLogs(logs []*Log, startIdx int) {
 			delete(otherMap, "stream_status")
 		}
 		logs[i].Other = common.MapToJsonStr(otherMap)
-		logs[i].Id = startIdx + i + 1
+		if renumber {
+			logs[i].Id = startIdx + i + 1
+		}
 	}
 }
 

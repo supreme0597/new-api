@@ -107,7 +107,7 @@ func GetLogDetail(c *gin.Context) {
 
 	// 非管理员脱敏 admin_info 等字段
 	if !isAdmin {
-		model.FormatUserLogs([]*model.Log{log}, 0)
+		model.FormatLogsWithRenumber([]*model.Log{log}, 0, false)
 	}
 
 	common.ApiSuccess(c, log)
