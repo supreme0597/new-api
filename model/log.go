@@ -75,10 +75,6 @@ const (
 	LogTypeLogin   = 7
 )
 
-func FormatUserLogs(logs []*Log, startIdx int) {
-	FormatLogsWithRenumber(logs, startIdx, true)
-}
-
 // FormatLogsWithRenumber strips admin-only fields from logs.
 // When renumber is true, log IDs are reassigned sequentially starting from startIdx+1
 // (for list views). When false, original IDs are preserved (for single-log detail views).
@@ -104,7 +100,7 @@ func FormatLogsWithRenumber(logs []*Log, startIdx int, renumber bool) {
 
 func GetLogByTokenId(tokenId int) (logs []*Log, err error) {
 	err = LOG_DB.Model(&Log{}).Where("token_id = ?", tokenId).Order("id desc").Limit(common.MaxRecentItems).Find(&logs).Error
-	FormatUserLogs(logs, 0)
+	FormatLogsWithRenumber(logs, 0, false)
 	return logs, err
 }
 
@@ -570,7 +566,7 @@ func GetUserLogs(userId int, logType int, startTimestamp int64, endTimestamp int
 		return nil, 0, errors.New("查询日志失败")
 	}
 
-	FormatUserLogs(logs, startIdx)
+	FormatLogsWithRenumber(logs, startIdx, false)
 	return logs, total, err
 }
 
