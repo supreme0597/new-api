@@ -1226,29 +1226,27 @@ function isDisplayableType(type: number): boolean {
 
 function RequestTab({ log }: { log: UsageLog }) {
   const { t } = useTranslation()
-  const requestData = useMemo(() => {
-    try {
-      return JSON.parse(log.request_data || '{}') as RequestDataPayload
-    } catch {
-      return {} as RequestDataPayload
-    }
-  }, [log.request_data])
 
-  const parsedBody = useMemo(() => {
+  // Headers: 直接使用后端已解析的 request_headers 字段
+  const headers: Record<string, string> | undefined = log.request_headers
+
+  // Body: 后端已提取 messages（chat 请求）或完整 body，直接使用 request_body
+  const bodyDisplay = useMemo(() => {
+    const raw = log.request_body || ''
+    if (!raw) return null
+    // 尝试格式化 JSON
     try {
-      return JSON.parse(log.request_body || '{}')
+      const parsed = JSON.parse(raw)
+      return JSON.stringify(parsed, null, 2)
     } catch {
-      return null
+      // 非 JSON，原样返回
+      return raw
     }
   }, [log.request_body])
 
-  const bodyHeaders = parsedBody?.headers as Record<string, string> | undefined
-  const messages = parsedBody?.body?.messages
-  const headers = requestData.request_headers || bodyHeaders
-
   return (
     <div className='space-y-6'>
-      {headers && (
+      {headers && Object.keys(headers).length > 0 && (
         <DetailSection
           icon={<ArrowDownToLine className='size-3.5' aria-hidden='true' />}
           label={t('Request Headers')}
@@ -1256,20 +1254,12 @@ function RequestTab({ log }: { log: UsageLog }) {
           <HeadersTable headers={headers} />
         </DetailSection>
       )}
-      {messages && (
+      {bodyDisplay && (
         <DetailSection
           icon={<FileJson className='size-3.5' aria-hidden='true' />}
           label={t('Request Body')}
         >
-          <JsonTreeView data={JSON.stringify(messages)} maxHeight={400} />
-        </DetailSection>
-      )}
-      {!headers && !messages && log.request_body && (
-        <DetailSection
-          icon={<FileJson className='size-3.5' aria-hidden='true' />}
-          label={t('Request Body')}
-        >
-          <JsonTreeView data={log.request_body} maxHeight={400} />
+          <JsonTreeView data={bodyDisplay} maxHeight={400} />
         </DetailSection>
       )}
     </div>

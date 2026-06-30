@@ -616,6 +616,7 @@ func buildCompleteRequestData(
 	}
 	if len(requestHeaders) > 0 {
 		reqPart["headers"] = requestHeaders
+		meta["request_headers"] = requestHeaders // 顶层字段，前端直接读取
 	}
 	meta["request"] = reqPart
 
@@ -625,6 +626,7 @@ func buildCompleteRequestData(
 	}
 	if len(responseHeaders) > 0 {
 		respPart["headers"] = responseHeaders
+		meta["response_headers"] = responseHeaders // 顶层字段，前端直接读取
 	}
 	meta["response"] = respPart
 
