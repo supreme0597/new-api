@@ -83,7 +83,7 @@ function LogTableContent({
   endTime?: number
 }) {
   const { t } = useTranslation()
-  const columns = useCommonLogsColumns(false)
+  const columns = useCommonLogsColumns(true)
 
   const now = useMemo(() => dayjs(), [])
   const defaultStart = useMemo(
@@ -137,8 +137,8 @@ function LogTableContent({
       const res = await getAllLogs({
         p: page,
         page_size: pageSize,
-        start_time: Math.floor(appliedStart.getTime() / 1000),
-        end_time: Math.floor(appliedEnd.getTime() / 1000),
+        start_timestamp: Math.floor(appliedStart.getTime() / 1000),
+        end_timestamp: Math.floor(appliedEnd.getTime() / 1000),
         model_name: modelName,
         exact_model: 1,
       })

@@ -250,10 +250,11 @@ export function ModelDetailsPerformance(props: { model: PricingModel; startTime?
           value={formatUptimePct(successRate)}
           hint={
             incidentCount > 0
-              ? t('{{count}} incidents in the last 24 hours', {
+              ? t('{{count}} incidents ({{range}})', {
                   count: incidentCount,
+                  range: timeRangeLabel,
                 })
-              : t('No incidents in the last 24 hours')
+              : t('No incidents ({{range}})', { range: timeRangeLabel })
           }
           intent={intent}
         />
@@ -319,8 +320,8 @@ export function ModelDetailsPerformance(props: { model: PricingModel; startTime?
       <section>
         <SectionHeader
           icon={Timer}
-          title={t('Latency trend (last 24h)')}
-          description={t('Average TTFT')}
+          title={t('Latency trend')}
+          description={timeRangeLabel}
         />
         <LatencyTrendChart series={latencySeries} />
       </section>
@@ -328,17 +329,8 @@ export function ModelDetailsPerformance(props: { model: PricingModel; startTime?
       <section>
         <SectionHeader
           icon={HeartPulse}
-          title={t('Availability (last 24h)')}
-          description={
-            incidentCount > 0
-              ? t(
-                  'Request success rate; {{incidents}} incident buckets in the last 24 hours',
-                  {
-                    incidents: incidentCount,
-                  }
-                )
-              : t('Request success rate sampled over the last 24 hours')
-          }
+          title={t('Availability')}
+          description={timeRangeLabel}
           accent={
             incidentCount > 0 ? (
               <span className='inline-flex items-center gap-1 text-amber-600 dark:text-amber-400'>
