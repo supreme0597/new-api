@@ -1,4 +1,4 @@
-package model
+﻿package model
 
 import (
 	"fmt"
@@ -63,6 +63,16 @@ func GetPerfMetrics(modelName string, group string, startTs int64, endTs int64) 
 
 type PerfMetricSummary struct {
 	ModelName      string `json:"model_name"`
+	RequestCount   int64  `json:"request_count"`
+	SuccessCount   int64  `json:"success_count"`
+	TotalLatencyMs int64  `json:"total_latency_ms"`
+	OutputTokens   int64  `json:"output_tokens"`
+	GenerationMs   int64  `json:"generation_ms"`
+}
+
+type PerfMetricSummaryBucket struct {
+	ModelName      string `json:"model_name"`
+	BucketTs       int64  `json:"bucket_ts"`
 	RequestCount   int64  `json:"request_count"`
 	SuccessCount   int64  `json:"success_count"`
 	TotalLatencyMs int64  `json:"total_latency_ms"`
@@ -168,27 +178,22 @@ func GetLeaderboardData(startTs int64, endTs int64, vendorId int, sortBy string,
 			}
 		}
 
-		// 计算指标
-		avgTps := 0.0
+		avgTps := float64(0)
 		if row.GenerationMs > 0 {
-			avgTps = float64(row.OutputTokens) / (float64(row.GenerationMs) / 1000.0)
+			avgTps = float64(row.OutputTokens) / float64(row.GenerationMs) * 1000
 		}
 		avgTtftMs := int64(0)
 		if row.TtftCount > 0 {
 			avgTtftMs = row.TtftSumMs / row.TtftCount
 		}
-		successRate := 0.0
+		successRate := float64(0)
 		if row.RequestCount > 0 {
 			successRate = float64(row.SuccessCount) / float64(row.RequestCount) * 100
 		}
 
-		// 计算评分：TPS 40% + TTFT 30% + Success Rate 30%
 		tpsScore := calcTpsScore(avgTps)
-		ttftScore := 0.0
-		if row.TtftCount > 0 {
-			ttftScore = calcTtftScore(int(avgTtftMs))
-		}
-		successRateScore := successRate // successRate 已经是 0-100 的百分制
+		ttftScore := calcTtftScore(int(avgTtftMs))
+		successRateScore := successRate // successRate 已是 0-100 的百分制
 		score := tpsScore*0.4 + ttftScore*0.3 + successRateScore*0.3
 
 		vendorName := mv.VendorName
@@ -238,6 +243,25 @@ func sortLeaderboardItemsBy(items []LeaderboardItem, sortBy string, desc bool) {
 	})
 }
 
+func GetPerfMetricsSummaryBucketsAll(startTs int64, endTs int64, groups []string) ([]PerfMetricSummaryBucket, error) {
+	var summaries []PerfMetricSummaryBucket
+	query := DB.Model(&PerfMetric{}).
+		Select("model_name, bucket_ts, SUM(request_count) as request_count, SUM(success_count) as success_count, SUM(total_latency_ms) as total_latency_ms, SUM(output_tokens) as output_tokens, SUM(generation_ms) as generation_ms").
+		Where("bucket_ts >= ? AND bucket_ts <= ?", startTs, endTs)
+	if groups != nil {
+		if len(groups) == 0 {
+			return summaries, nil
+		}
+		query = query.Where(commonGroupCol+" IN ?", groups)
+	}
+	err := query.
+		Group("model_name, bucket_ts").
+		Having("SUM(request_count) > 0").
+		Order("bucket_ts ASC").
+		Find(&summaries).Error
+	return summaries, err
+}
+
 func DeletePerfMetricsBefore(cutoffTs int64) error {
 	if cutoffTs <= 0 {
 		return nil
@@ -252,7 +276,6 @@ func PerfMetricStartTime(hours int) int64 {
 	return time.Now().Add(-time.Duration(hours) * time.Hour).Unix()
 }
 
-// ModelPerformanceDetailRecord 模型性能详情记录
 type ModelPerformanceDetailRecord struct {
 	Group        string  `json:"group"`
 	BucketTs     int64   `json:"bucket_ts"`
@@ -265,7 +288,6 @@ type ModelPerformanceDetailRecord struct {
 	TotalTokens  int64   `json:"total_tokens"`
 }
 
-// ModelPerformanceDetail 模型性能详情响应
 type ModelPerformanceDetail struct {
 	ModelName          string                         `json:"model_name"`
 	VendorName         string                         `json:"vendor_name"`
@@ -283,7 +305,7 @@ type ModelPerformanceDetail struct {
 }
 
 // GetModelPerformanceDetail 获取指定模型在指定时间范围内的性能详情
-// 按 group 和 bucket_ts 分组返回详细记录
+// 按 group + bucket_ts 分组返回详细记录
 func GetModelPerformanceDetail(modelName string, startTs int64, endTs int64) (*ModelPerformanceDetail, error) {
 	var metrics []PerfMetric
 	err := DB.Where("model_name = ? AND bucket_ts >= ? AND bucket_ts <= ?", modelName, startTs, endTs).

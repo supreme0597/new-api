@@ -207,11 +207,11 @@ func SetApiRouter(router *gin.Engine) {
 			optionRoute.DELETE("/channel_affinity_cache", controller.ClearChannelAffinityCache)
 			optionRoute.POST("/rest_model_ratio", controller.ResetModelRatio)
 			optionRoute.POST("/migrate_console_setting", controller.MigrateConsoleSetting) // 用于迁移检测的旧键，下个版本会删除
-			optionRoute.POST("/waffo-pancake/catalog", controller.ListWaffoPancakeCatalog)
+			optionRoute.GET("/waffo-pancake/catalog", controller.ListWaffoPancakeCatalog)
 			optionRoute.POST("/waffo-pancake/pair", controller.CreateWaffoPancakePair)
 			optionRoute.POST("/waffo-pancake/save", controller.SaveWaffoPancake)
 			optionRoute.POST("/waffo-pancake/subscription-product", controller.CreateWaffoPancakeSubscriptionProduct)
-			optionRoute.POST("/waffo-pancake/subscription-product-options", controller.ListWaffoPancakeSubscriptionProductOptions)
+			optionRoute.GET("/waffo-pancake/subscription-product-options", controller.ListWaffoPancakeSubscriptionProductOptions)
 		}
 
 		// LDAP 管理 (root only)
@@ -249,45 +249,8 @@ func SetApiRouter(router *gin.Engine) {
 			ratioSyncRoute.GET("/channels", controller.GetSyncableChannels)
 			ratioSyncRoute.POST("/fetch", controller.FetchUpstreamRatios)
 		}
-		channelRoute := apiRouter.Group("/channel")
-		{
-			channelRoute.GET("/", middleware.UserAuth(), controller.GetAllChannels)
-			channelRoute.GET("/search", middleware.UserAuth(), controller.SearchChannels)
-			channelRoute.GET("/models", middleware.UserAuth(), controller.ChannelListModels)
-			channelRoute.GET("/models_enabled", middleware.UserAuth(), controller.EnabledListModels)
-			channelRoute.GET("/owners", middleware.UserAuth(), controller.GetChannelOwners)
-			channelRoute.GET("/:id", middleware.UserAuth(), controller.GetChannel)
-			channelRoute.POST("/:id/key", middleware.RootAuth(), middleware.CriticalRateLimit(), middleware.DisableCache(), middleware.SecureVerificationRequired(), controller.GetChannelKey)
-			channelRoute.GET("/test", middleware.AdminAuth(), controller.TestAllChannels)
-			channelRoute.GET("/test/:id", middleware.UserAuth(), controller.TestChannel)
-			channelRoute.GET("/update_balance", middleware.AdminAuth(), controller.UpdateAllChannelsBalance)
-			channelRoute.GET("/update_balance/:id", middleware.AdminAuth(), controller.UpdateChannelBalance)
-			channelRoute.POST("/", middleware.UserAuth(), controller.AddChannel)
-			channelRoute.PUT("/", middleware.UserAuth(), controller.UpdateChannel)
-			channelRoute.DELETE("/disabled", middleware.AdminAuth(), controller.DeleteDisabledChannel)
-			channelRoute.POST("/tag/disabled", middleware.AdminAuth(), controller.DisableTagChannels)
-			channelRoute.POST("/tag/enabled", middleware.AdminAuth(), controller.EnableTagChannels)
-			channelRoute.PUT("/tag", middleware.AdminAuth(), controller.EditTagChannels)
-			channelRoute.DELETE("/:id", middleware.UserAuth(), controller.DeleteChannel)
-			channelRoute.POST("/batch", middleware.AdminAuth(), controller.DeleteChannelBatch)
-			channelRoute.POST("/fix", middleware.AdminAuth(), controller.FixChannelsAbilities)
-			channelRoute.GET("/fetch_models/:id", middleware.UserAuth(), controller.FetchUpstreamModels)
-			channelRoute.POST("/fetch_models", middleware.UserAuth(), controller.FetchModels)
-			channelRoute.POST("/:id/codex/refresh", middleware.AdminAuth(), controller.RefreshCodexChannelCredential)
-			channelRoute.GET("/:id/codex/usage", middleware.AdminAuth(), controller.GetCodexChannelUsage)
-			channelRoute.POST("/ollama/pull", middleware.AdminAuth(), controller.OllamaPullModel)
-			channelRoute.POST("/ollama/pull/stream", middleware.AdminAuth(), controller.OllamaPullModelStream)
-			channelRoute.DELETE("/ollama/delete", middleware.AdminAuth(), controller.OllamaDeleteModel)
-			channelRoute.GET("/ollama/version/:id", middleware.AdminAuth(), controller.OllamaVersion)
-			channelRoute.POST("/batch/tag", middleware.AdminAuth(), controller.BatchSetChannelTag)
-			channelRoute.GET("/tag/models", middleware.AdminAuth(), controller.GetTagModels)
-			channelRoute.POST("/copy/:id", middleware.UserAuth(), controller.CopyChannel)
-			channelRoute.POST("/multi_key/manage", middleware.AdminAuth(), controller.ManageMultiKeys)
-			channelRoute.POST("/upstream_updates/apply", middleware.AdminAuth(), controller.ApplyChannelUpstreamModelUpdates)
-			channelRoute.POST("/upstream_updates/apply_all", middleware.AdminAuth(), controller.ApplyAllChannelUpstreamModelUpdates)
-			channelRoute.POST("/upstream_updates/detect", middleware.AdminAuth(), controller.DetectChannelUpstreamModelUpdates)
-			channelRoute.POST("/upstream_updates/detect_all", middleware.AdminAuth(), controller.DetectAllChannelUpstreamModelUpdates)
-		}
+		registerChannelRoutes(apiRouter)
+		registerAuthzRoutes(apiRouter)
 
 		// 性能采样管理（仅管理员）
 		modelPerformanceAdminRoute := apiRouter.Group("/model-performance")
@@ -350,7 +313,9 @@ func SetApiRouter(router *gin.Engine) {
 		}
 		logRoute := apiRouter.Group("/log")
 		logRoute.GET("/", middleware.AdminAuth(), controller.GetAllLogs)
-		logRoute.DELETE("/", middleware.AdminAuth(), controller.DeleteHistoryLogs)
+		// Legacy synchronous direct-delete route used only by the classic frontend.
+		// TODO: remove once the classic frontend is removed; the default frontend uses /system-task/log-cleanup.
+		logRoute.DELETE("/", middleware.RootAuth(), controller.DeleteHistoryLogs)
 		logRoute.GET("/stat", middleware.AdminAuth(), controller.GetLogsStat)
 		logRoute.GET("/self/stat", middleware.UserAuth(), controller.GetLogsSelfStat)
 		logRoute.GET("/channel_affinity_usage_cache", middleware.AdminAuth(), controller.GetChannelAffinityUsageCacheStats)
@@ -360,10 +325,26 @@ func SetApiRouter(router *gin.Engine) {
 		logRoute.GET("/self/:id", middleware.UserAuth(), controller.GetLogDetail)
 		logRoute.GET("/:id", middleware.AdminAuth(), controller.GetLogDetail)
 
+		systemTaskRoute := apiRouter.Group("/system-task")
+		systemTaskRoute.Use(middleware.RootAuth())
+		{
+			systemTaskRoute.POST("/log-cleanup", controller.CreateLogCleanupSystemTask)
+			systemTaskRoute.GET("/list", controller.ListSystemTasks)
+			systemTaskRoute.GET("/current", controller.GetCurrentSystemTask)
+			systemTaskRoute.GET("/:task_id", controller.GetSystemTask)
+		}
+		systemInfoRoute := apiRouter.Group("/system-info")
+		systemInfoRoute.Use(middleware.RootAuth())
+		{
+			systemInfoRoute.GET("/instances", controller.ListSystemInstances)
+		}
+
 		dataRoute := apiRouter.Group("/data")
 		dataRoute.GET("/", middleware.AdminAuth(), controller.GetAllQuotaDates)
 		dataRoute.GET("/users", middleware.AdminAuth(), controller.GetQuotaDatesByUser)
 		dataRoute.GET("/self", middleware.UserAuth(), controller.GetUserQuotaDates)
+		dataRoute.GET("/flow", middleware.AdminAuth(), controller.GetAllFlowQuotaDates)
+		dataRoute.GET("/flow/self", middleware.UserAuth(), controller.GetUserFlowQuotaDates)
 
 		logRoute.Use(middleware.CORS(), middleware.CriticalRateLimit())
 		{

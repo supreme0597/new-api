@@ -12,8 +12,9 @@ type Store interface {
 var DBFuncs struct {
 	UpsertPerfMetric      func(metric *PerfMetricData) error
 	DeleteBefore          func(cutoffTs int64) error
-	GetPerfMetrics        func(modelName string, group string, startTs int64, endTs int64) ([]PerfMetricRow, error)
-	GetPerfMetricsSummary func(startTs int64, endTs int64, groups []string) ([]PerfMetricSummaryRow, error)
+	GetPerfMetrics                func(modelName string, group string, startTs int64, endTs int64) ([]PerfMetricRow, error)
+	GetPerfMetricsSummary         func(startTs int64, endTs int64, groups []string) ([]PerfMetricSummaryRow, error)
+	GetPerfMetricsSummaryBucketsAll func(startTs int64, endTs int64, groups []string) ([]PerfMetricSummaryBucketRow, error)
 }
 
 // PerfMetricData is the data needed for upserting a perf metric.
@@ -47,6 +48,17 @@ type PerfMetricRow struct {
 // PerfMetricSummaryRow is a summary row from the perf_metrics table.
 type PerfMetricSummaryRow struct {
 	ModelName      string
+	RequestCount   int64
+	SuccessCount   int64
+	TotalLatencyMs int64
+	OutputTokens   int64
+	GenerationMs   int64
+}
+
+// PerfMetricSummaryBucketRow is a summary bucket row from the perf_metrics table.
+type PerfMetricSummaryBucketRow struct {
+	ModelName      string
+	BucketTs       int64
 	RequestCount   int64
 	SuccessCount   int64
 	TotalLatencyMs int64
@@ -96,11 +108,12 @@ type QueryResult struct {
 }
 
 type ModelSummary struct {
-	ModelName    string  `json:"model_name"`
-	AvgLatencyMs int64   `json:"avg_latency_ms"`
-	SuccessRate  float64 `json:"success_rate"`
-	AvgTps       float64 `json:"avg_tps"`
-	RequestCount int64   `json:"-"`
+	ModelName          string    `json:"model_name"`
+	AvgLatencyMs       int64     `json:"avg_latency_ms"`
+	SuccessRate        float64   `json:"success_rate"`
+	AvgTps             float64   `json:"avg_tps"`
+	RecentSuccessRates []float64 `json:"recent_success_rates,omitempty"`
+	RequestCount       int64     `json:"-"`
 }
 
 type SummaryAllResult struct {

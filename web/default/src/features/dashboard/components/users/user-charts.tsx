@@ -23,7 +23,6 @@ import { Users, Loader2, ArrowUpDown } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { getRollingDateRange, type TimeGranularity } from '@/lib/time'
 import { VCHART_OPTION } from '@/lib/vchart'
-import { useThemeCustomization } from '@/context/theme-customization-provider'
 import { useTheme } from '@/context/theme-provider'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -34,12 +33,14 @@ import {
 } from '@/features/dashboard/constants'
 import {
   getDefaultDays,
-  getSavedGranularity,
   saveGranularity,
   processUserChartData,
   type UserChartMetric,
 } from '@/features/dashboard/lib'
-import type { ProcessedUserChartData } from '@/features/dashboard/types'
+import type {
+  ProcessedUserChartData,
+  UserChartsFilters,
+} from '@/features/dashboard/types'
 
 let themeManagerPromise: Promise<
   (typeof import('@visactor/vchart'))['ThemeManager']
@@ -64,27 +65,26 @@ const USER_CHARTS: {
 
 const TOP_USER_LIMIT_OPTIONS = [5, 10, 20, 50, 100]
 
-export function UserCharts({
-  metric = 'quota',
-  defaultDays,
-  hideTimeRangePresets = false,
-  vendor,
-  group
-}: {
+interface UserChartsProps {
+  filters: UserChartsFilters
+  onFiltersChange: (filters: UserChartsFilters) => void
   metric?: UserChartMetric
   defaultDays?: number
   hideTimeRangePresets?: boolean
   vendor?: string
   group?: string
-}) {
+}
+
+export function UserCharts(props: UserChartsProps) {
   const { t } = useTranslation()
   const { resolvedTheme } = useTheme()
-  const { customization } = useThemeCustomization()
   const [themeReady, setThemeReady] = useState(false)
   const themeManagerRef = useRef<
     (typeof import('@visactor/vchart'))['ThemeManager'] | null
   >(null)
 
+  const { metric, defaultDays, hideTimeRangePresets, vendor, group } = props
+  const onFiltersChange = props.onFiltersChange
   const [timeGranularity, setTimeGranularity] = useState<TimeGranularity>(() =>
     getSavedGranularity()
   )
@@ -100,26 +100,32 @@ export function UserCharts({
       start_timestamp: Math.floor(start.getTime() / 1000),
       end_timestamp: Math.floor(end.getTime() / 1000),
     }
-  })
+  }, [selectedRange])
 
-  const handleRangeChange = useCallback((days: number) => {
-    setSelectedRange(days)
-    const { start, end } = getRollingDateRange(days)
-    setTimeRange({
-      start_timestamp: Math.floor(start.getTime() / 1000),
-      end_timestamp: Math.floor(end.getTime() / 1000),
-    })
-  }, [])
+  const handleRangeChange = useCallback(
+    (days: number) => {
+      onFiltersChange({ ...props.filters, selectedRange: days })
+    },
+    [onFiltersChange, props.filters]
+  )
 
   const handleGranularityChange = useCallback(
     (g: TimeGranularity) => {
-      setTimeGranularity(g)
       saveGranularity(g)
-      // Granularity and time range are independent controls.
-      // Switching granularity only changes how data is grouped,
-      // not the time window being queried.
+      onFiltersChange({
+        ...props.filters,
+        timeGranularity: g,
+        selectedRange: getDefaultDays(g),
+      })
     },
-    []
+    [onFiltersChange, props.filters]
+  )
+
+  const handleTopUserLimitChange = useCallback(
+    (limit: number) => {
+      onFiltersChange({ ...props.filters, topUserLimit: limit })
+    },
+    [onFiltersChange, props.filters]
   )
 
   useEffect(() => {
@@ -232,7 +238,7 @@ export function UserCharts({
 
         <Tabs
           value={String(topUserLimit)}
-          onValueChange={(value) => setTopUserLimit(Number(value))}
+          onValueChange={(value) => handleTopUserLimitChange(Number(value))}
           className='shrink-0'
         >
           <TabsList>
@@ -295,7 +301,7 @@ export function UserCharts({
                   themeReady &&
                   spec && (
                     <VChart
-                      key={`user-${chart.value}-${topUserLimit}-${resolvedTheme}-${customization.preset}`}
+                      key={`user-${chart.value}-${topUserLimit}-${resolvedTheme}`}
                       spec={{
                         ...spec,
                         theme: resolvedTheme === 'dark' ? 'dark' : 'light',

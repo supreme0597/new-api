@@ -49,6 +49,26 @@ func RegisterPerfMetricsDB() {
 		return result, nil
 	}
 
+	perfmetrics.DBFuncs.GetPerfMetricsSummaryBucketsAll = func(startTs int64, endTs int64, groups []string) ([]perfmetrics.PerfMetricSummaryBucketRow, error) {
+		rows, err := GetPerfMetricsSummaryBucketsAll(startTs, endTs, groups)
+		if err != nil {
+			return nil, err
+		}
+		result := make([]perfmetrics.PerfMetricSummaryBucketRow, len(rows))
+		for i, row := range rows {
+			result[i] = perfmetrics.PerfMetricSummaryBucketRow{
+				ModelName:      row.ModelName,
+				BucketTs:       row.BucketTs,
+				RequestCount:   row.RequestCount,
+				SuccessCount:   row.SuccessCount,
+				TotalLatencyMs: row.TotalLatencyMs,
+				OutputTokens:   row.OutputTokens,
+				GenerationMs:   row.GenerationMs,
+			}
+		}
+		return result, nil
+	}
+
 	perfmetrics.DBFuncs.GetPerfMetricsSummary = func(startTs int64, endTs int64, groups []string) ([]perfmetrics.PerfMetricSummaryRow, error) {
 		rows, err := GetPerfMetricsSummaryAll(startTs, endTs, groups)
 		if err != nil {
