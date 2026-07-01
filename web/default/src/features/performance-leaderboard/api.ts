@@ -30,9 +30,12 @@ export async function getLeaderboard(params: LeaderboardParams = {}) {
 
 export async function getLeaderboardGroups(params: { hours?: number; start_time?: number; end_time?: number } = {}) {
   const searchParams = new URLSearchParams()
-  if (params.hours) searchParams.set('hours', String(params.hours))
-  if (params.start_time) searchParams.set('start_time', String(params.start_time))
-  if (params.end_time) searchParams.set('end_time', String(params.end_time))
+  if (params.start_time && params.end_time) {
+    searchParams.set('start_time', String(params.start_time))
+    searchParams.set('end_time', String(params.end_time))
+  } else if (params.hours) {
+    searchParams.set('hours', String(params.hours))
+  }
 
   const res = await api.get(`/api/model-performance/groups?${searchParams.toString()}`)
   return res.data

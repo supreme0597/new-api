@@ -46,9 +46,10 @@ export function useLeaderboardGroups(params: {
   startTime?: number
   endTime?: number
 } = {}) {
+  const { hours, startTime, endTime } = params
   return useQuery({
     queryKey: ['performance-leaderboard', 'groups', params],
-    queryFn: () => getLeaderboardGroups(params),
+    queryFn: () => getLeaderboardGroups({ hours, start_time: startTime, end_time: endTime }),
     staleTime: 10 * 60 * 1000,
   })
 }
