@@ -288,7 +288,8 @@ export function PerformanceLeaderboard() {
             open={detailDialogOpen}
             onOpenChange={handleCloseDetail}
             modelName={selectedModel || ''}
-            hours={hours}
+            startTime={startTime}
+            endTime={endTime}
           />
 
           {/* Performance Detail Sheet (for model name column) */}
@@ -302,7 +303,7 @@ export function PerformanceLeaderboard() {
                 <SheetDescription>{t('Model performance details')}</SheetDescription>
               </SheetHeader>
               <div className='flex-1 overflow-y-auto px-4 pt-11 pb-5 sm:px-6 sm:pt-12 sm:pb-6'>
-                {perfModel && <ModelDetailsPerformance model={perfModel} />}
+                {perfModel && <ModelDetailsPerformance model={perfModel} startTime={startTime} endTime={endTime} />}
               </div>
             </SheetContent>
           </Sheet>

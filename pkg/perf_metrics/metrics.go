@@ -76,14 +76,20 @@ func Record(sample Sample) {
 }
 
 func Query(params QueryParams) (QueryResult, error) {
-	if params.Hours <= 0 {
-		params.Hours = 24
+	var startTs, endTs int64
+	if params.StartTs > 0 && params.EndTs > 0 && params.EndTs > params.StartTs {
+		startTs = params.StartTs
+		endTs = params.EndTs
+	} else {
+		if params.Hours <= 0 {
+			params.Hours = 24
+		}
+		if params.Hours > 24*30 {
+			params.Hours = 24 * 30
+		}
+		endTs = time.Now().Unix()
+		startTs = endTs - int64(params.Hours)*3600
 	}
-	if params.Hours > 24*30 {
-		params.Hours = 24 * 30
-	}
-	endTs := time.Now().Unix()
-	startTs := endTs - int64(params.Hours)*3600
 
 	merged := map[bucketKey]counters{}
 	rows, err := DBFuncs.GetPerfMetrics(params.Model, params.Group, startTs, endTs)
@@ -121,15 +127,21 @@ func Query(params QueryParams) (QueryResult, error) {
 	return buildQueryResult(params.Model, merged), nil
 }
 
-func QuerySummaryAll(hours int, groups []string) (SummaryAllResult, error) {
-	if hours <= 0 {
-		hours = 24
+func QuerySummaryAll(hours int, groups []string, startTsOpt int64, endTsOpt int64) (SummaryAllResult, error) {
+	var startTs, endTs int64
+	if startTsOpt > 0 && endTsOpt > 0 && endTsOpt > startTsOpt {
+		startTs = startTsOpt
+		endTs = endTsOpt
+	} else {
+		if hours <= 0 {
+			hours = 24
+		}
+		if hours > 24*30 {
+			hours = 24 * 30
+		}
+		endTs = time.Now().Unix()
+		startTs = endTs - int64(hours)*3600
 	}
-	if hours > 24*30 {
-		hours = 24 * 30
-	}
-	endTs := time.Now().Unix()
-	startTs := endTs - int64(hours)*3600
 	allowedGroups := allowedGroupSet(groups)
 
 	rows, err := DBFuncs.GetPerfMetricsSummary(startTs, endTs, groups)

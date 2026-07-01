@@ -67,9 +67,11 @@ type Sample struct {
 }
 
 type QueryParams struct {
-	Model string
-	Group string
-	Hours int
+	Model   string
+	Group   string
+	Hours   int
+	StartTs int64 // 可选，绝对时间戳（秒），同时设置 StartTs/EndTs 时优先于 Hours
+	EndTs   int64 // 可选，绝对时间戳（秒）
 }
 
 type BucketPoint struct {

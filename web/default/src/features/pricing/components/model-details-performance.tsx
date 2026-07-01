@@ -18,8 +18,9 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { AlertTriangle, HeartPulse, Timer } from 'lucide-react'
+import { AlertTriangle, HeartPulse, Timer, Clock } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import dayjs from '@/lib/dayjs'
 import { cn } from '@/lib/utils'
 import {
   StaticDataTable,
@@ -150,11 +151,11 @@ function average(
   )
 }
 
-export function ModelDetailsPerformance(props: { model: PricingModel }) {
+export function ModelDetailsPerformance(props: { model: PricingModel; startTime?: number; endTime?: number }) {
   const { t } = useTranslation()
   const metricsQuery = useQuery({
-    queryKey: ['perf-metrics', props.model.model_name],
-    queryFn: () => getPerfMetrics(props.model.model_name, undefined, 24),
+    queryKey: ['perf-metrics', props.model.model_name, props.startTime, props.endTime],
+    queryFn: () => getPerfMetrics(props.model.model_name, undefined, 24, props.startTime, props.endTime),
     staleTime: 60 * 1000,
   })
   const groups = useMemo(
@@ -214,8 +215,23 @@ export function ModelDetailsPerformance(props: { model: PricingModel }) {
     intent = 'default'
   }
 
+  const timeRangeLabel = useMemo(() => {
+    if (props.startTime && props.endTime) {
+      const fmt = 'YYYY-MM-DD HH:mm'
+      return `${dayjs(props.startTime).format(fmt)} ~ ${dayjs(props.endTime).format(fmt)}`
+    }
+    return t('Last 24 hours')
+  }, [props.startTime, props.endTime, t])
+
   return (
     <div className='flex flex-col gap-4'>
+      <div className='flex items-center justify-between'>
+        <div className='text-muted-foreground/70 inline-flex items-center gap-1.5 text-xs'>
+          <Clock className='size-3' />
+          <span className='font-medium'>{t('Time Range')}:</span>{' '}
+          <span className='font-mono'>{timeRangeLabel}</span>
+        </div>
+      </div>
       <div className='grid grid-cols-1 gap-2 sm:grid-cols-3'>
         <StatCard
           icon={Timer}

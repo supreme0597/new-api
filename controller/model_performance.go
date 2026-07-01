@@ -159,13 +159,24 @@ func GetModelPerformanceDetail(c *gin.Context) {
 	}
 
 	hours, _ := strconv.Atoi(c.DefaultQuery("hours", "24"))
+	startTimeMs, _ := strconv.ParseInt(c.Query("start_time"), 10, 64)
+	endTimeMs, _ := strconv.ParseInt(c.Query("end_time"), 10, 64)
+
 	if hours < 1 {
 		hours = 24
 	}
 
 	// 计算时间范围
-	endTs := time.Now().Unix()
-	startTs := endTs - int64(hours)*3600
+	var startTs, endTs int64
+	if startTimeMs > 0 && endTimeMs > 0 && endTimeMs > startTimeMs {
+		// 优先使用绝对时间（毫秒时间戳），与 GetModelPerformanceList 一致
+		startTs = startTimeMs / 1000
+		endTs = endTimeMs / 1000
+	} else {
+		// 回退到 hours 相对时间
+		endTs = time.Now().Unix()
+		startTs = endTs - int64(hours)*3600
+	}
 
 	detail, err := model.GetModelPerformanceDetail(modelName, startTs, endTs)
 	if err != nil {

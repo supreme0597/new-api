@@ -75,22 +75,28 @@ function fromInputValue(value: string): Date | undefined {
 
 function LogTableContent({
   modelName,
-  hours,
+  startTime,
+  endTime,
 }: {
   modelName: string
-  hours: number
+  startTime?: number
+  endTime?: number
 }) {
   const { t } = useTranslation()
   const columns = useCommonLogsColumns(false)
 
   const now = useMemo(() => dayjs(), [])
   const defaultStart = useMemo(
-    () => dayjs().subtract(hours, 'hour').toDate(),
-    [hours]
+    () => (startTime ? new Date(startTime) : dayjs().subtract(24, 'hour').toDate()),
+    [startTime]
+  )
+  const defaultEnd = useMemo(
+    () => (endTime ? new Date(endTime) : now.toDate()),
+    [endTime]
   )
 
   const [start, setStart] = useState<Date | undefined>(defaultStart)
-  const [end, setEnd] = useState<Date | undefined>(now.toDate())
+  const [end, setEnd] = useState<Date | undefined>(defaultEnd)
 
   const [appliedStart, setAppliedStart] = useState(start)
   const [appliedEnd, setAppliedEnd] = useState(end)
@@ -273,16 +279,26 @@ type ModelDetailDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   modelName: string
-  hours: number
+  startTime?: number
+  endTime?: number
 }
 
 export function ModelDetailDialog({
   open,
   onOpenChange,
   modelName,
-  hours,
+  startTime,
+  endTime,
 }: ModelDetailDialogProps) {
   const { t } = useTranslation()
+
+  const timeRangeLabel = useMemo(() => {
+    if (startTime && endTime) {
+      const fmt = 'YYYY-MM-DD HH:mm'
+      return `${dayjs(startTime).format(fmt)} ~ ${dayjs(endTime).format(fmt)}`
+    }
+    return t('No time filter')
+  }, [startTime, endTime, t])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -292,14 +308,15 @@ export function ModelDetailDialog({
             <Server className='h-5 w-5 text-muted-foreground' />
             {modelName}
           </DialogTitle>
-          <DialogDescription className='text-sm'>
-            {t('Request logs for the last {{hours}} hours', { hours })}
+          <DialogDescription className='text-sm flex items-center gap-1'>
+            <span className='font-medium'>{t('Time Range')}:</span>
+            <span className='font-mono text-xs'>{timeRangeLabel}</span>
           </DialogDescription>
         </DialogHeader>
 
         <div className='flex flex-col flex-1 min-h-0'>
           <UsageLogsProvider>
-            <LogTableContent modelName={modelName} hours={hours} />
+            <LogTableContent modelName={modelName} startTime={startTime} endTime={endTime} />
           </UsageLogsProvider>
         </div>
       </DialogContent>
