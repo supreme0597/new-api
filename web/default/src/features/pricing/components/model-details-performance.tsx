@@ -151,11 +151,11 @@ function average(
   )
 }
 
-export function ModelDetailsPerformance(props: { model: PricingModel; startTime?: number; endTime?: number }) {
+export function ModelDetailsPerformance(props: { model: PricingModel; startTime?: number; endTime?: number; group?: string }) {
   const { t } = useTranslation()
   const metricsQuery = useQuery({
-    queryKey: ['perf-metrics', props.model.model_name, props.startTime, props.endTime],
-    queryFn: () => getPerfMetrics(props.model.model_name, undefined, 24, props.startTime, props.endTime),
+    queryKey: ['perf-metrics', props.model.model_name, props.group, props.startTime, props.endTime],
+    queryFn: () => getPerfMetrics(props.model.model_name, props.group, 24, props.startTime, props.endTime),
     staleTime: 60 * 1000,
   })
   const groups = useMemo(
@@ -182,6 +182,14 @@ export function ModelDetailsPerformance(props: { model: PricingModel; startTime?
     }
     return map
   }, [groups])
+
+  const timeRangeLabel = useMemo(() => {
+    if (props.startTime && props.endTime) {
+      const fmt = 'YYYY-MM-DD HH:mm'
+      return `${dayjs(props.startTime).format(fmt)} ~ ${dayjs(props.endTime).format(fmt)}`
+    }
+    return t('Last 24 hours')
+  }, [props.startTime, props.endTime, t])
 
   if (metricsQuery.isLoading || performances.length === 0) {
     return (
@@ -214,14 +222,6 @@ export function ModelDetailsPerformance(props: { model: PricingModel; startTime?
   } else if (successRate >= 99) {
     intent = 'default'
   }
-
-  const timeRangeLabel = useMemo(() => {
-    if (props.startTime && props.endTime) {
-      const fmt = 'YYYY-MM-DD HH:mm'
-      return `${dayjs(props.startTime).format(fmt)} ~ ${dayjs(props.endTime).format(fmt)}`
-    }
-    return t('Last 24 hours')
-  }, [props.startTime, props.endTime, t])
 
   return (
     <div className='flex flex-col gap-4'>

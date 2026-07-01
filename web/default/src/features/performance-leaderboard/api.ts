@@ -2,6 +2,7 @@ import { api } from '@/lib/api'
 
 export interface LeaderboardParams {
   vendor_id?: number
+  group?: string
   hours?: number
   start_time?: number  // 毫秒时间戳
   end_time?: number    // 毫秒时间戳
@@ -14,6 +15,7 @@ export interface LeaderboardParams {
 export async function getLeaderboard(params: LeaderboardParams = {}) {
   const searchParams = new URLSearchParams()
   if (params.vendor_id) searchParams.set('vendor_id', String(params.vendor_id))
+  if (params.group) searchParams.set('group', params.group)
   if (params.hours) searchParams.set('hours', String(params.hours))
   if (params.start_time) searchParams.set('start_time', String(params.start_time))
   if (params.end_time) searchParams.set('end_time', String(params.end_time))
@@ -23,6 +25,16 @@ export async function getLeaderboard(params: LeaderboardParams = {}) {
   if (params.sort_order) searchParams.set('sort_order', params.sort_order)
 
   const res = await api.get(`/api/model-performance/list?${searchParams.toString()}`)
+  return res.data
+}
+
+export async function getLeaderboardGroups(params: { hours?: number; start_time?: number; end_time?: number } = {}) {
+  const searchParams = new URLSearchParams()
+  if (params.hours) searchParams.set('hours', String(params.hours))
+  if (params.start_time) searchParams.set('start_time', String(params.start_time))
+  if (params.end_time) searchParams.set('end_time', String(params.end_time))
+
+  const res = await api.get(`/api/model-performance/groups?${searchParams.toString()}`)
   return res.data
 }
 

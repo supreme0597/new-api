@@ -15,6 +15,7 @@ import (
 func GetModelPerformanceList(c *gin.Context) {
 	vendorId, _ := strconv.Atoi(c.DefaultQuery("vendor_id", "0"))
 	source := c.DefaultQuery("source", "")
+	group := c.Query("group")
 	hours, _ := strconv.Atoi(c.DefaultQuery("hours", "24"))
 	startTimeMs, _ := strconv.ParseInt(c.Query("start_time"), 10, 64)
 	endTimeMs, _ := strconv.ParseInt(c.Query("end_time"), 10, 64)
@@ -52,7 +53,7 @@ func GetModelPerformanceList(c *gin.Context) {
 		startTs = endTs - int64(hours)*3600
 	}
 
-	items, err := model.GetLeaderboardData(startTs, endTs, vendorId, sortBy, sortOrder)
+	items, err := model.GetLeaderboardData(startTs, endTs, vendorId, group, sortBy, sortOrder)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"success": false,
@@ -158,6 +159,7 @@ func GetModelPerformanceDetail(c *gin.Context) {
 		return
 	}
 
+	group := c.Query("group")
 	hours, _ := strconv.Atoi(c.DefaultQuery("hours", "24"))
 	startTimeMs, _ := strconv.ParseInt(c.Query("start_time"), 10, 64)
 	endTimeMs, _ := strconv.ParseInt(c.Query("end_time"), 10, 64)
@@ -178,7 +180,7 @@ func GetModelPerformanceDetail(c *gin.Context) {
 		startTs = endTs - int64(hours)*3600
 	}
 
-	detail, err := model.GetModelPerformanceDetail(modelName, startTs, endTs)
+	detail, err := model.GetModelPerformanceDetail(modelName, group, startTs, endTs)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"success": false,
@@ -190,5 +192,39 @@ func GetModelPerformanceDetail(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"data":    detail,
+	})
+}
+
+// GetLeaderboardGroups 获取排行榜中存在的分组列表
+func GetLeaderboardGroups(c *gin.Context) {
+	hours, _ := strconv.Atoi(c.DefaultQuery("hours", "24"))
+	startTimeMs, _ := strconv.ParseInt(c.Query("start_time"), 10, 64)
+	endTimeMs, _ := strconv.ParseInt(c.Query("end_time"), 10, 64)
+
+	if hours < 1 {
+		hours = 24
+	}
+
+	var startTs, endTs int64
+	if startTimeMs > 0 && endTimeMs > 0 && endTimeMs > startTimeMs {
+		startTs = startTimeMs / 1000
+		endTs = endTimeMs / 1000
+	} else {
+		endTs = time.Now().Unix()
+		startTs = endTs - int64(hours)*3600
+	}
+
+	groups, err := model.GetDistinctLeaderboardGroups(startTs, endTs)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"message": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    groups,
 	})
 }

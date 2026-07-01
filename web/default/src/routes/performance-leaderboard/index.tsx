@@ -4,6 +4,7 @@ import { PerformanceLeaderboard } from '@/features/performance-leaderboard'
 
 const leaderboardSearchSchema = z.object({
   vendor_id: z.string().optional().catch(undefined),
+  group: z.string().optional().catch(undefined),
   hours: z.number().optional().catch(24),
   start_time: z.number().optional().catch(undefined),
   end_time: z.number().optional().catch(undefined),

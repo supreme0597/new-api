@@ -92,6 +92,7 @@ func GetPerfMetricsSummaryAll(startTs int64, endTs int64, groups []string) ([]Pe
 type LeaderboardItem struct {
 	Rank        int     `json:"rank"`
 	ModelName   string  `json:"model_name"`
+	Group       string  `json:"group,omitempty"`
 	VendorName  string  `json:"vendor_name"`
 	AvgTps      float64 `json:"avg_tps"`
 	AvgTtftMs   int64   `json:"avg_ttft_ms"`
@@ -113,7 +114,8 @@ type LeaderboardAggRow struct {
 
 // GetLeaderboardData 获取排行榜数据（从 perf_metrics 聚合）
 // 按 model_name 聚合，再从 models + vendors 表获取 vendor_name
-func GetLeaderboardData(startTs int64, endTs int64, vendorId int, sortBy string, sortOrder string) ([]LeaderboardItem, error) {
+// group 非空时，按指定分组过滤（同一模型不同分组分开排名）
+func GetLeaderboardData(startTs int64, endTs int64, vendorId int, group string, sortBy string, sortOrder string) ([]LeaderboardItem, error) {
 	// Step 1: 从 perf_metrics 按 model_name 聚合
 	var aggRows []LeaderboardAggRow
 	query := DB.Model(&PerfMetric{}).
@@ -121,6 +123,10 @@ func GetLeaderboardData(startTs int64, endTs int64, vendorId int, sortBy string,
 		Where("bucket_ts >= ? AND bucket_ts <= ?", startTs, endTs).
 		Group("model_name").
 		Having("SUM(request_count) > 0")
+
+	if group != "" {
+		query = query.Where(commonGroupCol+" = ?", group)
+	}
 
 	if err := query.Find(&aggRows).Error; err != nil {
 		return nil, err
@@ -198,6 +204,7 @@ func GetLeaderboardData(startTs int64, endTs int64, vendorId int, sortBy string,
 
 		items = append(items, LeaderboardItem{
 			ModelName:   row.ModelName,
+			Group:       group,
 			VendorName:  vendorName,
 			AvgTps:      avgTps,
 			AvgTtftMs:   avgTtftMs,
@@ -282,12 +289,28 @@ type ModelPerformanceDetail struct {
 	} `json:"time_range"`
 }
 
+// GetDistinctLeaderboardGroups 获取排行榜中实际存在的分组列表
+func GetDistinctLeaderboardGroups(startTs int64, endTs int64) ([]string, error) {
+	var groups []string
+	err := DB.Model(&PerfMetric{}).
+		Select("DISTINCT "+commonGroupCol).
+		Where("bucket_ts >= ? AND bucket_ts <= ?", startTs, endTs).
+		Where(commonGroupCol+" != ''").
+		Order(commonGroupCol + " ASC").
+		Pluck(commonGroupCol, &groups).Error
+	return groups, err
+}
+
 // GetModelPerformanceDetail 获取指定模型在指定时间范围内的性能详情
 // 按 group 和 bucket_ts 分组返回详细记录
-func GetModelPerformanceDetail(modelName string, startTs int64, endTs int64) (*ModelPerformanceDetail, error) {
+// group 非空时，只返回指定分组的记录
+func GetModelPerformanceDetail(modelName string, group string, startTs int64, endTs int64) (*ModelPerformanceDetail, error) {
 	var metrics []PerfMetric
-	err := DB.Where("model_name = ? AND bucket_ts >= ? AND bucket_ts <= ?", modelName, startTs, endTs).
-		Order(fmt.Sprintf("bucket_ts DESC, %s ASC", commonGroupCol)).
+	query := DB.Where("model_name = ? AND bucket_ts >= ? AND bucket_ts <= ?", modelName, startTs, endTs)
+	if group != "" {
+		query = query.Where(commonGroupCol+" = ?", group)
+	}
+	err := query.Order(fmt.Sprintf("bucket_ts DESC, %s ASC", commonGroupCol)).
 		Find(&metrics).Error
 	if err != nil {
 		return nil, err

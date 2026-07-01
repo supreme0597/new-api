@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query'
-import { getLeaderboard, getLeaderboardVendors } from '../api'
+import { getLeaderboard, getLeaderboardGroups, getLeaderboardVendors } from '../api'
 import type { LeaderboardTimeRange } from '../types'
 
 export function useLeaderboard(params: {
   vendorId?: number
+  group?: string
   hours?: LeaderboardTimeRange
   startTime?: number
   endTime?: number
@@ -17,6 +18,7 @@ export function useLeaderboard(params: {
     queryFn: () =>
       getLeaderboard({
         vendor_id: params.vendorId,
+        group: params.group,
         hours: params.hours,
         start_time: params.startTime,
         end_time: params.endTime,
@@ -35,6 +37,18 @@ export function useLeaderboardVendors() {
   return useQuery({
     queryKey: ['performance-leaderboard', 'vendors'],
     queryFn: getLeaderboardVendors,
+    staleTime: 10 * 60 * 1000,
+  })
+}
+
+export function useLeaderboardGroups(params: {
+  hours?: LeaderboardTimeRange
+  startTime?: number
+  endTime?: number
+} = {}) {
+  return useQuery({
+    queryKey: ['performance-leaderboard', 'groups', params],
+    queryFn: () => getLeaderboardGroups(params),
     staleTime: 10 * 60 * 1000,
   })
 }

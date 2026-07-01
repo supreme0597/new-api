@@ -24,6 +24,7 @@ func SetApiRouter(router *gin.Engine) {
 			modelPerformanceRoute.GET("/list", controller.GetModelPerformanceList)
 			modelPerformanceRoute.GET("/vendors", controller.GetModelPerformanceVendors)
 			modelPerformanceRoute.GET("/sources", controller.GetModelPerformanceVendors)
+			modelPerformanceRoute.GET("/groups", controller.GetLeaderboardGroups)
 			modelPerformanceRoute.GET("/detail", controller.GetModelPerformanceDetail)
 		}
 	}

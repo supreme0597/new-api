@@ -27,7 +27,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { CompactDateTimeRangePicker } from '@/features/usage-logs/components/compact-date-time-range-picker'
-import { useLeaderboard, useLeaderboardVendors } from './hooks/use-leaderboard'
+import { useLeaderboard, useLeaderboardVendors, useLeaderboardGroups } from './hooks/use-leaderboard'
 import type { LeaderboardTimeRange, LeaderboardItem } from './types'
 import { MetricTooltip } from './metrics-legend'
 import { ModelDetailDialog } from './components/model-detail-dialog'
@@ -67,6 +67,7 @@ export function PerformanceLeaderboard() {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const vendorId = search.vendor_id ? Number(search.vendor_id) : undefined
+  const group = (search.group as string) || undefined
   const hours = (search.hours as LeaderboardTimeRange) || 24
   const now = dayjs()
   const defaultStartTime = now.subtract(5, 'minute').valueOf()
@@ -79,6 +80,7 @@ export function PerformanceLeaderboard() {
 
   const leaderboardQuery = useLeaderboard({
     vendorId,
+    group,
     hours,
     startTime,
     endTime,
@@ -88,9 +90,11 @@ export function PerformanceLeaderboard() {
     sortOrder,
   })
   const vendorsQuery = useLeaderboardVendors()
+  const groupsQuery = useLeaderboardGroups({ hours, startTime, endTime })
 
   const data = leaderboardQuery.data?.data
   const vendors = vendorsQuery.data?.data || []
+  const groups = groupsQuery.data?.data || []
 
   const handleVendorChange = (value: string) => {
     navigate({
@@ -98,6 +102,17 @@ export function PerformanceLeaderboard() {
       search: (prev: Record<string, unknown>) => ({
         ...prev,
         vendor_id: value === '__all__' ? undefined : value,
+        page: 1,
+      }),
+    })
+  }
+
+  const handleGroupChange = (value: string) => {
+    navigate({
+      to: '/performance-leaderboard',
+      search: (prev: Record<string, unknown>) => ({
+        ...prev,
+        group: value === '__all__' ? undefined : value,
         page: 1,
       }),
     })
@@ -241,6 +256,32 @@ export function PerformanceLeaderboard() {
                 </SelectContent>
               </Select>
 
+              <Select
+                items={[
+                  { value: '__all__', label: t('All Groups') },
+                  ...groups.map((g: string) => ({
+                    value: g,
+                    label: g,
+                  })),
+                ]}
+                onValueChange={handleGroupChange}
+                value={group || '__all__'}
+              >
+                <SelectTrigger className='w-[160px]'>
+                  <SelectValue placeholder={t('All Groups')} />
+                </SelectTrigger>
+                <SelectContent alignItemWithTrigger={false}>
+                  <SelectItem value='__all__'>{t('All Groups')}</SelectItem>
+                  <SelectGroup>
+                    {groups.map((g: string) => (
+                      <SelectItem key={g} value={g}>
+                        {g}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+
               <CompactDateTimeRangePicker
                 start={startTime ? new Date(startTime) : undefined}
                 end={endTime ? new Date(endTime) : undefined}
@@ -303,7 +344,7 @@ export function PerformanceLeaderboard() {
                 <SheetDescription>{t('Model performance details')}</SheetDescription>
               </SheetHeader>
               <div className='flex-1 overflow-y-auto px-4 pt-11 pb-5 sm:px-6 sm:pt-12 sm:pb-6'>
-                {perfModel && <ModelDetailsPerformance model={perfModel} startTime={startTime} endTime={endTime} />}
+                {perfModel && <ModelDetailsPerformance model={perfModel} startTime={startTime} endTime={endTime} group={group} />}
               </div>
             </SheetContent>
           </Sheet>

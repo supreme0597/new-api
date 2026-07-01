@@ -1,6 +1,7 @@
 export interface LeaderboardItem {
   rank: number
   model_name: string
+  group?: string
   vendor_name: string
   avg_tps: number
   avg_ttft_ms: number
