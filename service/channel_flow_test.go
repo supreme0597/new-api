@@ -397,6 +397,7 @@ func TestRedisFlowBackendReleaseDispatchesWaitingRequest(t *testing.T) {
 	backend, pool, cleanup := newRedisFlowBackendForTest(t)
 	defer cleanup()
 	pool.MaxQueueSize = 2
+	pool.QueueTimeoutMs = 5000
 
 	guard1, _, err := backend.Acquire(context.Background(), AcquireRequest{
 		RequestID:      "redis-req-1",
@@ -447,6 +448,7 @@ func TestRedisFlowBackendAllowsQueueUpToMaxQueueSize(t *testing.T) {
 	backend, pool, cleanup := newRedisFlowBackendForTest(t)
 	defer cleanup()
 	pool.MaxQueueSize = 2
+	pool.QueueTimeoutMs = 5000
 
 	guard1, _, err := backend.Acquire(context.Background(), AcquireRequest{
 		RequestID:      "redis-queue-limit-1",
@@ -1482,6 +1484,141 @@ func TestRedisFlowBackendDirtyHeadCleanup(t *testing.T) {
 		require.NoError(t, err)
 	case <-time.After(2 * time.Second):
 		t.Fatal("valid request was blocked behind stale waiting head")
+	}
+}
+
+func TestRedisFlowBackendAbandonedWaitingHeadDoesNotBlockEligibleRequest(t *testing.T) {
+	backend, pool, cleanup := newRedisFlowBackendForTest(t)
+	defer cleanup()
+	pool.MaxInflight = 1
+	pool.MaxQueueSize = 5
+	pool.QueueTimeoutMs = 2000
+	pool.LeaseMs = 5000
+
+	guard1, _, err := backend.Acquire(context.Background(), AcquireRequest{
+		RequestID:      "redis-abandoned-head-running",
+		Pool:           pool,
+		UserID:         1,
+		QueueTimeoutMs: pool.QueueTimeoutMs,
+	})
+	require.NoError(t, err)
+
+	keys := redisKeysForPool(pool)
+	nowMs := time.Now().UnixMilli()
+	abandonedReq := AcquireRequest{
+		RequestID:      "redis-abandoned-head-stale",
+		Pool:           pool,
+		UserID:         2,
+		QueueTimeoutMs: pool.QueueTimeoutMs,
+	}
+	require.NoError(t, common.RDB.ZAdd(context.Background(), keys.Waiting, &redis.Z{
+		Score:  1,
+		Member: abandonedReq.RequestID,
+	}).Err())
+	require.NoError(t, common.RDB.ZAdd(context.Background(), keys.Deadline, &redis.Z{
+		Score:  float64(nowMs + int64(time.Hour/time.Millisecond)),
+		Member: abandonedReq.RequestID,
+	}).Err())
+	require.NoError(t, common.RDB.ZAdd(context.Background(), keys.subjectWaiting("user_id", abandonedReq.UserID), &redis.Z{
+		Score:  1,
+		Member: abandonedReq.RequestID,
+	}).Err())
+	pipe := common.RDB.TxPipeline()
+	backend.writeRequestMeta(context.Background(), pipe, keys, abandonedReq, "waiting", nowMs, 0, 0)
+	_, err = pipe.Exec(context.Background())
+	require.NoError(t, err)
+	require.NoError(t, common.RDB.Set(context.Background(), keys.Seq, 1, 0).Err())
+
+	resultCh := make(chan error, 1)
+	go func() {
+		guard2, decision2, err := backend.Acquire(context.Background(), AcquireRequest{
+			RequestID:      "redis-abandoned-head-live",
+			Pool:           pool,
+			UserID:         3,
+			QueueTimeoutMs: pool.QueueTimeoutMs,
+		})
+		if err != nil {
+			resultCh <- err
+			return
+		}
+		if guard2 == nil || decision2 == nil || !decision2.Admitted || !decision2.Queued {
+			resultCh <- fmt.Errorf("live request was not admitted after abandoned head cleanup: decision=%+v guard=%v", decision2, guard2)
+			return
+		}
+		_ = guard2.Release(context.Background())
+		resultCh <- nil
+	}()
+
+	eventuallyFlowStatus(t, backend, pool, func(status PoolStatus) bool {
+		return status.Running == 1 && status.Queued == 1 && status.AbandonedWaitingCleanups >= 1
+	})
+	require.NoError(t, guard1.Release(context.Background()))
+
+	select {
+	case err := <-resultCh:
+		require.NoError(t, err)
+	case <-time.After(3 * time.Second):
+		t.Fatal("live request was blocked behind abandoned waiting head")
+	}
+
+	status, err := backend.Status(context.Background(), pool)
+	require.NoError(t, err)
+	require.Equal(t, 0, status.Queued)
+	require.GreaterOrEqual(t, status.AbandonedWaitingCleanups, int64(1))
+}
+
+func TestRedisFlowBackendActiveWaiterRefreshesLiveness(t *testing.T) {
+	backend, pool, cleanup := newRedisFlowBackendForTest(t)
+	defer cleanup()
+	pool.MaxInflight = 1
+	pool.MaxQueueSize = 5
+	pool.QueueTimeoutMs = int64((redisFlowWaiterTTL + time.Second) / time.Millisecond)
+	pool.LeaseMs = int64((redisFlowWaiterTTL + 2*time.Second) / time.Millisecond)
+
+	guard1, _, err := backend.Acquire(context.Background(), AcquireRequest{
+		RequestID:      "redis-live-waiter-running",
+		Pool:           pool,
+		UserID:         1,
+		QueueTimeoutMs: pool.QueueTimeoutMs,
+	})
+	require.NoError(t, err)
+
+	resultCh := make(chan error, 1)
+	go func() {
+		guard2, decision2, err := backend.Acquire(context.Background(), AcquireRequest{
+			RequestID:      "redis-live-waiter-queued",
+			Pool:           pool,
+			UserID:         2,
+			QueueTimeoutMs: pool.QueueTimeoutMs,
+		})
+		if err != nil {
+			resultCh <- err
+			return
+		}
+		if guard2 == nil || decision2 == nil || !decision2.Admitted || !decision2.Queued {
+			resultCh <- fmt.Errorf("live waiter was not admitted after long wait: decision=%+v guard=%v", decision2, guard2)
+			return
+		}
+		_ = guard2.Release(context.Background())
+		resultCh <- nil
+	}()
+
+	eventuallyFlowStatus(t, backend, pool, func(status PoolStatus) bool {
+		return status.Running == 1 && status.Queued == 1
+	})
+	time.Sleep(redisFlowWaiterTTL + 250*time.Millisecond)
+
+	keys := redisKeysForPool(pool)
+	exists, err := common.RDB.Exists(context.Background(), keys.waiter("redis-live-waiter-queued")).Result()
+	require.NoError(t, err)
+	require.Equal(t, int64(1), exists, "active waiting acquire should refresh waiter liveness")
+
+	require.NoError(t, guard1.Release(context.Background()))
+	select {
+	case err := <-resultCh:
+		require.NoError(t, err)
+	case <-time.After(2 * time.Second):
+		t.Fatal("live waiter was not dispatched after release")
 	}
 }
 

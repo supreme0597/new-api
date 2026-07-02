@@ -22,6 +22,7 @@ const (
 	redisFlowPollMax         = 50 * time.Millisecond
 	redisFlowCleanupBatch    = 128
 	redisFlowRequestTTLExtra = time.Hour
+	redisFlowWaiterTTL       = 5 * time.Second
 )
 
 // redisFlowBackend implements Redis-backed channel flow state.
@@ -31,10 +32,11 @@ const (
 // work to every WATCH path; callers needing pool-level visibility should sample
 // PoolStatus over time and compute deltas per pool.
 type redisFlowBackend struct {
-	pollMin       time.Duration
-	pollMax       time.Duration
-	watchAttempts atomic.Int64
-	txConflicts   atomic.Int64
+	pollMin                  time.Duration
+	pollMax                  time.Duration
+	watchAttempts            atomic.Int64
+	txConflicts              atomic.Int64
+	abandonedWaitingCleanups atomic.Int64
 }
 
 type redisFlowKeys struct {
@@ -143,6 +145,9 @@ func (b *redisFlowBackend) Acquire(ctx context.Context, req AcquireRequest) (Flo
 			return nil, decision, redisAcquireContextError(decision.RejectCode, err)
 		}
 
+		if enqueued {
+			_ = b.refreshWaitingLiveness(acquireCtx, rdb, keys, req.RequestID)
+		}
 		_ = b.cleanupExpired(acquireCtx, rdb, keys, req.Pool)
 		attempt, err := b.tryAcquireOnce(acquireCtx, rdb, keys, req, enqueued, sequenceScore, queuedAt)
 		if err != nil {
@@ -232,19 +237,20 @@ func (b *redisFlowBackend) Status(ctx context.Context, pool model.ChannelFlowPoo
 		}
 	}
 	return PoolStatus{
-		PoolKey:        pool.PoolKey,
-		Name:           pool.Name,
-		Backend:        pool.Backend,
-		Health:         flowHealth(int(running), pool.MaxInflight, int(queued), pool.MaxQueueSize),
-		ScheduleActive: pool.Enabled && pool.IsScheduleActiveAt(time.Now()),
-		Running:        int(running),
-		MaxInflight:    pool.MaxInflight,
-		Queued:         int(queued),
-		MaxQueueSize:   pool.MaxQueueSize,
-		OldestWaitMs:   oldestWaitMs,
-		ConfigVersion:  pool.ConfigVersion,
-		WatchAttempts:  b.watchAttempts.Load(),
-		TxConflicts:    b.txConflicts.Load(),
+		PoolKey:                  pool.PoolKey,
+		Name:                     pool.Name,
+		Backend:                  pool.Backend,
+		Health:                   flowHealth(int(running), pool.MaxInflight, int(queued), pool.MaxQueueSize),
+		ScheduleActive:           pool.Enabled && pool.IsScheduleActiveAt(time.Now()),
+		Running:                  int(running),
+		MaxInflight:              pool.MaxInflight,
+		Queued:                   int(queued),
+		MaxQueueSize:             pool.MaxQueueSize,
+		OldestWaitMs:             oldestWaitMs,
+		ConfigVersion:            pool.ConfigVersion,
+		WatchAttempts:            b.watchAttempts.Load(),
+		TxConflicts:              b.txConflicts.Load(),
+		AbandonedWaitingCleanups: b.abandonedWaitingCleanups.Load(),
 	}, nil
 }
 
@@ -375,6 +381,7 @@ func (b *redisFlowBackend) tryAcquireOnce(
 						Member: req.RequestID,
 					})
 				}
+				pipe.Set(ctx, keys.waiter(req.RequestID), "1", redisFlowWaiterTTL)
 				b.writeRequestMeta(ctx, pipe, keys, req, "waiting", enqueuedAtMs, 0, 0)
 				return nil
 			})
@@ -426,6 +433,7 @@ func (b *redisFlowBackend) tryAcquireOnce(
 		_, err = tx.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
 			pipe.ZRem(ctx, keys.Waiting, req.RequestID)
 			pipe.ZRem(ctx, keys.Deadline, req.RequestID)
+			pipe.Del(ctx, keys.waiter(req.RequestID))
 			if subjectID > 0 {
 				pipe.ZRem(ctx, keys.subjectWaiting(subjectType, subjectID), req.RequestID)
 			}
@@ -472,6 +480,13 @@ func (b *redisFlowBackend) isEligibleWaitingRequest(ctx context.Context, tx *red
 			return false, err
 		}
 		for _, requestID := range waiting {
+			alive, err := b.waiterAlive(ctx, tx, keys, requestID)
+			if err != nil {
+				return false, err
+			}
+			if !alive {
+				return false, nil
+			}
 			subjectType, subjectID, err := b.requestSubjectFromTx(ctx, tx, keys, requestID)
 			if err != nil {
 				return false, err
@@ -556,10 +571,19 @@ func (b *redisFlowBackend) requestIntFromTx(ctx context.Context, tx *redis.Tx, k
 	return parsed, nil
 }
 
+func (b *redisFlowBackend) waiterAlive(ctx context.Context, tx *redis.Tx, keys redisFlowKeys, requestID string) (bool, error) {
+	exists, err := tx.Exists(ctx, keys.waiter(requestID)).Result()
+	if err != nil {
+		return false, redisFlowUnavailable(err)
+	}
+	return exists > 0, nil
+}
+
 func (b *redisFlowBackend) removeWaiting(ctx context.Context, rdb *redis.Client, keys redisFlowKeys, requestID string, subjectType string, subjectID int) error {
 	pipe := rdb.TxPipeline()
 	pipe.ZRem(ctx, keys.Waiting, requestID)
 	pipe.ZRem(ctx, keys.Deadline, requestID)
+	pipe.Del(ctx, keys.waiter(requestID))
 	if subjectID > 0 {
 		pipe.ZRem(ctx, keys.subjectWaiting(subjectType, subjectID), requestID)
 	}
@@ -641,6 +665,18 @@ func (b *redisFlowBackend) cleanupExpired(ctx context.Context, rdb *redis.Client
 			break
 		}
 		if err := b.removeWaitingRequests(ctx, rdb, keys, dirtyWaiting); err != nil {
+			return err
+		}
+	}
+	for {
+		abandonedWaiting, err := b.abandonedWaitingRequestIDs(ctx, rdb, keys)
+		if err != nil {
+			return err
+		}
+		if len(abandonedWaiting) == 0 {
+			break
+		}
+		if err := b.removeAbandonedWaitingRequests(ctx, rdb, keys, abandonedWaiting); err != nil {
 			return err
 		}
 	}
@@ -733,6 +769,24 @@ func (b *redisFlowBackend) dirtyWaitingRequestIDs(ctx context.Context, rdb *redi
 	return dirty, nil
 }
 
+func (b *redisFlowBackend) abandonedWaitingRequestIDs(ctx context.Context, rdb *redis.Client, keys redisFlowKeys) ([]string, error) {
+	waiting, err := rdb.ZRange(ctx, keys.Waiting, 0, redisFlowCleanupBatch-1).Result()
+	if err != nil {
+		return nil, redisFlowUnavailable(err)
+	}
+	abandoned := make([]string, 0, len(waiting))
+	for _, requestID := range waiting {
+		exists, err := rdb.Exists(ctx, keys.waiter(requestID)).Result()
+		if err != nil {
+			return nil, redisFlowUnavailable(err)
+		}
+		if exists == 0 {
+			abandoned = append(abandoned, requestID)
+		}
+	}
+	return abandoned, nil
+}
+
 func (b *redisFlowBackend) removeRunningRequests(ctx context.Context, rdb *redis.Client, keys redisFlowKeys, pool model.ChannelFlowPool, requestIDs []string) error {
 	pipe := rdb.TxPipeline()
 	for _, requestID := range requestIDs {
@@ -753,6 +807,7 @@ func (b *redisFlowBackend) removeWaitingRequests(ctx context.Context, rdb *redis
 		subjectType, subjectID := b.requestSubject(ctx, rdb, keys, requestID)
 		pipe.ZRem(ctx, keys.Waiting, requestID)
 		pipe.ZRem(ctx, keys.Deadline, requestID)
+		pipe.Del(ctx, keys.waiter(requestID))
 		if subjectID > 0 {
 			pipe.ZRem(ctx, keys.subjectWaiting(subjectType, subjectID), requestID)
 		}
@@ -760,6 +815,21 @@ func (b *redisFlowBackend) removeWaitingRequests(ctx context.Context, rdb *redis
 	}
 	_, err := pipe.Exec(ctx)
 	return redisFlowUnavailable(err)
+}
+
+func (b *redisFlowBackend) removeAbandonedWaitingRequests(ctx context.Context, rdb *redis.Client, keys redisFlowKeys, requestIDs []string) error {
+	if len(requestIDs) == 0 {
+		return nil
+	}
+	if err := b.removeWaitingRequests(ctx, rdb, keys, requestIDs); err != nil {
+		return err
+	}
+	b.abandonedWaitingCleanups.Add(int64(len(requestIDs)))
+	return nil
+}
+
+func (b *redisFlowBackend) refreshWaitingLiveness(ctx context.Context, rdb *redis.Client, keys redisFlowKeys, requestID string) error {
+	return redisFlowUnavailable(rdb.Set(ctx, keys.waiter(requestID), "1", redisFlowWaiterTTL).Err())
 }
 
 func (b *redisFlowBackend) nextSequence(ctx context.Context, rdb *redis.Client, keys redisFlowKeys, existing float64) (float64, error) {
@@ -924,6 +994,10 @@ func redisKeysForPool(pool model.ChannelFlowPool) redisFlowKeys {
 
 func (k redisFlowKeys) request(requestID string) string {
 	return k.Base + ":request:" + requestID
+}
+
+func (k redisFlowKeys) waiter(requestID string) string {
+	return k.Base + ":waiter:" + requestID
 }
 
 func (k redisFlowKeys) userWaiting(userID int) string {
