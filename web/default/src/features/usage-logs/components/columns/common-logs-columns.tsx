@@ -275,13 +275,22 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
       header: t('Time'),
       cell: ({ row }) => {
         const log = row.original
-        const timestamp = row.getValue('created_at') as number
+        const endTimestamp = row.getValue('created_at') as number
+        const useTime = row.getValue('use_time') as number || 0
+        const startTimestamp = useTime > 0 ? endTimestamp - useTime : endTimestamp
         const config = getLogTypeConfig(log.type)
+        const isConsumeOrError = log.type === 2 || log.type === 5
 
         return (
           <div className='flex min-w-0 flex-col gap-0.5'>
+            {isConsumeOrError && startTimestamp !== endTimestamp ? (
+              <span className='truncate font-mono text-xs tabular-nums'>
+                <span className='text-muted-foreground/60'>{'← '}</span>
+                {formatTimestampToDate(startTimestamp)}
+              </span>
+            ) : null}
             <span className='truncate font-mono text-xs tabular-nums'>
-              {formatTimestampToDate(timestamp)}
+              {formatTimestampToDate(endTimestamp)}
             </span>
             <StatusBadge
               label={t(config.label)}

@@ -141,21 +141,31 @@ function SummaryField<TData>({
 
 function MobileLogTimeStatus({
   createdAt,
+  useTime,
   type,
 }: {
   createdAt: unknown
+  useTime: unknown
   type: unknown
 }) {
   const { t } = useTranslation()
-  const timestamp = typeof createdAt === 'number' ? createdAt : undefined
+  const endTimestamp = typeof createdAt === 'number' ? createdAt : undefined
+  const duration = typeof useTime === 'number' ? useTime : 0
+  const startTimestamp = endTimestamp != null && duration > 0 ? endTimestamp - duration : endTimestamp
   const logType = typeof type === 'number' ? type : undefined
   const config = getLogTypeConfig(logType ?? LOG_TYPE_ENUM.UNKNOWN)
   const variant = config.color as StatusVariant
+  const isConsumeOrError = logType === 2 || logType === 5
 
   return (
     <div className='space-y-1'>
+      {isConsumeOrError && startTimestamp != null && startTimestamp !== endTimestamp ? (
+        <div className='font-mono text-[11px] leading-tight tabular-nums text-muted-foreground/60'>
+          {'← '}{formatTimestampToDate(startTimestamp)}
+        </div>
+      ) : null}
       <div className='font-mono text-xs leading-tight tabular-nums'>
-        {formatTimestampToDate(timestamp)}
+        {formatTimestampToDate(endTimestamp)}
       </div>
       <div
         className={cn(
@@ -203,6 +213,7 @@ function CommonLogsCard<TData>({
           </div>
           <MobileLogTimeStatus
             createdAt={rowData?.created_at}
+            useTime={rowData?.use_time}
             type={rowData?.type}
           />
         </div>
