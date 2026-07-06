@@ -556,13 +556,16 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         if (!isTimingLogType(log.type)) return null
 
         const useTime = row.getValue('use_time') as number
+        const queueTime = (row.getValue('queue_time') as number) || 0
+        const actualTime =
+          queueTime > 0 && useTime > queueTime ? useTime - queueTime : useTime
         const other = parseLogOther(log.other)
         const frt = other?.frt
         const tokensPerSecond =
-          useTime > 0 && log.completion_tokens > 0
-            ? log.completion_tokens / useTime
+          actualTime > 0 && log.completion_tokens > 0
+            ? log.completion_tokens / actualTime
             : null
-        const timeVariant = getResponseTimeColor(useTime, log.completion_tokens)
+        const timeVariant = getResponseTimeColor(actualTime, log.completion_tokens)
         const frtVariant = frt
           ? getFirstResponseTimeColor(frt / 1000)
           : 'neutral'
@@ -652,6 +655,25 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                 )}
             </div>
           </div>
+        )
+      },
+    },
+    {
+      accessorKey: 'queue_time',
+      header: t('Queue time'),
+      cell: ({ row }) => {
+        const log = row.original
+        if (!isTimingLogType(log.type)) return null
+        const queueTime = row.getValue('queue_time') as number
+        if (!queueTime) return null
+        return (
+          <StatusBadge
+            label={formatUseTime(queueTime)}
+            variant='neutral'
+            size='sm'
+            copyable={false}
+            className='rounded-md font-mono border border-border/60 bg-muted/30 dark:border-border/40 dark:bg-muted/20'
+          />
         )
       },
     },
