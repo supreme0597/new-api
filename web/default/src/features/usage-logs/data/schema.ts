@@ -45,6 +45,7 @@ export const usageLogSchema = z.object({
   other: z.string().default(''),
   request_id: z.string().default(''),
   upstream_request_id: z.string().default(''),
+  session_id: z.string().default(''),
   request_data: z.string().default(''),
   request_headers: z.record(z.string()).optional().default(undefined),
   request_body: z.string().default(''),

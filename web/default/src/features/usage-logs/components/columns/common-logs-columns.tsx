@@ -757,6 +757,39 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
     },
 
     {
+      accessorKey: 'session_id',
+      header: t('Session ID'),
+      cell: ({ row }) => {
+        const log = row.original
+        if (!isDisplayableLogType(log.type)) return null
+
+        const sessionId = log.session_id
+        if (!sessionId)
+          return <span className='text-muted-foreground/60'>-</span>
+
+        return (
+          <TooltipProvider delay={300}>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <span className='font-mono text-xs text-muted-foreground max-w-[180px] truncate' />
+                }
+              >
+                {sessionId}
+              </TooltipTrigger>
+              {sessionId.length > 24 && (
+                <TooltipContent side='top' className='max-w-xs break-all'>
+                  {sessionId}
+                </TooltipContent>
+              )}
+            </Tooltip>
+          </TooltipProvider>
+        )
+      },
+      size: 180,
+    },
+
+    {
       accessorKey: 'content',
       header: t('Details'),
       cell: function DetailsCell({ row }) {

@@ -619,6 +619,13 @@ export function DetailsDialog(props: DetailsDialogProps) {
                 mono
               />
             )}
+            {props.log.session_id && (
+              <DetailRow
+                label={t('Session ID')}
+                value={props.log.session_id}
+                mono
+              />
+            )}
 
             {props.log.channel > 0 && (
               <DetailRow
