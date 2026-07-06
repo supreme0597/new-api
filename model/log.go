@@ -52,6 +52,7 @@ type Log struct {
 	Ip                string `json:"ip" gorm:"index;default:''"`
 	RequestId         string `json:"request_id,omitempty" gorm:"type:varchar(64);index:idx_logs_request_id;default:''"`
 	UpstreamRequestId string `json:"upstream_request_id,omitempty" gorm:"type:varchar(128);index:idx_logs_upstream_request_id;default:''"`
+	SessionId         string `json:"session_id,omitempty" gorm:"type:varchar(128);index:idx_logs_session_id;default:''"`
 	Other             string `json:"other"`
 	RequestData       string `json:"request_data" gorm:"type:longtext"`  // 完整请求记录 JSON（元数据+请求头+请求体+响应头+响应体）
 	RequestBody       string `json:"request_body" gorm:"type:longtext"`  // 请求体原文
@@ -248,6 +249,7 @@ func RecordErrorLog(c *gin.Context, userId int, channelId int, modelName string,
 	username := c.GetString("username")
 	requestId := c.GetString(common.RequestIdKey)
 	upstreamRequestId := c.GetString(common.UpstreamRequestIdKey)
+	sessionId := c.GetString(common.SessionIdKey)
 	otherStr := common.MapToJsonStr(other)
 	// 判断是否需要记录 IP
 	needRecordIp := false
@@ -280,6 +282,7 @@ func RecordErrorLog(c *gin.Context, userId int, channelId int, modelName string,
 		}(),
 		RequestId:         requestId,
 		UpstreamRequestId: upstreamRequestId,
+		SessionId:         sessionId,
 		Other:             otherStr,
 	}
 	err := LOG_DB.Create(log).Error
@@ -300,6 +303,7 @@ type RecordConsumeLogParams struct {
 	UseTimeSeconds   int                    `json:"use_time_seconds"`
 	IsStream         bool                   `json:"is_stream"`
 	Group            string                 `json:"group"`
+	SessionId        string                 `json:"session_id"`
 	Other            map[string]interface{} `json:"other"`
 }
 
@@ -343,6 +347,7 @@ func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams)
 		}(),
 		RequestId:         requestId,
 		UpstreamRequestId: upstreamRequestId,
+		SessionId:         params.SessionId,
 		Other:             otherStr,
 	}
 	err := LOG_DB.Create(log).Error
