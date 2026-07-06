@@ -472,6 +472,7 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 		UseTimeSeconds:   int(summary.UseTimeSeconds),
 		IsStream:         relayInfo.IsStream,
 		Group:            relayInfo.UsingGroup,
+		SessionId:        ctx.GetString(common.SessionIdKey),
 		Other:            other,
 	})
 	if err != nil {

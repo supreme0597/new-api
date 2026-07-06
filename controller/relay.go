@@ -118,6 +118,11 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		return
 	}
 
+	// Fallback: extract session id from request body metadata (e.g. Claude Code)
+	if c.GetString(common.SessionIdKey) == "" {
+		extractSessionFromMetadata(c, request)
+	}
+
 	relayInfo, err := relaycommon.GenRelayInfo(c, relayFormat, request, ws)
 	if err != nil {
 		newAPIError = types.NewError(err, types.ErrorCodeGenRelayInfoFailed)
@@ -695,4 +700,38 @@ func shouldRetryTaskRelay(c *gin.Context, channelId int, taskErr *dto.TaskError,
 		return false
 	}
 	return true
+}
+
+// extractSessionFromMetadata tries to pull a session_id from the request body
+// metadata (used by Claude Code and similar clients that embed metadata in the body).
+func extractSessionFromMetadata(c *gin.Context, request dto.Request) {
+	storage, err := common.GetBodyStorage(c)
+	if err != nil {
+		return
+	}
+	raw, err := storage.Bytes()
+	if err != nil {
+		return
+	}
+	// Restore for downstream consumers
+	if _, seekErr := storage.Seek(0, 0); seekErr != nil {
+		return
+	}
+
+	var meta map[string]interface{}
+	if err := common.Unmarshal(raw, &meta); err != nil {
+		return
+	}
+	metadata, ok := meta["metadata"].(map[string]interface{})
+	if !ok {
+		return
+	}
+	if sid, ok := metadata["session_id"].(string); ok && sid != "" {
+		if len(sid) > 128 {
+			sid = sid[:128]
+		}
+		c.Set(common.SessionIdKey, sid)
+		ctx := context.WithValue(c.Request.Context(), common.SessionIdKey, sid)
+		c.Request = c.Request.WithContext(ctx)
+	}
 }

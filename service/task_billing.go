@@ -58,6 +58,7 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo) {
 		Content:   logContent,
 		TokenId:   info.TokenId,
 		Group:     info.UsingGroup,
+		SessionId: c.GetString(common.SessionIdKey),
 		Other:     other,
 	})
 	model.UpdateUserUsedQuotaAndRequestCount(info.UserId, info.PriceData.Quota)
