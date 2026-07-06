@@ -168,6 +168,7 @@ func PostWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, mod
 	}
 
 	useTimeSeconds := time.Now().Unix() - relayInfo.StartTime.Unix()
+	queueTimeMs, _ := common.GetContextKeyType[int64](ctx, constant.ContextKeyFlowQueueTimeMs)
 	textInputTokens := usage.InputTokenDetails.TextTokens
 	textOutTokens := usage.OutputTokenDetails.TextTokens
 
@@ -249,6 +250,7 @@ func PostWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, mod
 		Content:          logContent,
 		TokenId:          relayInfo.TokenId,
 		UseTimeSeconds:   int(useTimeSeconds),
+		QueueTimeSeconds: int(queueTimeMs / 1000),
 		IsStream:         relayInfo.IsStream,
 		Group:            relayInfo.UsingGroup,
 		SessionId:        ctx.GetString(common.SessionIdKey),
@@ -290,6 +292,7 @@ func PostAudioConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, u
 	}
 
 	useTimeSeconds := time.Now().Unix() - relayInfo.StartTime.Unix()
+	queueTimeMs, _ := common.GetContextKeyType[int64](ctx, constant.ContextKeyFlowQueueTimeMs)
 	textInputTokens := usage.PromptTokensDetails.TextTokens
 	textOutTokens := usage.CompletionTokenDetails.TextTokens
 
@@ -371,6 +374,7 @@ func PostAudioConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, u
 		Content:          logContent,
 		TokenId:          relayInfo.TokenId,
 		UseTimeSeconds:   int(useTimeSeconds),
+		QueueTimeSeconds: int(queueTimeMs / 1000),
 		IsStream:         relayInfo.IsStream,
 		Group:            relayInfo.UsingGroup,
 		SessionId:        ctx.GetString(common.SessionIdKey),

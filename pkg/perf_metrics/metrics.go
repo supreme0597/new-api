@@ -28,12 +28,15 @@ func RecordRelaySample(info *relaycommon.RelayInfo, success bool, outputTokens i
 		return
 	}
 	now := time.Now()
+
+	queueTimeMs := info.GetFlowQueueTimeMs()
+
 	hasTtft := info.IsStream && info.HasSendResponse()
 	ttftMs := int64(0)
 	if hasTtft {
-		ttftMs = info.FirstResponseTime.Sub(info.StartTime).Milliseconds()
+		ttftMs = info.FirstResponseTime.Sub(info.StartTime).Milliseconds() - queueTimeMs
 	}
-	latencyMs := now.Sub(info.StartTime).Milliseconds()
+	latencyMs := now.Sub(info.StartTime).Milliseconds() - queueTimeMs
 	generationMs := latencyMs
 	if hasTtft {
 		generationMs = now.Sub(info.FirstResponseTime).Milliseconds()

@@ -203,10 +203,14 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		}
 
 		addUsedChannel(c, channel.Id)
-		flowGuard, _, flowErr := service.AcquireChannelFlowGuard(c, channel.Id, relayInfo)
+		flowGuard, flowDecision, flowErr := service.AcquireChannelFlowGuard(c, channel.Id, relayInfo)
 		if flowErr != nil {
 			newAPIError = flowErr
 			break
+		}
+		if flowDecision != nil && flowDecision.WaitedMs > 0 {
+			relayInfo.FlowQueueTimeMs = flowDecision.WaitedMs
+			common.SetContextKey(c, constant.ContextKeyFlowQueueTimeMs, flowDecision.WaitedMs)
 		}
 		defer func(guard service.FlowGuard) {
 			if r := recover(); r != nil {
@@ -445,7 +449,8 @@ func processChannelError(c *gin.Context, channelError types.ChannelError, err *t
 			startTime = time.Now()
 		}
 		useTimeSeconds := int(time.Since(startTime).Seconds())
-		model.RecordErrorLog(c, userId, channelId, modelName, tokenName, err.MaskSensitiveErrorWithStatusCode(), tokenId, useTimeSeconds, common.GetContextKeyBool(c, constant.ContextKeyIsStream), userGroup, other)
+		queueTimeMs, _ := common.GetContextKeyType[int64](c, constant.ContextKeyFlowQueueTimeMs)
+		model.RecordErrorLog(c, userId, channelId, modelName, tokenName, err.MaskSensitiveErrorWithStatusCode(), tokenId, useTimeSeconds, int(queueTimeMs/1000), common.GetContextKeyBool(c, constant.ContextKeyIsStream), userGroup, other)
 	}
 
 }

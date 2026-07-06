@@ -35,6 +35,7 @@ type textQuotaSummary struct {
 	ModelName                string
 	TokenName                string
 	UseTimeSeconds           int64
+	QueueTimeSeconds         int
 	CompletionRatio          float64
 	CacheRatio               float64
 	ImageRatio               float64
@@ -158,10 +159,12 @@ func composeTieredTextQuota(relayInfo *relaycommon.RelayInfo, summary textQuotaS
 }
 
 func calculateTextQuotaSummary(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage *dto.Usage) textQuotaSummary {
+	queueTimeMs, _ := common.GetContextKeyType[int64](ctx, constant.ContextKeyFlowQueueTimeMs)
 	summary := textQuotaSummary{
 		ModelName:            relayInfo.OriginModelName,
 		TokenName:            ctx.GetString("token_name"),
 		UseTimeSeconds:       time.Now().Unix() - relayInfo.StartTime.Unix(),
+		QueueTimeSeconds:     int(queueTimeMs / 1000),
 		CompletionRatio:      relayInfo.PriceData.CompletionRatio,
 		CacheRatio:           relayInfo.PriceData.CacheRatio,
 		ImageRatio:           relayInfo.PriceData.ImageRatio,
@@ -470,6 +473,7 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 		Content:          logContent,
 		TokenId:          relayInfo.TokenId,
 		UseTimeSeconds:   int(summary.UseTimeSeconds),
+		QueueTimeSeconds: summary.QueueTimeSeconds,
 		IsStream:         relayInfo.IsStream,
 		Group:            relayInfo.UsingGroup,
 		SessionId:        ctx.GetString(common.SessionIdKey),
@@ -501,6 +505,9 @@ func buildRequestMetadata(ctx *gin.Context, relayInfo *relaycommon.RelayInfo) st
 	latencyMs := int64(0)
 	if !relayInfo.StartTime.IsZero() {
 		latencyMs = time.Since(relayInfo.StartTime).Milliseconds()
+		if relayInfo.FlowQueueTimeMs > 0 {
+			latencyMs -= relayInfo.FlowQueueTimeMs
+		}
 	}
 	requestId := ctx.GetString(common.RequestIdKey)
 	upstreamRequestId := ctx.GetString(common.UpstreamRequestIdKey)
@@ -515,7 +522,11 @@ func buildRequestMetadata(ctx *gin.Context, relayInfo *relaycommon.RelayInfo) st
 		"status_code":         ctx.GetInt("status_code"),
 	}
 	if relayInfo.FirstResponseTime.After(relayInfo.StartTime) {
-		meta["first_response_ms"] = relayInfo.FirstResponseTime.Sub(relayInfo.StartTime).Milliseconds()
+		frMs := relayInfo.FirstResponseTime.Sub(relayInfo.StartTime).Milliseconds()
+		if relayInfo.FlowQueueTimeMs > 0 && frMs > relayInfo.FlowQueueTimeMs {
+			frMs -= relayInfo.FlowQueueTimeMs
+		}
+		meta["first_response_ms"] = frMs
 	}
 	metaBytes, err := common.Marshal(meta)
 	if err != nil {
