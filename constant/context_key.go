@@ -72,4 +72,8 @@ const (
 	// fallback in authHelper (finishAdminAudit) skips its record to avoid
 	// duplicate entries.
 	ContextKeyAuditLogged ContextKey = "audit_logged"
+
+	// ContextKeyFlowQueueTimeMs stores the flow control queue wait time (in milliseconds, int64)
+	// for the current request, recorded after AcquireChannelFlowGuard succeeds.
+	ContextKeyFlowQueueTimeMs ContextKey = "flow_queue_time_ms"
 )

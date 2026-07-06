@@ -44,6 +44,7 @@ type Log struct {
 	PromptTokens      int    `json:"prompt_tokens" gorm:"default:0"`
 	CompletionTokens  int    `json:"completion_tokens" gorm:"default:0"`
 	UseTime           int    `json:"use_time" gorm:"default:0"`
+	QueueTime         int    `json:"queue_time" gorm:"default:0"`
 	IsStream          bool   `json:"is_stream"`
 	ChannelId         int    `json:"channel" gorm:"index"`
 	ChannelName       string `json:"channel_name" gorm:"->"`
@@ -243,7 +244,7 @@ func RecordTopupLog(userId int, content string, callerIp string, paymentMethod s
 	}
 }
 
-func RecordErrorLog(c *gin.Context, userId int, channelId int, modelName string, tokenName string, content string, tokenId int, useTimeSeconds int,
+func RecordErrorLog(c *gin.Context, userId int, channelId int, modelName string, tokenName string, content string, tokenId int, useTimeSeconds int, queueTimeSeconds int,
 	isStream bool, group string, other map[string]interface{}) {
 	logger.LogInfo(c, fmt.Sprintf("record error log: userId=%d, channelId=%d, modelName=%s, tokenName=%s, content=%s", userId, channelId, modelName, tokenName, common.LocalLogPreview(content)))
 	username := c.GetString("username")
@@ -272,6 +273,7 @@ func RecordErrorLog(c *gin.Context, userId int, channelId int, modelName string,
 		ChannelId:        channelId,
 		TokenId:          tokenId,
 		UseTime:          useTimeSeconds,
+		QueueTime:        queueTimeSeconds,
 		IsStream:         isStream,
 		Group:            group,
 		Ip: func() string {
@@ -301,6 +303,7 @@ type RecordConsumeLogParams struct {
 	Content          string                 `json:"content"`
 	TokenId          int                    `json:"token_id"`
 	UseTimeSeconds   int                    `json:"use_time_seconds"`
+	QueueTimeSeconds int                    `json:"queue_time_seconds"`
 	IsStream         bool                   `json:"is_stream"`
 	Group            string                 `json:"group"`
 	SessionId        string                 `json:"session_id"`
@@ -337,6 +340,7 @@ func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams)
 		ChannelId:        params.ChannelId,
 		TokenId:          params.TokenId,
 		UseTime:          params.UseTimeSeconds,
+		QueueTime:        params.QueueTimeSeconds,
 		IsStream:         params.IsStream,
 		Group:            params.Group,
 		Ip: func() string {
@@ -420,7 +424,7 @@ func RecordTaskBillingLog(params RecordTaskBillingLogParams) {
 	}
 }
 
-func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, startIdx int, num int, channel int, group string, requestId string, upstreamRequestId string) (logs []*Log, total int64, err error) {
+func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, startIdx int, num int, channel int, group string, requestId string, upstreamRequestId string, sessionId string) (logs []*Log, total int64, err error) {
 	var tx *gorm.DB
 	if logType == LogTypeUnknown {
 		tx = LOG_DB
@@ -443,6 +447,9 @@ func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName
 	if upstreamRequestId != "" {
 		tx = tx.Where("logs.upstream_request_id = ?", upstreamRequestId)
 	}
+	if sessionId != "" {
+		tx = tx.Where("logs.session_id = ?", sessionId)
+	}
 	if startTimestamp != 0 {
 		tx = tx.Where("logs.created_at >= ?", startTimestamp)
 	}
@@ -463,7 +470,7 @@ func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName
 	// 使用 Select() 避免查询 body 字段，提高性能
 	selectFields := "id, user_id, created_at, type, content, username, token_name, model_name, " +
 		"quota, prompt_tokens, completion_tokens, use_time, is_stream, channel_id, channel_name, " +
-		"token_id, " + logGroupCol + ", ip, request_id, upstream_request_id, other"
+		"token_id, " + logGroupCol + ", ip, request_id, upstream_request_id, session_id, other"
 	err = tx.Select(selectFields).Order("logs.created_at desc, logs.id desc").Limit(num).Offset(startIdx).Find(&logs).Error
 	if err != nil {
 		return nil, 0, err
@@ -526,7 +533,7 @@ func GetLogById(id int) (*Log, error) {
 
 const logSearchCountLimit = 10000
 
-func GetUserLogs(userId int, logType int, startTimestamp int64, endTimestamp int64, modelName string, tokenName string, startIdx int, num int, group string, requestId string, upstreamRequestId string) (logs []*Log, total int64, err error) {
+func GetUserLogs(userId int, logType int, startTimestamp int64, endTimestamp int64, modelName string, tokenName string, startIdx int, num int, group string, requestId string, upstreamRequestId string, sessionId string) (logs []*Log, total int64, err error) {
 	var tx *gorm.DB
 	if logType == LogTypeUnknown {
 		tx = LOG_DB.Where("logs.user_id = ?", userId)
@@ -546,6 +553,9 @@ func GetUserLogs(userId int, logType int, startTimestamp int64, endTimestamp int
 	if upstreamRequestId != "" {
 		tx = tx.Where("logs.upstream_request_id = ?", upstreamRequestId)
 	}
+	if sessionId != "" {
+		tx = tx.Where("logs.session_id = ?", sessionId)
+	}
 	if startTimestamp != 0 {
 		tx = tx.Where("logs.created_at >= ?", startTimestamp)
 	}
@@ -564,7 +574,7 @@ func GetUserLogs(userId int, logType int, startTimestamp int64, endTimestamp int
 	// 使用 Select() 避免查询 body 字段，提高性能
 	selectFields := "id, user_id, created_at, type, content, username, token_name, model_name, " +
 		"quota, prompt_tokens, completion_tokens, use_time, is_stream, channel_id, channel_name, " +
-		"token_id, " + logGroupCol + ", ip, request_id, upstream_request_id, other"
+		"token_id, " + logGroupCol + ", ip, request_id, upstream_request_id, session_id, other"
 	err = tx.Select(selectFields).Order("logs.id desc").Limit(num).Offset(startIdx).Find(&logs).Error
 	if err != nil {
 		common.SysError("failed to search user logs: " + err.Error())

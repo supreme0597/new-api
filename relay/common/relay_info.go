@@ -138,6 +138,10 @@ type RelayInfo struct {
 	// Billing 是计费会话，封装了预扣费/结算/退款的统一生命周期。
 	// 免费模型时为 nil。
 	Billing BillingSettler
+	// FlowQueueTimeMs stores the flow control pool queue wait time in milliseconds.
+	// Set after AcquireChannelFlowGuard succeeds. Used to deduct queue time from
+	// performance metrics and display queue_time in usage logs.
+	FlowQueueTimeMs int64 `json:"flow_queue_time_ms,omitempty"`
 	// BillingSource indicates whether this request is billed from wallet quota or subscription.
 	// "" or "wallet" => wallet; "subscription" => subscription
 	BillingSource string
@@ -676,6 +680,15 @@ func (info *RelayInfo) SetFirstResponseTime() {
 
 func (info *RelayInfo) HasSendResponse() bool {
 	return info.FirstResponseTime.After(info.StartTime)
+}
+
+// GetFlowQueueTimeMs returns the flow control queue wait time in milliseconds.
+// Returns 0 if info is nil or no queue time was recorded.
+func (info *RelayInfo) GetFlowQueueTimeMs() int64 {
+	if info == nil {
+		return 0
+	}
+	return info.FlowQueueTimeMs
 }
 
 type TaskRelayInfo struct {
