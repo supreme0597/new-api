@@ -182,7 +182,10 @@ var CohereSafetySetting string
 const (
 	RequestIdKey         = "X-Oneapi-Request-Id"
 	UpstreamRequestIdKey = "X-Upstream-Request-Id"
+	SessionIdKey         = "X-New-Api-Session-Id"
 )
+
+var SessionHeaderCandidates = []string{"X-Opencode-Session", "X-Session-Id", "X-Conversation-Id", "X-Thread-Id"}
 
 const (
 	RoleGuestUser  = 0
