@@ -229,8 +229,8 @@ export function CommonLogsFilterBar<TData>(
   )
 
   const dateRangeFilter = (
-    <LogsFilterField wide>
-      <div className="flex items-center gap-2">
+    <LogsFilterField>
+      <div className="flex flex-col gap-1">
         <CompactDateTimeRangePicker
           start={filters.startTime}
           end={filters.endTime}
@@ -244,7 +244,7 @@ export function CommonLogsFilterBar<TData>(
           <select
             value={timeField}
             onChange={(e) => setTimeField(e.target.value)}
-            className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+            className="h-7 rounded-md border border-input bg-background px-2 text-xs"
           >
             <option value="model_end_time">{t('End Time')}</option>
             <option value="model_start_time">{t('Start Time')}</option>
