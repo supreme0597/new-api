@@ -709,6 +709,12 @@ func shouldRetryTaskRelay(c *gin.Context, channelId int, taskErr *dto.TaskError,
 
 // extractSessionFromMetadata tries to pull a session_id from the request body
 // metadata (used by Claude Code and similar clients that embed metadata in the body).
+//
+// Two strategies are tried in order:
+//  1. Explicit key "session_id" → use its value directly.
+//  2. Any key containing "session" (case-insensitive) → use that key's value.
+//     Claude Code sends metadata like { "user_abc_session_def": "some-id" }
+//     where the key name encodes the session identity and the value is the actual session ID.
 func extractSessionFromMetadata(c *gin.Context, request dto.Request) {
 	storage, err := common.GetBodyStorage(c)
 	if err != nil {
@@ -731,12 +737,30 @@ func extractSessionFromMetadata(c *gin.Context, request dto.Request) {
 	if !ok {
 		return
 	}
+
+	// Strategy 1: explicit "session_id" key
 	if sid, ok := metadata["session_id"].(string); ok && sid != "" {
-		if len(sid) > 128 {
-			sid = sid[:128]
-		}
-		c.Set(common.SessionIdKey, sid)
-		ctx := context.WithValue(c.Request.Context(), common.SessionIdKey, sid)
-		c.Request = c.Request.WithContext(ctx)
+		setSessionFromMetadata(c, sid)
+		return
 	}
+
+	// Strategy 2: any key containing "session" (case-insensitive)
+	// Claude Code sends metadata like { "user_abc_session_def": "value" }
+	for k, v := range metadata {
+		if strings.Contains(strings.ToLower(k), "session") {
+			if sid, ok := v.(string); ok && sid != "" {
+				setSessionFromMetadata(c, sid)
+				return
+			}
+		}
+	}
+}
+
+func setSessionFromMetadata(c *gin.Context, sid string) {
+	if len(sid) > 128 {
+		sid = sid[:128]
+	}
+	c.Set(common.SessionIdKey, sid)
+	ctx := context.WithValue(c.Request.Context(), common.SessionIdKey, sid)
+	c.Request = c.Request.WithContext(ctx)
 }

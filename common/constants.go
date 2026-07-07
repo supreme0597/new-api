@@ -185,7 +185,7 @@ const (
 	SessionIdKey         = "X-New-Api-Session-Id"
 )
 
-var SessionHeaderCandidates = []string{"X-Opencode-Session", "X-Session-Id", "X-Conversation-Id", "X-Thread-Id"}
+var SessionHeaderCandidates = []string{"X-Opencode-Session", "X-Session-Id", "X-Session-Affinity", "X-Claude-Code-Session-Id", "X-Conversation-Id", "X-Thread-Id"}
 
 const (
 	RoleGuestUser  = 0
