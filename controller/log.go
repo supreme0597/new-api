@@ -14,6 +14,10 @@ import (
 func GetAllLogs(c *gin.Context) {
 	pageInfo := common.GetPageQuery(c)
 	logType, _ := strconv.Atoi(c.Query("type"))
+	timeField := c.DefaultQuery("time_field", "created_at")
+	if timeField != "created_at" && timeField != "request_time" && timeField != "model_start_time" && timeField != "model_end_time" {
+		timeField = "created_at"
+	}
 	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
 	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
 	username := c.Query("username")
@@ -24,7 +28,7 @@ func GetAllLogs(c *gin.Context) {
 	requestId := c.Query("request_id")
 	upstreamRequestId := c.Query("upstream_request_id")
 	sessionId := c.Query("session_id")
-	logs, total, err := model.GetAllLogs(logType, startTimestamp, endTimestamp, modelName, username, tokenName, pageInfo.GetStartIdx(), pageInfo.GetPageSize(), channel, group, requestId, upstreamRequestId, sessionId)
+	logs, total, err := model.GetAllLogs(logType, timeField, startTimestamp, endTimestamp, modelName, username, tokenName, pageInfo.GetStartIdx(), pageInfo.GetPageSize(), channel, group, requestId, upstreamRequestId, sessionId)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -39,6 +43,10 @@ func GetUserLogs(c *gin.Context) {
 	pageInfo := common.GetPageQuery(c)
 	userId := c.GetInt("id")
 	logType, _ := strconv.Atoi(c.Query("type"))
+	timeField := c.DefaultQuery("time_field", "created_at")
+	if timeField != "created_at" && timeField != "request_time" && timeField != "model_start_time" && timeField != "model_end_time" {
+		timeField = "created_at"
+	}
 	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
 	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
 	tokenName := c.Query("token_name")
@@ -47,7 +55,7 @@ func GetUserLogs(c *gin.Context) {
 	requestId := c.Query("request_id")
 	upstreamRequestId := c.Query("upstream_request_id")
 	sessionId := c.Query("session_id")
-	logs, total, err := model.GetUserLogs(userId, logType, startTimestamp, endTimestamp, modelName, tokenName, pageInfo.GetStartIdx(), pageInfo.GetPageSize(), group, requestId, upstreamRequestId, sessionId)
+	logs, total, err := model.GetUserLogs(userId, logType, timeField, startTimestamp, endTimestamp, modelName, tokenName, pageInfo.GetStartIdx(), pageInfo.GetPageSize(), group, requestId, upstreamRequestId, sessionId)
 	if err != nil {
 		common.ApiError(c, err)
 		return

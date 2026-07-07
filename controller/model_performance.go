@@ -23,6 +23,10 @@ func GetModelPerformanceList(c *gin.Context) {
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
 	sortBy := c.DefaultQuery("sort_by", "score")
 	sortOrder := c.DefaultQuery("sort_order", "desc")
+	timeField := c.DefaultQuery("time_field", "created_at")
+	if timeField != "created_at" && timeField != "request_time" && timeField != "model_start_time" && timeField != "model_end_time" {
+		timeField = "created_at"
+	}
 
 	if page < 1 {
 		page = 1
@@ -53,7 +57,7 @@ func GetModelPerformanceList(c *gin.Context) {
 		startTs = endTs - int64(hours)*3600
 	}
 
-	items, err := model.GetLeaderboardData(startTs, endTs, vendorId, group, sortBy, sortOrder)
+	items, err := model.GetLeaderboardData(startTs, endTs, vendorId, group, sortBy, sortOrder, timeField)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"success": false,

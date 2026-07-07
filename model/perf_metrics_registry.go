@@ -12,6 +12,7 @@ func RegisterPerfMetricsDB() {
 			ModelName:      metric.ModelName,
 			Group:          metric.Group,
 			BucketTs:       metric.BucketTs,
+			StartBucketTs:  metric.StartBucketTs,
 			RequestCount:   metric.RequestCount,
 			SuccessCount:   metric.SuccessCount,
 			TotalLatencyMs: metric.TotalLatencyMs,
@@ -26,8 +27,8 @@ func RegisterPerfMetricsDB() {
 		return DeletePerfMetricsBefore(cutoffTs)
 	}
 
-	perfmetrics.DBFuncs.GetPerfMetrics = func(modelName string, group string, startTs int64, endTs int64) ([]perfmetrics.PerfMetricRow, error) {
-		rows, err := GetPerfMetrics(modelName, group, startTs, endTs)
+	perfmetrics.DBFuncs.GetPerfMetrics = func(modelName string, group string, startTs int64, endTs int64, timeField string) ([]perfmetrics.PerfMetricRow, error) {
+		rows, err := GetPerfMetrics(modelName, group, startTs, endTs, timeField)
 		if err != nil {
 			return nil, err
 		}
@@ -49,8 +50,8 @@ func RegisterPerfMetricsDB() {
 		return result, nil
 	}
 
-	perfmetrics.DBFuncs.GetPerfMetricsSummary = func(startTs int64, endTs int64, groups []string) ([]perfmetrics.PerfMetricSummaryRow, error) {
-		rows, err := GetPerfMetricsSummaryAll(startTs, endTs, groups)
+	perfmetrics.DBFuncs.GetPerfMetricsSummary = func(startTs int64, endTs int64, groups []string, timeField string) ([]perfmetrics.PerfMetricSummaryRow, error) {
+		rows, err := GetPerfMetricsSummaryAll(startTs, endTs, groups, timeField)
 		if err != nil {
 			return nil, err
 		}

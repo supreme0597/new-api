@@ -4,6 +4,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -134,6 +135,7 @@ func chatCompletionsViaResponses(c *gin.Context, info *relaycommon.RelayInfo, ad
 	var requestBody io.Reader = body
 
 	var httpResp *http.Response
+	info.ModelStartTime = time.Now()
 	resp, err := adaptor.DoRequest(c, info, requestBody)
 	if err != nil {
 		return nil, types.NewOpenAIError(err, types.ErrorCodeDoRequestFailed, http.StatusInternalServerError)
@@ -158,6 +160,7 @@ func chatCompletionsViaResponses(c *gin.Context, info *relaycommon.RelayInfo, ad
 			service.ResetStatusCode(newApiErr, statusCodeMappingStr)
 			return nil, newApiErr
 		}
+		info.ModelEndTime = time.Now()
 		return usage, nil
 	}
 
@@ -166,5 +169,6 @@ func chatCompletionsViaResponses(c *gin.Context, info *relaycommon.RelayInfo, ad
 		service.ResetStatusCode(newApiErr, statusCodeMappingStr)
 		return nil, newApiErr
 	}
+	info.ModelEndTime = time.Now()
 	return usage, nil
 }

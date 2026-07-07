@@ -450,7 +450,8 @@ func processChannelError(c *gin.Context, channelError types.ChannelError, err *t
 		}
 		useTimeSeconds := int(time.Since(startTime).Seconds())
 		queueTimeMs, _ := common.GetContextKeyType[int64](c, constant.ContextKeyFlowQueueTimeMs)
-		model.RecordErrorLog(c, userId, channelId, modelName, tokenName, err.MaskSensitiveErrorWithStatusCode(), tokenId, useTimeSeconds, int(queueTimeMs/1000), common.GetContextKeyBool(c, constant.ContextKeyIsStream), userGroup, other)
+		requestTime := startTime.Unix()
+		model.RecordErrorLog(c, userId, channelId, modelName, tokenName, err.MaskSensitiveErrorWithStatusCode(), tokenId, useTimeSeconds, int(queueTimeMs/1000), common.GetContextKeyBool(c, constant.ContextKeyIsStream), userGroup, other, requestTime, 0, 0)
 	}
 
 }

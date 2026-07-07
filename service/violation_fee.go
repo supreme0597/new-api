@@ -159,6 +159,9 @@ func ChargeViolationFeeIfNeeded(ctx *gin.Context, relayInfo *relaycommon.RelayIn
 		Group:          relayInfo.UsingGroup,
 		SessionId:      ctx.GetString(common.SessionIdKey),
 		Other:          other,
+		RequestTime:    relayInfo.StartTime.Unix(),
+		ModelStartTime: relayInfo.ModelStartTime.Unix(),
+		ModelEndTime:   relayInfo.ModelEndTime.Unix(),
 	})
 
 	return true

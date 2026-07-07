@@ -104,6 +104,8 @@ type RelayInfo struct {
 	TokenUnlimited    bool
 	StartTime         time.Time
 	FirstResponseTime time.Time
+	ModelStartTime    time.Time // 模型调用开始时间
+	ModelEndTime      time.Time // 模型调用结束时间
 	isFirstResponse   bool
 	//SendLastReasoningResponse bool
 	IsStream               bool

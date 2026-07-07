@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -183,6 +184,7 @@ func GeminiHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 		requestBody = body
 	}
 
+	info.ModelStartTime = time.Now()
 	resp, err := adaptor.DoRequest(c, info, requestBody)
 	if err != nil {
 		logger.LogError(c, "Do gemini request failed: "+err.Error())
@@ -207,6 +209,9 @@ func GeminiHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 	if openaiErr != nil {
 		service.ResetStatusCode(openaiErr, statusCodeMappingStr)
 		return openaiErr
+	}
+	if openaiErr == nil {
+		info.ModelEndTime = time.Now()
 	}
 
 	service.PostTextConsumeQuota(c, info, usage.(*dto.Usage), nil)
@@ -287,6 +292,7 @@ func GeminiEmbeddingHandler(c *gin.Context, info *relaycommon.RelayInfo) (newAPI
 	info.UpstreamRequestBodySize = size
 	requestBody = body
 
+	info.ModelStartTime = time.Now()
 	resp, err := adaptor.DoRequest(c, info, requestBody)
 	if err != nil {
 		logger.LogError(c, "Do gemini request failed: "+err.Error())
@@ -308,6 +314,9 @@ func GeminiEmbeddingHandler(c *gin.Context, info *relaycommon.RelayInfo) (newAPI
 	if openaiErr != nil {
 		service.ResetStatusCode(openaiErr, statusCodeMappingStr)
 		return openaiErr
+	}
+	if openaiErr == nil {
+		info.ModelEndTime = time.Now()
 	}
 
 	service.PostTextConsumeQuota(c, info, usage.(*dto.Usage), nil)

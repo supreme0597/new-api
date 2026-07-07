@@ -12,8 +12,8 @@ type Store interface {
 var DBFuncs struct {
 	UpsertPerfMetric      func(metric *PerfMetricData) error
 	DeleteBefore          func(cutoffTs int64) error
-	GetPerfMetrics        func(modelName string, group string, startTs int64, endTs int64) ([]PerfMetricRow, error)
-	GetPerfMetricsSummary func(startTs int64, endTs int64, groups []string) ([]PerfMetricSummaryRow, error)
+	GetPerfMetrics        func(modelName string, group string, startTs int64, endTs int64, timeField string) ([]PerfMetricRow, error)
+	GetPerfMetricsSummary func(startTs int64, endTs int64, groups []string, timeField string) ([]PerfMetricSummaryRow, error)
 }
 
 // PerfMetricData is the data needed for upserting a perf metric.
@@ -21,6 +21,7 @@ type PerfMetricData struct {
 	ModelName      string
 	Group          string
 	BucketTs       int64
+	StartBucketTs  int64
 	RequestCount   int64
 	SuccessCount   int64
 	TotalLatencyMs int64
@@ -55,15 +56,16 @@ type PerfMetricSummaryRow struct {
 }
 
 type Sample struct {
-	Model        string
-	Group        string
-	Source       string // "relay" | "sampling" — 标记数据来源，便于审计和调试，不影响 bucketKey 聚合
-	LatencyMs    int64
-	TtftMs       int64
-	HasTtft      bool
-	Success      bool
-	OutputTokens int64
-	GenerationMs int64
+	Model          string
+	Group          string
+	Source         string // "relay" | "sampling" — 标记数据来源，便于审计和调试，不影响 bucketKey 聚合
+	LatencyMs      int64
+	TtftMs         int64
+	HasTtft        bool
+	Success        bool
+	OutputTokens   int64
+	GenerationMs   int64
+	StartBucketTs  int64
 }
 
 type QueryParams struct {
@@ -126,13 +128,14 @@ type counters struct {
 }
 
 type atomicBucket struct {
-	requestCount   atomic.Int64
-	successCount   atomic.Int64
-	totalLatencyMs atomic.Int64
-	ttftSumMs      atomic.Int64
-	ttftCount      atomic.Int64
-	outputTokens   atomic.Int64
-	generationMs   atomic.Int64
+	requestCount        atomic.Int64
+	successCount        atomic.Int64
+	totalLatencyMs      atomic.Int64
+	ttftSumMs           atomic.Int64
+	ttftCount           atomic.Int64
+	outputTokens        atomic.Int64
+	generationMs        atomic.Int64
+	minStartBucketTs    atomic.Int64
 }
 
 func (b *atomicBucket) add(sample Sample) {
@@ -199,4 +202,20 @@ func (b *atomicBucket) addCounters(c counters) {
 	if c.generationMs != 0 {
 		b.generationMs.Add(c.generationMs)
 	}
+}
+
+func (b *atomicBucket) updateMinStartBucket(val int64) {
+	for {
+		current := b.minStartBucketTs.Load()
+		if current != 0 && current <= val {
+			return
+		}
+		if b.minStartBucketTs.CompareAndSwap(current, val) {
+			return
+		}
+	}
+}
+
+func (b *atomicBucket) snapshotMinStartBucketTs() int64 {
+	return b.minStartBucketTs.Load()
 }

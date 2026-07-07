@@ -219,7 +219,10 @@ func RelaySwapFace(c *gin.Context, info *relaycommon.RelayInfo) *dto.MidjourneyR
 	requestURL := getMjRequestPath(c.Request.URL.String())
 	baseURL := c.GetString("base_url")
 	fullRequestURL := fmt.Sprintf("%s%s", baseURL, requestURL)
+
+	info.ModelStartTime = time.Now()
 	mjResp, _, err := service.DoMidjourneyHttpRequest(c, time.Second*60, fullRequestURL)
+	info.ModelEndTime = time.Now()
 	if err != nil {
 		return &mjResp.Response
 	}
@@ -525,10 +528,12 @@ func RelayMidjourneySubmit(c *gin.Context, relayInfo *relaycommon.RelayInfo) *dt
 		}
 	}
 
+	relayInfo.ModelStartTime = time.Now()
 	midjResponseWithStatus, responseBody, err := service.DoMidjourneyHttpRequest(c, time.Second*60, fullRequestURL)
 	if err != nil {
 		return &midjResponseWithStatus.Response
 	}
+	relayInfo.ModelEndTime = time.Now()
 	midjResponse := &midjResponseWithStatus.Response
 
 	defer func() {
