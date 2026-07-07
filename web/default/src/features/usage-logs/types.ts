@@ -41,6 +41,7 @@ export interface CommonFilters {
   startTime?: Date
   endTime?: Date
   channel?: string
+  timeField?: 'created_at' | 'model_start_time' | 'model_end_time' | 'request_time'
 }
 
 /**

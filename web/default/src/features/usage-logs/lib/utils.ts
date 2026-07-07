@@ -218,6 +218,9 @@ export function buildApiParams(config: {
     ...(searchParams.sessionId
       ? { session_id: String(searchParams.sessionId) }
       : {}),
+    ...(searchParams.timeField
+      ? { time_field: String(searchParams.timeField) }
+      : {}),
     ...buildTimeRangeParams(searchParams, false),
   }
 

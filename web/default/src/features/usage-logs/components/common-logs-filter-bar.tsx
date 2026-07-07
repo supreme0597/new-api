@@ -79,6 +79,7 @@ export function CommonLogsFilterBar<TData>(
     return { startTime: start, endTime: end }
   })
   const [logType, setLogType] = useState<LogTypeValue>(LOG_TYPE_ALL_VALUE)
+  const [timeField, setTimeField] = useState<string>((searchParams as Record<string, unknown>).timeField as string || 'model_end_time')
 
   useEffect(() => {
     const { start, end } = getDefaultTimeRange()
@@ -95,6 +96,7 @@ export function CommonLogsFilterBar<TData>(
       requestId: searchParams.requestId || undefined,
       upstreamRequestId: searchParams.upstreamRequestId || undefined,
       sessionId: searchParams.sessionId || undefined,
+      timeField: ((searchParams as Record<string, unknown>).timeField as string) || 'model_end_time',
     })
 
     const typeArr = searchParams.type
@@ -134,18 +136,20 @@ export function CommonLogsFilterBar<TData>(
       search: {
         ...filterParams,
         type: [logType],
+        timeField,
         page: 1,
       },
     })
     queryClient.invalidateQueries({ queryKey: ['logs'] })
     queryClient.invalidateQueries({ queryKey: ['usage-logs-stats'] })
-  }, [filters, logType, navigate, queryClient])
+  }, [filters, logType, timeField, navigate, queryClient])
 
   const handleReset = useCallback(() => {
     const { start, end } = getDefaultTimeRange()
     const resetFilters: CommonLogFilters = { startTime: start, endTime: end }
     setFilters(resetFilters)
     setLogType(LOG_TYPE_ALL_VALUE)
+    setTimeField('model_end_time')
 
     navigate({
       to: '/usage-logs/$section',
@@ -226,14 +230,27 @@ export function CommonLogsFilterBar<TData>(
 
   const dateRangeFilter = (
     <LogsFilterField wide>
-      <CompactDateTimeRangePicker
-        start={filters.startTime}
-        end={filters.endTime}
-        onChange={({ start, end }) => {
-          handleChange('startTime', start)
-          handleChange('endTime', end)
-        }}
-      />
+      <div className="flex items-center gap-2">
+        <CompactDateTimeRangePicker
+          start={filters.startTime}
+          end={filters.endTime}
+          onChange={({ start, end }) => {
+            handleChange('startTime', start)
+            handleChange('endTime', end)
+          }}
+        />
+        <div className="flex items-center gap-1.5 text-xs">
+          <span className="text-muted-foreground whitespace-nowrap">{t('By')}</span>
+          <select
+            value={timeField}
+            onChange={(e) => setTimeField(e.target.value)}
+            className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+          >
+            <option value="model_end_time">{t('End Time')}</option>
+            <option value="model_start_time">{t('Start Time')}</option>
+          </select>
+        </div>
+      </div>
     </LogsFilterField>
   )
   const modelFilter = (

@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { getLeaderboard, getLeaderboardGroups, getLeaderboardVendors } from '../api'
+import { getLeaderboard, getLeaderboardGroups, getLeaderboardVendors, type LeaderboardParams } from '../api'
 import type { LeaderboardTimeRange } from '../types'
 
 export function useLeaderboard(params: {
@@ -12,6 +12,7 @@ export function useLeaderboard(params: {
   pageSize?: number
   sortBy?: string
   sortOrder?: string
+  timeField?: string
 }) {
   return useQuery({
     queryKey: ['performance-leaderboard', params],
@@ -26,6 +27,7 @@ export function useLeaderboard(params: {
         pageSize: params.pageSize,
         sort_by: params.sortBy,
         sort_order: params.sortOrder,
+        time_field: params.timeField as LeaderboardParams['time_field'],
       }),
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: true,

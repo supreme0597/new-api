@@ -1,17 +1,20 @@
 import { api } from '@/lib/api'
 
-export async function getPerfMetricsSummary(hours: number = 24) {
-  const res = await api.get('/api/perf-metrics/summary', {
-    params: { hours },
-  })
+export type PerfTimeField = 'created_at' | 'model_start_time' | 'model_end_time' | 'request_time'
+
+export async function getPerfMetricsSummary(hours: number = 24, timeField?: PerfTimeField) {
+  const params: Record<string, string | number> = { hours }
+  if (timeField) params.time_field = timeField
+  const res = await api.get('/api/perf-metrics/summary', { params })
   return res.data
 }
 
-export async function getPerfMetrics(model: string, group?: string, hours: number = 24, startTime?: number, endTime?: number) {
+export async function getPerfMetrics(model: string, group?: string, hours: number = 24, startTime?: number, endTime?: number, timeField?: PerfTimeField) {
   const params: Record<string, string | number> = { model, hours }
   if (group) params.group = group
   if (startTime) params.start_time = startTime
   if (endTime) params.end_time = endTime
+  if (timeField) params.time_field = timeField
   const res = await api.get('/api/perf-metrics', { params })
   return res.data
 }

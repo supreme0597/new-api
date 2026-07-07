@@ -27,7 +27,7 @@ import {
   staticDataTableClassNames as tableStyles,
 } from '@/components/data-table'
 import { GroupBadge } from '@/components/group-badge'
-import { getPerfMetrics } from '@/features/performance-metrics/api'
+import { getPerfMetrics, type PerfTimeField } from '@/features/performance-metrics/api'
 import {
   formatLatency,
   formatThroughput,
@@ -151,11 +151,11 @@ function average(
   )
 }
 
-export function ModelDetailsPerformance(props: { model: PricingModel; startTime?: number; endTime?: number; group?: string }) {
+export function ModelDetailsPerformance(props: { model: PricingModel; startTime?: number; endTime?: number; group?: string; timeField?: string }) {
   const { t } = useTranslation()
   const metricsQuery = useQuery({
-    queryKey: ['perf-metrics', props.model.model_name, props.group, props.startTime, props.endTime],
-    queryFn: () => getPerfMetrics(props.model.model_name, props.group, 24, props.startTime, props.endTime),
+    queryKey: ['perf-metrics', props.model.model_name, props.group, props.startTime, props.endTime, props.timeField],
+    queryFn: () => getPerfMetrics(props.model.model_name, props.group, 24, props.startTime, props.endTime, props.timeField as PerfTimeField),
     staleTime: 60 * 1000,
   })
   const groups = useMemo(
