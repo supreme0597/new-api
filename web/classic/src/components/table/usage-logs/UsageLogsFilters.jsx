@@ -103,6 +103,15 @@ const LogsFilters = ({
           />
 
           <Form.Input
+            field='session_id'
+            prefix={<IconSearch />}
+            placeholder={t('Session ID')}
+            showClear
+            pure
+            size='small'
+          />
+
+          <Form.Input
             field='channel'
             prefix={<IconSearch />}
             placeholder={t('渠道 ID')}
