@@ -229,7 +229,7 @@ export function CommonLogsFilterBar<TData>(
   )
 
   const dateRangeFilter = (
-    <LogsFilterField className="col-span-1 sm:col-span-2 lg:col-span-3">
+    <LogsFilterField className="sm:col-span-2">
       <div className="flex items-center gap-2">
         <CompactDateTimeRangePicker
           start={filters.startTime}
@@ -238,6 +238,7 @@ export function CommonLogsFilterBar<TData>(
             handleChange('startTime', start)
             handleChange('endTime', end)
           }}
+          className="flex-1 min-w-0"
         />
         <div className="flex items-center gap-1.5 text-xs shrink-0">
           <span className="text-muted-foreground whitespace-nowrap">{t('By')}</span>
