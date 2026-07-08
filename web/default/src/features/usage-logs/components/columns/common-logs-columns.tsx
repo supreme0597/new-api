@@ -556,16 +556,13 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         if (!isTimingLogType(log.type)) return null
 
         const useTime = row.getValue('use_time') as number
-        const queueTime = (row.getValue('queue_time') as number) || 0
-        const actualTime =
-          queueTime > 0 && useTime > queueTime ? useTime - queueTime : useTime
         const other = parseLogOther(log.other)
         const frt = other?.frt
         const tokensPerSecond =
-          actualTime > 0 && log.completion_tokens > 0
-            ? log.completion_tokens / actualTime
+          useTime > 0 && log.completion_tokens > 0
+            ? log.completion_tokens / useTime
             : null
-        const timeVariant = getResponseTimeColor(actualTime, log.completion_tokens)
+        const timeVariant = getResponseTimeColor(useTime, log.completion_tokens)
         const frtVariant = frt
           ? getFirstResponseTimeColor(frt / 1000)
           : 'neutral'
@@ -655,25 +652,6 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                 )}
             </div>
           </div>
-        )
-      },
-    },
-    {
-      accessorKey: 'queue_time',
-      header: t('Queue time'),
-      cell: ({ row }) => {
-        const log = row.original
-        if (!isTimingLogType(log.type)) return null
-        const queueTime = row.getValue('queue_time') as number
-        if (!queueTime) return null
-        return (
-          <StatusBadge
-            label={formatUseTime(queueTime)}
-            variant='neutral'
-            size='sm'
-            copyable={false}
-            className='rounded-md font-mono border border-border/60 bg-muted/30 dark:border-border/40 dark:bg-muted/20'
-          />
         )
       },
     },
@@ -794,10 +772,16 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
             <Tooltip>
               <TooltipTrigger
                 render={
-                  <span className='font-mono text-xs text-muted-foreground max-w-[180px] truncate' />
+                  <span className='max-w-[180px]' />
                 }
               >
-                {sessionId}
+                <StatusBadge
+                  label={sessionId}
+                  variant='neutral'
+                  size='sm'
+                  copyText={sessionId}
+                  className='font-mono rounded-md'
+                />
               </TooltipTrigger>
               {sessionId.length > 24 && (
                 <TooltipContent side='top' className='max-w-xs break-all'>
