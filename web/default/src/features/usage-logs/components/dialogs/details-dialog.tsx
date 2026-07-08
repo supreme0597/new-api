@@ -460,12 +460,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
     !!other?.expr_b64
   const hasAudioTokens = other?.ws || other?.audio
   const showTiming = isTimingLogType(props.log.type)
-  const queueTime =
-    (props.log as { queue_time?: number }).queue_time || 0
-  const useTime =
-    queueTime > 0 && props.log.use_time > queueTime
-      ? props.log.use_time - queueTime
-      : props.log.use_time
+  const useTime = props.log.use_time
   const showAdminIp =
     !!props.log.ip && (showTiming || isTopup)
   const adminInfo = other?.admin_info
@@ -716,13 +711,6 @@ export function DetailsDialog(props: DetailsDialogProps) {
                       )}
                   </span>
                 }
-              />
-            )}
-
-            {showTiming && queueTime > 0 && (
-              <DetailRow
-                label={t('Queue time')}
-                value={formatUseTime(queueTime)}
               />
             )}
 
