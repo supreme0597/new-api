@@ -284,8 +284,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         return (
           <div className='flex min-w-0 flex-col gap-0.5'>
             {isConsumeOrError && startTimestamp !== endTimestamp ? (
-              <span className='truncate font-mono text-xs tabular-nums'>
-                <span className='text-muted-foreground/60'>{'← '}</span>
+              <span className='truncate font-mono text-xs tabular-nums text-muted-foreground/60'>
                 {formatTimestampToDate(startTimestamp)}
               </span>
             ) : null}
@@ -308,6 +307,38 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         return value.includes(String(row.original.type))
       },
       enableHiding: false,
+      size: 180,
+    },
+    {
+      accessorKey: 'model_start_time',
+      header: t('Model Request Time'),
+      cell: ({ row }) => {
+        const log = row.original
+        const modelStartTime = row.getValue('model_start_time') as number || 0
+        const modelEndTime = log.model_end_time || 0
+        const config = getLogTypeConfig(log.type)
+        const isConsumeOrError = log.type === 2 || log.type === 5
+
+        if (!isConsumeOrError || (modelStartTime === 0 && modelEndTime === 0)) {
+          return null
+        }
+
+        return (
+          <div className='flex min-w-0 flex-col gap-0.5'>
+            {modelStartTime > 0 && (
+              <span className='truncate font-mono text-xs tabular-nums text-muted-foreground/60'>
+                {formatTimestampToDate(modelStartTime)}
+              </span>
+            )}
+            {modelEndTime > 0 && (
+              <span className='truncate font-mono text-xs tabular-nums'>
+                {formatTimestampToDate(modelEndTime)}
+              </span>
+            )}
+          </div>
+        )
+      },
+      enableHiding: true,
       size: 180,
     },
   ]

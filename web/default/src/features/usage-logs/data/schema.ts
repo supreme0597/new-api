@@ -51,6 +51,9 @@ export const usageLogSchema = z.object({
   request_headers: z.record(z.string()).optional().default(undefined),
   request_body: z.string().default(''),
   response_body: z.string().default(''),
+  request_time: z.number().default(0),
+  model_start_time: z.number().default(0),
+  model_end_time: z.number().default(0),
 })
 
 export type UsageLog = z.infer<typeof usageLogSchema>
