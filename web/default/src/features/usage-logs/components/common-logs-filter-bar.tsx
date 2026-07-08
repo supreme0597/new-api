@@ -229,7 +229,7 @@ export function CommonLogsFilterBar<TData>(
   )
 
   const dateRangeFilter = (
-    <LogsFilterField>
+    <LogsFilterField className="col-span-1 sm:col-span-2 lg:col-span-3">
       <div className="flex items-center gap-2">
         <CompactDateTimeRangePicker
           start={filters.startTime}
