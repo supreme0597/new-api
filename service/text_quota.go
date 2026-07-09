@@ -35,7 +35,6 @@ type textQuotaSummary struct {
 	ModelName                string
 	TokenName                string
 	UseTimeSeconds           int64
-	QueueTimeSeconds         int
 	CompletionRatio          float64
 	CacheRatio               float64
 	ImageRatio               float64
@@ -159,12 +158,19 @@ func composeTieredTextQuota(relayInfo *relaycommon.RelayInfo, summary textQuotaS
 }
 
 func calculateTextQuotaSummary(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage *dto.Usage) textQuotaSummary {
-	queueTimeMs, _ := common.GetContextKeyType[int64](ctx, constant.ContextKeyFlowQueueTimeMs)
 	summary := textQuotaSummary{
 		ModelName:            relayInfo.OriginModelName,
 		TokenName:            ctx.GetString("token_name"),
-		UseTimeSeconds:       time.Now().Unix() - relayInfo.StartTime.Unix(),
-		QueueTimeSeconds:     int(queueTimeMs / 1000),
+		UseTimeSeconds: func() int64 {
+			d := relayInfo.ModelEndTime.Unix() - relayInfo.ModelStartTime.Unix()
+			if d < 0 {
+				return 0
+			}
+			if d < 1 && relayInfo.ModelEndTime.Unix() > relayInfo.ModelStartTime.Unix() {
+				return 1
+			}
+			return d
+		}(),
 		CompletionRatio:      relayInfo.PriceData.CompletionRatio,
 		CacheRatio:           relayInfo.PriceData.CacheRatio,
 		ImageRatio:           relayInfo.PriceData.ImageRatio,
@@ -473,7 +479,6 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 		Content:          logContent,
 		TokenId:          relayInfo.TokenId,
 		UseTimeSeconds:   int(summary.UseTimeSeconds),
-		QueueTimeSeconds: summary.QueueTimeSeconds,
 		RequestTime:      relayInfo.StartTime.Unix(),
 		ModelStartTime:   relayInfo.ModelStartTime.Unix(),
 		ModelEndTime:     relayInfo.ModelEndTime.Unix(),

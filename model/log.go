@@ -44,7 +44,6 @@ type Log struct {
 	PromptTokens      int    `json:"prompt_tokens" gorm:"default:0"`
 	CompletionTokens  int    `json:"completion_tokens" gorm:"default:0"`
 	UseTime           int    `json:"use_time" gorm:"default:0"`
-	QueueTime         int    `json:"queue_time" gorm:"default:0"`
 	RequestTime       int64  `json:"request_time" gorm:"bigint;default:0;index:idx_logs_request_time"`
 	ModelStartTime    int64  `json:"model_start_time" gorm:"bigint;default:0"`
 	ModelEndTime      int64  `json:"model_end_time" gorm:"bigint;default:0"`
@@ -247,7 +246,7 @@ func RecordTopupLog(userId int, content string, callerIp string, paymentMethod s
 	}
 }
 
-func RecordErrorLog(c *gin.Context, userId int, channelId int, modelName string, tokenName string, content string, tokenId int, useTimeSeconds int, queueTimeSeconds int,
+func RecordErrorLog(c *gin.Context, userId int, channelId int, modelName string, tokenName string, content string, tokenId int, useTimeSeconds int,
 	isStream bool, group string, other map[string]interface{},
 	requestTime int64, modelStartTime int64, modelEndTime int64) {
 	logger.LogInfo(c, fmt.Sprintf("record error log: userId=%d, channelId=%d, modelName=%s, tokenName=%s, content=%s", userId, channelId, modelName, tokenName, common.LocalLogPreview(content)))
@@ -277,7 +276,6 @@ func RecordErrorLog(c *gin.Context, userId int, channelId int, modelName string,
 		ChannelId:        channelId,
 		TokenId:          tokenId,
 		UseTime:          useTimeSeconds,
-		QueueTime:        queueTimeSeconds,
 		RequestTime:      requestTime,
 		ModelStartTime:   modelStartTime,
 		ModelEndTime:     modelEndTime,
@@ -310,7 +308,6 @@ type RecordConsumeLogParams struct {
 	Content          string                 `json:"content"`
 	TokenId          int                    `json:"token_id"`
 	UseTimeSeconds   int                    `json:"use_time_seconds"`
-	QueueTimeSeconds int                    `json:"queue_time_seconds"`
 	RequestTime      int64                  `json:"request_time"`
 	ModelStartTime   int64                  `json:"model_start_time"`
 	ModelEndTime     int64                  `json:"model_end_time"`
@@ -350,7 +347,6 @@ func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams)
 		ChannelId:        params.ChannelId,
 		TokenId:          params.TokenId,
 		UseTime:          params.UseTimeSeconds,
-		QueueTime:        params.QueueTimeSeconds,
 		RequestTime:      params.RequestTime,
 		ModelStartTime:   params.ModelStartTime,
 		ModelEndTime:     params.ModelEndTime,

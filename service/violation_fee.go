@@ -3,7 +3,6 @@ package service
 import (
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
@@ -131,7 +130,13 @@ func ChargeViolationFeeIfNeeded(ctx *gin.Context, relayInfo *relaycommon.RelayIn
 	model.UpdateUserUsedQuotaAndRequestCount(relayInfo.UserId, feeQuota)
 	model.UpdateChannelUsedQuota(relayInfo.ChannelId, feeQuota)
 
-	useTimeSeconds := time.Now().Unix() - relayInfo.StartTime.Unix()
+	useTimeSeconds := relayInfo.ModelEndTime.Unix() - relayInfo.ModelStartTime.Unix()
+	if useTimeSeconds < 0 {
+		useTimeSeconds = 0
+	}
+	if useTimeSeconds < 1 && relayInfo.ModelEndTime.Unix() > relayInfo.ModelStartTime.Unix() {
+		useTimeSeconds = 1
+	}
 	tokenName := ctx.GetString("token_name")
 	oai := apiErr.ToOpenAIError()
 

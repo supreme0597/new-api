@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"math"
 	"strings"
-	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -167,8 +166,13 @@ func PostWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, mod
 		tieredResult = tieredRes
 	}
 
-	useTimeSeconds := time.Now().Unix() - relayInfo.StartTime.Unix()
-	queueTimeMs, _ := common.GetContextKeyType[int64](ctx, constant.ContextKeyFlowQueueTimeMs)
+	useTimeSeconds := relayInfo.ModelEndTime.Unix() - relayInfo.ModelStartTime.Unix()
+	if useTimeSeconds < 0 {
+		useTimeSeconds = 0
+	}
+	if useTimeSeconds < 1 && relayInfo.ModelEndTime.Unix() > relayInfo.ModelStartTime.Unix() {
+		useTimeSeconds = 1
+	}
 	textInputTokens := usage.InputTokenDetails.TextTokens
 	textOutTokens := usage.OutputTokenDetails.TextTokens
 
@@ -250,7 +254,6 @@ func PostWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, mod
 		Content:          logContent,
 		TokenId:          relayInfo.TokenId,
 		UseTimeSeconds:   int(useTimeSeconds),
-		QueueTimeSeconds: int(queueTimeMs / 1000),
 		RequestTime:      relayInfo.StartTime.Unix(),
 		ModelStartTime:   relayInfo.ModelStartTime.Unix(),
 		ModelEndTime:     relayInfo.ModelEndTime.Unix(),
@@ -294,8 +297,13 @@ func PostAudioConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, u
 		tieredResult = tieredRes
 	}
 
-	useTimeSeconds := time.Now().Unix() - relayInfo.StartTime.Unix()
-	queueTimeMs, _ := common.GetContextKeyType[int64](ctx, constant.ContextKeyFlowQueueTimeMs)
+	useTimeSeconds := relayInfo.ModelEndTime.Unix() - relayInfo.ModelStartTime.Unix()
+	if useTimeSeconds < 0 {
+		useTimeSeconds = 0
+	}
+	if useTimeSeconds < 1 && relayInfo.ModelEndTime.Unix() > relayInfo.ModelStartTime.Unix() {
+		useTimeSeconds = 1
+	}
 	textInputTokens := usage.PromptTokensDetails.TextTokens
 	textOutTokens := usage.CompletionTokenDetails.TextTokens
 
@@ -377,7 +385,6 @@ func PostAudioConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, u
 		Content:          logContent,
 		TokenId:          relayInfo.TokenId,
 		UseTimeSeconds:   int(useTimeSeconds),
-		QueueTimeSeconds: int(queueTimeMs / 1000),
 		RequestTime:      relayInfo.StartTime.Unix(),
 		ModelStartTime:   relayInfo.ModelStartTime.Unix(),
 		ModelEndTime:     relayInfo.ModelEndTime.Unix(),
