@@ -311,7 +311,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
     },
     {
       accessorKey: 'model_start_time',
-      header: t('Model Request Time'),
+      header: t('模型请求时间'),
       cell: ({ row }) => {
         const log = row.original
         const modelStartTime = row.getValue('model_start_time') as number || 0

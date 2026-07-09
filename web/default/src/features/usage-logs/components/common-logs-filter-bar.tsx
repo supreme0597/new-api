@@ -247,8 +247,8 @@ export function CommonLogsFilterBar<TData>(
             onChange={(e) => setTimeField(e.target.value)}
             className="h-8 rounded-md border border-input bg-background px-2 text-xs"
           >
-            <option value="model_end_time">{t('End Time')}</option>
-            <option value="model_start_time">{t('Start Time')}</option>
+            <option value="model_end_time">{t('Model End Time')}</option>
+            <option value="model_start_time">{t('Model Start Time')}</option>
             <option value="request_time">{t('Request Time')}</option>
             <option value="created_at">{t('Created Time')}</option>
           </select>
