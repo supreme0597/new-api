@@ -9,6 +9,8 @@ const (
 
 	ContextKeyOriginalModel    ContextKey = "original_model"
 	ContextKeyRequestStartTime ContextKey = "request_start_time"
+	ContextKeyModelStartTime   ContextKey = "model_start_time"
+	ContextKeyModelEndTime     ContextKey = "model_end_time"
 
 	/* token related keys */
 	ContextKeyTokenUnlimited         ContextKey = "token_unlimited_quota"

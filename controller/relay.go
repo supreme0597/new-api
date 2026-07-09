@@ -282,6 +282,8 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		newAPIError = service.NormalizeViolationFeeError(newAPIError)
 		relayInfo.LastError = newAPIError
 
+		common.SetContextKey(c, constant.ContextKeyModelStartTime, relayInfo.ModelStartTime.Unix())
+		common.SetContextKey(c, constant.ContextKeyModelEndTime, relayInfo.ModelEndTime.Unix())
 		processChannelError(c, *types.NewChannelError(channel.Id, channel.Type, channel.Name, channel.ChannelInfo.IsMultiKey, common.GetContextKeyString(c, constant.ContextKeyChannelKey), channel.GetAutoBan()), newAPIError)
 
 		if !shouldRetry(c, newAPIError, common.RetryTimes-retryParam.GetRetry()) {
@@ -449,9 +451,10 @@ func processChannelError(c *gin.Context, channelError types.ChannelError, err *t
 			startTime = time.Now()
 		}
 		useTimeSeconds := int(time.Since(startTime).Seconds())
-		queueTimeMs, _ := common.GetContextKeyType[int64](c, constant.ContextKeyFlowQueueTimeMs)
 		requestTime := startTime.Unix()
-		model.RecordErrorLog(c, userId, channelId, modelName, tokenName, err.MaskSensitiveErrorWithStatusCode(), tokenId, useTimeSeconds, int(queueTimeMs/1000), common.GetContextKeyBool(c, constant.ContextKeyIsStream), userGroup, other, requestTime, 0, 0)
+		modelStartTime, _ := common.GetContextKeyType[int64](c, constant.ContextKeyModelStartTime)
+		modelEndTime, _ := common.GetContextKeyType[int64](c, constant.ContextKeyModelEndTime)
+		model.RecordErrorLog(c, userId, channelId, modelName, tokenName, err.MaskSensitiveErrorWithStatusCode(), tokenId, useTimeSeconds, common.GetContextKeyBool(c, constant.ContextKeyIsStream), userGroup, other, requestTime, modelStartTime, modelEndTime)
 	}
 
 }
@@ -608,6 +611,8 @@ func RelayTask(c *gin.Context) {
 		}
 
 		if !taskErr.LocalError {
+			common.SetContextKey(c, constant.ContextKeyModelStartTime, relayInfo.ModelStartTime.Unix())
+			common.SetContextKey(c, constant.ContextKeyModelEndTime, relayInfo.ModelEndTime.Unix())
 			processChannelError(c,
 				*types.NewChannelError(channel.Id, channel.Type, channel.Name, channel.ChannelInfo.IsMultiKey,
 					common.GetContextKeyString(c, constant.ContextKeyChannelKey), channel.GetAutoBan()),
