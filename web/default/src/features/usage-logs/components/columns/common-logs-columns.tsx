@@ -276,9 +276,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
       cell: ({ row }) => {
         const log = row.original
         const endTimestamp = row.getValue('created_at') as number
-        const requestTime = row.getValue('request_time') as number || 0
-        const useTime = row.getValue('use_time') as number || 0
-        const startTimestamp = requestTime > 0 ? requestTime : (useTime > 0 ? endTimestamp - useTime : endTimestamp)
+        const startTimestamp = row.getValue('request_time') as number || endTimestamp
         const config = getLogTypeConfig(log.type)
         const isConsumeOrError = log.type === 2 || log.type === 5
 
