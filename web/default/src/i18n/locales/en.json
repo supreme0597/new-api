@@ -4914,6 +4914,8 @@
     "Configure LDAP/Active Directory authentication for enterprise users": "Configure LDAP/Active Directory authentication for enterprise users",
     "Base DN": "Base DN",
     "All Channel Types": "All Channel Types",
-    "Super admin can switch between public and test channels": "Super admin can switch between public and test channels"
+    "Super admin can switch between public and test channels": "Super admin can switch between public and test channels",
+    "Request Time": "Request Time",
+    "Created Time": "Created Time"
   }
 }

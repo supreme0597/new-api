@@ -4914,6 +4914,8 @@
     "Configure LDAP/Active Directory authentication for enterprise users": "配置 LDAP/Active Directory 企业用户认证",
     "Base DN": "Base DN",
     "All Channel Types": "所有渠道类型",
-    "Super admin can switch between public and test channels": "超级管理员可在公共渠道和测试渠道之间切换"
+    "Super admin can switch between public and test channels": "超级管理员可在公共渠道和测试渠道之间切换",
+    "Request Time": "请求时间",
+    "Created Time": "创建时间"
   }
 }
