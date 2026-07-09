@@ -249,6 +249,8 @@ export function CommonLogsFilterBar<TData>(
           >
             <option value="model_end_time">{t('End Time')}</option>
             <option value="model_start_time">{t('Start Time')}</option>
+            <option value="request_time">{t('Request Time')}</option>
+            <option value="created_at">{t('Created Time')}</option>
           </select>
         </div>
       </div>
