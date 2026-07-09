@@ -20,13 +20,9 @@ func GetPerfMetricsSummary(c *gin.Context) {
 	}
 	startTimeMs, _ := strconv.ParseInt(c.Query("start_time"), 10, 64)
 	endTimeMs, _ := strconv.ParseInt(c.Query("end_time"), 10, 64)
-	timeField := c.DefaultQuery("time_field", "created_at")
-	if timeField != "created_at" && timeField != "request_time" && timeField != "model_start_time" && timeField != "model_end_time" {
-		timeField = "created_at"
-	}
 
 	activeGroups := append(lo.Keys(ratio_setting.GetGroupRatioCopy()), "auto")
-	result, err := perfmetrics.QuerySummaryAll(hours, activeGroups, startTimeMs/1000, endTimeMs/1000, timeField)
+	result, err := perfmetrics.QuerySummaryAll(hours, activeGroups, startTimeMs/1000, endTimeMs/1000)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"success": false,
@@ -59,10 +55,6 @@ func GetPerfMetrics(c *gin.Context) {
 	}
 	startTimeMs, _ := strconv.ParseInt(c.Query("start_time"), 10, 64)
 	endTimeMs, _ := strconv.ParseInt(c.Query("end_time"), 10, 64)
-	timeField := c.DefaultQuery("time_field", "created_at")
-	if timeField != "created_at" && timeField != "request_time" && timeField != "model_start_time" && timeField != "model_end_time" {
-		timeField = "created_at"
-	}
 
 	result, err := perfmetrics.Query(perfmetrics.QueryParams{
 		Model:   modelName,
@@ -70,7 +62,7 @@ func GetPerfMetrics(c *gin.Context) {
 		Hours:   hours,
 		StartTs: startTimeMs / 1000,
 		EndTs:   endTimeMs / 1000,
-	}, timeField)
+	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"success": false,

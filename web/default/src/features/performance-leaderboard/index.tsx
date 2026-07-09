@@ -77,7 +77,6 @@ export function PerformanceLeaderboard() {
   const page = search.page || 1
   const sortBy = (search.sort_by as SortBy) || 'score'
   const sortOrder = (search.sort_order as SortOrder) || 'desc'
-  const timeField = (search.time_field as string) || 'model_end_time'
 
   const leaderboardQuery = useLeaderboard({
     vendorId,
@@ -89,7 +88,6 @@ export function PerformanceLeaderboard() {
     pageSize: PAGE_SIZE,
     sortBy,
     sortOrder,
-    timeField,
   })
   const vendorsQuery = useLeaderboardVendors()
   const groupsQuery = useLeaderboardGroups({ hours, startTime, endTime })
@@ -127,17 +125,6 @@ export function PerformanceLeaderboard() {
         ...prev,
         start_time: range.start?.getTime(),
         end_time: range.end?.getTime(),
-        page: 1,
-      }),
-    })
-  }
-
-  const handleTimeFieldChange = (value: string) => {
-    navigate({
-      to: '/performance-leaderboard',
-      search: (prev: Record<string, unknown>) => ({
-        ...prev,
-        time_field: value,
         page: 1,
       }),
     })
@@ -301,17 +288,6 @@ export function PerformanceLeaderboard() {
                 onChange={handleTimeRangeChange}
                 className='w-full sm:w-[340px]'
               />
-              <div className="flex items-center gap-1.5 text-xs">
-                <span className="text-muted-foreground whitespace-nowrap">{t('By')}</span>
-                <select
-                  value={timeField}
-                  onChange={(e) => handleTimeFieldChange(e.target.value)}
-                  className="h-8 rounded-md border border-input bg-background px-2 text-xs"
-                >
-                  <option value="model_end_time">{t('End Time')}</option>
-                  <option value="model_start_time">{t('Start Time')}</option>
-                </select>
-              </div>
             </div>
           </section>
 
@@ -368,7 +344,7 @@ export function PerformanceLeaderboard() {
                 <SheetDescription>{t('Model performance details')}</SheetDescription>
               </SheetHeader>
               <div className='flex-1 overflow-y-auto px-4 pt-11 pb-5 sm:px-6 sm:pt-12 sm:pb-6'>
-                {perfModel && <ModelDetailsPerformance model={perfModel} startTime={startTime} endTime={endTime} group={group} timeField={timeField} />}
+                {perfModel && <ModelDetailsPerformance model={perfModel} startTime={startTime} endTime={endTime} group={group} />}
               </div>
             </SheetContent>
           </Sheet>

@@ -21,7 +21,6 @@ type PerfMetricData struct {
 	ModelName      string
 	Group          string
 	BucketTs       int64
-	StartBucketTs  int64
 	RequestCount   int64
 	SuccessCount   int64
 	TotalLatencyMs int64
@@ -65,7 +64,6 @@ type Sample struct {
 	Success        bool
 	OutputTokens   int64
 	GenerationMs   int64
-	StartBucketTs  int64
 }
 
 type QueryParams struct {
@@ -128,14 +126,13 @@ type counters struct {
 }
 
 type atomicBucket struct {
-	requestCount        atomic.Int64
-	successCount        atomic.Int64
-	totalLatencyMs      atomic.Int64
-	ttftSumMs           atomic.Int64
-	ttftCount           atomic.Int64
-	outputTokens        atomic.Int64
-	generationMs        atomic.Int64
-	minStartBucketTs    atomic.Int64
+	requestCount   atomic.Int64
+	successCount   atomic.Int64
+	totalLatencyMs atomic.Int64
+	ttftSumMs      atomic.Int64
+	ttftCount      atomic.Int64
+	outputTokens   atomic.Int64
+	generationMs   atomic.Int64
 }
 
 func (b *atomicBucket) add(sample Sample) {
@@ -204,18 +201,4 @@ func (b *atomicBucket) addCounters(c counters) {
 	}
 }
 
-func (b *atomicBucket) updateMinStartBucket(val int64) {
-	for {
-		current := b.minStartBucketTs.Load()
-		if current != 0 && current <= val {
-			return
-		}
-		if b.minStartBucketTs.CompareAndSwap(current, val) {
-			return
-		}
-	}
-}
 
-func (b *atomicBucket) snapshotMinStartBucketTs() int64 {
-	return b.minStartBucketTs.Load()
-}

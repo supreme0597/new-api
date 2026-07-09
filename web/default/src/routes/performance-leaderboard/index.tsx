@@ -11,7 +11,6 @@ const leaderboardSearchSchema = z.object({
   page: z.number().optional().catch(1),
   sort_by: z.enum(['score', 'tps', 'ttft']).optional().catch('score'),
   sort_order: z.enum(['desc', 'asc']).optional().catch('desc'),
-  time_field: z.enum(['created_at', 'model_start_time', 'model_end_time', 'request_time']).optional().catch('model_end_time'),
 })
 
 export const Route = createFileRoute('/performance-leaderboard/')({

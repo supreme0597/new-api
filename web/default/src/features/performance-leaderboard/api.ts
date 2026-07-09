@@ -10,7 +10,6 @@ export interface LeaderboardParams {
   pageSize?: number
   sort_by?: string
   sort_order?: string
-  time_field?: 'created_at' | 'model_start_time' | 'model_end_time' | 'request_time'
 }
 
 export async function getLeaderboard(params: LeaderboardParams = {}) {
@@ -24,7 +23,6 @@ export async function getLeaderboard(params: LeaderboardParams = {}) {
   if (params.pageSize) searchParams.set('pageSize', String(params.pageSize))
   if (params.sort_by) searchParams.set('sort_by', params.sort_by)
   if (params.sort_order) searchParams.set('sort_order', params.sort_order)
-  if (params.time_field) searchParams.set('time_field', params.time_field)
 
   const res = await api.get(`/api/model-performance/list?${searchParams.toString()}`)
   return res.data

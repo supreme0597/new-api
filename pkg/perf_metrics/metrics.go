@@ -53,22 +53,7 @@ func RecordRelaySample(info *relaycommon.RelayInfo, success bool, outputTokens i
 		Success:        success,
 		OutputTokens:   outputTokens,
 		GenerationMs:   generationMs,
-		StartBucketTs:  startBucketTsFromInfo(info),
 	})
-}
-
-// startBucketTsFromInfo 返回基于 ModelStartTime 的桶值，若 ModelStartTime 未设置则回退到 StartTime（兼容旧路径 / 异常路径）
-func startBucketTsFromInfo(info *relaycommon.RelayInfo) int64 {
-	if info == nil {
-		return 0
-	}
-	if !info.ModelStartTime.IsZero() {
-		return bucketStart(info.ModelStartTime.Unix())
-	}
-	if !info.StartTime.IsZero() {
-		return bucketStart(info.StartTime.Unix())
-	}
-	return 0
 }
 
 func Record(sample Sample) {
@@ -90,11 +75,10 @@ func Record(sample Sample) {
 	}
 	actual, _ := hotBuckets.LoadOrStore(key, &atomicBucket{})
 	actual.(*atomicBucket).add(sample)
-	actual.(*atomicBucket).updateMinStartBucket(sample.StartBucketTs)
 	recordRedis(key, sample)
 }
 
-func Query(params QueryParams, timeField string) (QueryResult, error) {
+func Query(params QueryParams) (QueryResult, error) {
 	var startTs, endTs int64
 	if params.StartTs > 0 && params.EndTs > 0 && params.EndTs > params.StartTs {
 		startTs = params.StartTs
@@ -111,7 +95,7 @@ func Query(params QueryParams, timeField string) (QueryResult, error) {
 	}
 
 	merged := map[bucketKey]counters{}
-	rows, err := DBFuncs.GetPerfMetrics(params.Model, params.Group, startTs, endTs, timeField)
+	rows, err := DBFuncs.GetPerfMetrics(params.Model, params.Group, startTs, endTs, "")
 	if err != nil {
 		return QueryResult{}, err
 	}
@@ -139,13 +123,6 @@ func Query(params QueryParams, timeField string) (QueryResult, error) {
 		if params.Group != "" && k.group != params.Group {
 			return true
 		}
-		// When time_field=request_time or model_start_time, filter in-memory hot buckets by minStartBucketTs
-		if timeField == "request_time" || timeField == "model_start_time" {
-			snap := value.(*atomicBucket).snapshotMinStartBucketTs()
-			if snap == 0 || snap < startTs || snap > endTs {
-				return true
-			}
-		}
 		mergeCounters(merged, k, value.(*atomicBucket).snapshot())
 		return true
 	})
@@ -153,7 +130,7 @@ func Query(params QueryParams, timeField string) (QueryResult, error) {
 	return buildQueryResult(params.Model, merged), nil
 }
 
-func QuerySummaryAll(hours int, groups []string, startTsOpt int64, endTsOpt int64, timeField string) (SummaryAllResult, error) {
+func QuerySummaryAll(hours int, groups []string, startTsOpt int64, endTsOpt int64) (SummaryAllResult, error) {
 	var startTs, endTs int64
 	if startTsOpt > 0 && endTsOpt > 0 && endTsOpt > startTsOpt {
 		startTs = startTsOpt
@@ -170,7 +147,7 @@ func QuerySummaryAll(hours int, groups []string, startTsOpt int64, endTsOpt int6
 	}
 	allowedGroups := allowedGroupSet(groups)
 
-	rows, err := DBFuncs.GetPerfMetricsSummary(startTs, endTs, groups, timeField)
+	rows, err := DBFuncs.GetPerfMetricsSummary(startTs, endTs, groups, "")
 	if err != nil {
 		return SummaryAllResult{}, err
 	}
@@ -193,13 +170,6 @@ func QuerySummaryAll(hours int, groups []string, startTsOpt int64, endTsOpt int6
 		}
 		if allowedGroups != nil {
 			if _, ok := allowedGroups[k.group]; !ok {
-				return true
-			}
-		}
-		// When time_field=request_time or model_start_time, filter in-memory hot buckets by minStartBucketTs
-		if timeField == "request_time" || timeField == "model_start_time" {
-			minStartSnap := value.(*atomicBucket).snapshotMinStartBucketTs()
-			if minStartSnap == 0 || minStartSnap < startTs || minStartSnap > endTs {
 				return true
 			}
 		}

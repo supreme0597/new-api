@@ -15,7 +15,6 @@ type PerfMetric struct {
 	ModelName      string `json:"model_name" gorm:"size:128;uniqueIndex:idx_perf_model_group_bucket,priority:1"`
 	Group          string `json:"group" gorm:"column:group;size:64;uniqueIndex:idx_perf_model_group_bucket,priority:2"`
 	BucketTs       int64  `json:"bucket_ts" gorm:"uniqueIndex:idx_perf_model_group_bucket,priority:3;index:idx_perf_bucket_ts"`
-	StartBucketTs  int64  `json:"start_bucket_ts" gorm:"default:0;index:idx_perf_model_start_bucket,priority:2;index:idx_perf_model_group_start_bucket,priority:3"`
 	RequestCount   int64  `json:"-" gorm:"default:0"`
 	SuccessCount   int64  `json:"-" gorm:"default:0"`
 	TotalLatencyMs int64  `json:"-" gorm:"default:0"`
@@ -47,10 +46,6 @@ func UpsertPerfMetric(metric *PerfMetric) error {
 			"ttft_count":       gorm.Expr("perf_metrics.ttft_count + ?", metric.TtftCount),
 			"output_tokens":    gorm.Expr("perf_metrics.output_tokens + ?", metric.OutputTokens),
 			"generation_ms":    gorm.Expr("perf_metrics.generation_ms + ?", metric.GenerationMs),
-			"start_bucket_ts": gorm.Expr(
-				"LEAST(COALESCE(perf_metrics.start_bucket_ts, ?), ?)",
-				metric.StartBucketTs, metric.StartBucketTs,
-			),
 		}),
 	}).Create(metric).Error
 }
@@ -128,16 +123,12 @@ type LeaderboardAggRow struct {
 // GetLeaderboardData 获取排行榜数据（从 perf_metrics 聚合）
 // 按 model_name 聚合，再从 models + vendors 表获取 vendor_name
 // group 非空时，按指定分组过滤（同一模型不同分组分开排名）
-func GetLeaderboardData(startTs int64, endTs int64, vendorId int, group string, sortBy string, sortOrder string, timeField string) ([]LeaderboardItem, error) {
+func GetLeaderboardData(startTs int64, endTs int64, vendorId int, group string, sortBy string, sortOrder string) ([]LeaderboardItem, error) {
 	// Step 1: 从 perf_metrics 按 model_name 聚合
 	var aggRows []LeaderboardAggRow
-	timeColumn := "bucket_ts"
-	if timeField == "request_time" || timeField == "model_start_time" {
-		timeColumn = "start_bucket_ts"
-	}
 	query := DB.Model(&PerfMetric{}).
 		Select("model_name, SUM(request_count) as request_count, SUM(success_count) as success_count, SUM(ttft_sum_ms) as ttft_sum_ms, SUM(ttft_count) as ttft_count, SUM(output_tokens) as output_tokens, SUM(generation_ms) as generation_ms").
-		Where(timeColumn+" >= ? AND "+timeColumn+" <= ?", startTs, endTs).
+		Where("bucket_ts >= ? AND bucket_ts <= ?", startTs, endTs).
 		Group("model_name").
 		Having("SUM(request_count) > 0")
 

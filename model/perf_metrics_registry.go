@@ -12,7 +12,6 @@ func RegisterPerfMetricsDB() {
 			ModelName:      metric.ModelName,
 			Group:          metric.Group,
 			BucketTs:       metric.BucketTs,
-			StartBucketTs:  metric.StartBucketTs,
 			RequestCount:   metric.RequestCount,
 			SuccessCount:   metric.SuccessCount,
 			TotalLatencyMs: metric.TotalLatencyMs,
