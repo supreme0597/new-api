@@ -680,8 +680,10 @@ func (info *RelayInfo) SetFirstResponseTime() {
 	}
 }
 
-// ModelUseTimeSeconds 返回模型纯运行耗时（秒）。
-// 计算方式：ModelEndTime - ModelStartTime。
+// ModelUseTimeSeconds 返回模型纯运行耗时（秒），即 ModelEndTime - ModelStartTime。
+// 仅用于成功路径，不含排队时间和请求预处理时间。
+// 注意：错误路径（controller/relay.go processChannelError）使用
+// time.Since(startTime) 计算 use_time，包含排队时间，与本方法语义不同。
 // 若任一时间尚未设置（请求未完成）或差值为负，返回 0。
 // 当端点时间差不足 1 秒但确实有先后时，返回 1。
 func (info *RelayInfo) ModelUseTimeSeconds() int64 {

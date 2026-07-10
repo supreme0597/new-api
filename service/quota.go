@@ -166,6 +166,8 @@ func PostWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, mod
 		tieredResult = tieredRes
 	}
 
+	// 成功路径：use_time 为纯模型运行耗时（ModelEndTime - ModelStartTime），
+	// 不含排队时间和请求预处理时间。
 	useTimeSeconds := relayInfo.ModelUseTimeSeconds()
 	textInputTokens := usage.InputTokenDetails.TextTokens
 	textOutTokens := usage.OutputTokenDetails.TextTokens
@@ -291,6 +293,8 @@ func PostAudioConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, u
 		tieredResult = tieredRes
 	}
 
+	// 成功路径：use_time 为纯模型运行耗时（ModelEndTime - ModelStartTime），
+	// 不含排队时间和请求预处理时间。
 	useTimeSeconds := relayInfo.ModelUseTimeSeconds()
 	textInputTokens := usage.PromptTokensDetails.TextTokens
 	textOutTokens := usage.CompletionTokenDetails.TextTokens

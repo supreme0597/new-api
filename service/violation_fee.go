@@ -130,6 +130,8 @@ func ChargeViolationFeeIfNeeded(ctx *gin.Context, relayInfo *relaycommon.RelayIn
 	model.UpdateUserUsedQuotaAndRequestCount(relayInfo.UserId, feeQuota)
 	model.UpdateChannelUsedQuota(relayInfo.ChannelId, feeQuota)
 
+	// 成功路径：use_time 为纯模型运行耗时（ModelEndTime - ModelStartTime），
+	// 不含排队时间和请求预处理时间。
 	useTimeSeconds := relayInfo.ModelUseTimeSeconds()
 	tokenName := ctx.GetString("token_name")
 	oai := apiErr.ToOpenAIError()

@@ -161,6 +161,8 @@ func calculateTextQuotaSummary(ctx *gin.Context, relayInfo *relaycommon.RelayInf
 	summary := textQuotaSummary{
 		ModelName:            relayInfo.OriginModelName,
 		TokenName:            ctx.GetString("token_name"),
+		// 成功路径：use_time 为纯模型运行耗时（ModelEndTime - ModelStartTime），
+		// 不含排队时间和请求预处理时间。
 		UseTimeSeconds:       relayInfo.ModelUseTimeSeconds(),
 		CompletionRatio:      relayInfo.PriceData.CompletionRatio,
 		CacheRatio:           relayInfo.PriceData.CacheRatio,

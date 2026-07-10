@@ -450,6 +450,10 @@ func processChannelError(c *gin.Context, channelError types.ChannelError, err *t
 		if startTime.IsZero() {
 			startTime = time.Now()
 		}
+		// 注意：错误路径使用 time.Since(startTime) 作为 use_time，
+		// 包含排队时间和模型启动时间（模型可能未启动或启动后失败）。
+		// 这与成功路径（ModelEndTime - ModelStartTime，纯模型耗时）语义不同。
+		// 参见 relay/common/relay_info.go ModelUseTimeSeconds() 中的说明。
 		useTimeSeconds := int(time.Since(startTime).Seconds())
 		requestTime := startTime.Unix()
 		modelStartTime, _ := common.GetContextKeyType[int64](c, constant.ContextKeyModelStartTime)
