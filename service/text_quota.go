@@ -161,16 +161,7 @@ func calculateTextQuotaSummary(ctx *gin.Context, relayInfo *relaycommon.RelayInf
 	summary := textQuotaSummary{
 		ModelName:            relayInfo.OriginModelName,
 		TokenName:            ctx.GetString("token_name"),
-		UseTimeSeconds: func() int64 {
-			d := relayInfo.ModelEndTime.Unix() - relayInfo.ModelStartTime.Unix()
-			if d < 0 {
-				return 0
-			}
-			if d < 1 && relayInfo.ModelEndTime.Unix() > relayInfo.ModelStartTime.Unix() {
-				return 1
-			}
-			return d
-		}(),
+		UseTimeSeconds:       relayInfo.ModelUseTimeSeconds(),
 		CompletionRatio:      relayInfo.PriceData.CompletionRatio,
 		CacheRatio:           relayInfo.PriceData.CacheRatio,
 		ImageRatio:           relayInfo.PriceData.ImageRatio,

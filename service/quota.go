@@ -166,13 +166,7 @@ func PostWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, mod
 		tieredResult = tieredRes
 	}
 
-	useTimeSeconds := relayInfo.ModelEndTime.Unix() - relayInfo.ModelStartTime.Unix()
-	if useTimeSeconds < 0 {
-		useTimeSeconds = 0
-	}
-	if useTimeSeconds < 1 && relayInfo.ModelEndTime.Unix() > relayInfo.ModelStartTime.Unix() {
-		useTimeSeconds = 1
-	}
+	useTimeSeconds := relayInfo.ModelUseTimeSeconds()
 	textInputTokens := usage.InputTokenDetails.TextTokens
 	textOutTokens := usage.OutputTokenDetails.TextTokens
 
@@ -297,13 +291,7 @@ func PostAudioConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, u
 		tieredResult = tieredRes
 	}
 
-	useTimeSeconds := relayInfo.ModelEndTime.Unix() - relayInfo.ModelStartTime.Unix()
-	if useTimeSeconds < 0 {
-		useTimeSeconds = 0
-	}
-	if useTimeSeconds < 1 && relayInfo.ModelEndTime.Unix() > relayInfo.ModelStartTime.Unix() {
-		useTimeSeconds = 1
-	}
+	useTimeSeconds := relayInfo.ModelUseTimeSeconds()
 	textInputTokens := usage.PromptTokensDetails.TextTokens
 	textOutTokens := usage.CompletionTokenDetails.TextTokens
 
