@@ -553,6 +553,13 @@ func GetLogById(id int) (*Log, error) {
 		}
 		return nil, err
 	}
+	// 从 log_details 表获取大字段数据
+	detail, err := GetLogDetailByLogId(int64(id))
+	if err == nil && detail != nil {
+		log.RequestData = detail.RequestData
+		log.RequestBody = detail.RequestBody
+		log.ResponseBody = detail.ResponseBody
+	}
 	return &log, nil
 }
 

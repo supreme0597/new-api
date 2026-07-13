@@ -390,6 +390,15 @@ func migrateLOGDB() error {
 	if err = LOG_DB.AutoMigrate(&Log{}); err != nil {
 		return err
 	}
+	if err = LOG_DB.AutoMigrate(&LogDetail{}); err != nil {
+		return err
+	}
+	if err = LOG_DB.AutoMigrate(&LogBackup{}); err != nil {
+		return err
+	}
+	if err = LOG_DB.AutoMigrate(&LogDetailBackup{}); err != nil {
+		return err
+	}
 	return nil
 }
 

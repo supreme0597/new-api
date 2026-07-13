@@ -47,9 +47,6 @@ func captureUpstreamRequestHeaders(info *common.RelayInfo, headers http.Header) 
 	if info == nil || info.CapturedData == nil {
 		return
 	}
-	if !operation_setting.GetLogDetailSetting().Enabled {
-		return
-	}
 	h := make(map[string]string, len(headers))
 	for name, values := range headers {
 		h[name] = strings.Join(values, ", ")
@@ -60,9 +57,6 @@ func captureUpstreamRequestHeaders(info *common.RelayInfo, headers http.Header) 
 // captureUpstreamResponseHeaders 将上游响应头保存到 CapturedData 中（日志详情存储）
 func captureUpstreamResponseHeaders(info *common.RelayInfo, headers http.Header) {
 	if info == nil || info.CapturedData == nil {
-		return
-	}
-	if !operation_setting.GetLogDetailSetting().Enabled {
 		return
 	}
 	h := make(map[string]string, len(headers))

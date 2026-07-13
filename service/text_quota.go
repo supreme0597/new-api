@@ -544,12 +544,13 @@ func truncateBody(body string, maxSize int) string {
 	return body
 }
 
-// saveLogDetailBody 异步保存日志详情数据（请求体/响应体）
+// saveLogDetailBody 异步保存日志详情数据（请求体/响应体）到 log_details 表
 func saveLogDetailBody(ctx *gin.Context, info *relaycommon.RelayInfo, logID int) {
-	setting := operation_setting.GetLogDetailSetting()
-	if !setting.Enabled || info.CapturedData == nil {
+	if info.CapturedData == nil {
 		return
 	}
+
+	setting := operation_setting.GetLogDetailSetting()
 
 	// 截断超大 body
 	requestBody := truncateBody(info.CapturedData.RequestBody, setting.MaxBodySize)
@@ -576,15 +577,15 @@ func saveLogDetailBody(ctx *gin.Context, info *relaycommon.RelayInfo, logID int)
 		}
 	}
 
-	// 使用 LOG_DB（日志数据库），添加错误处理
-	if err := model.LOG_DB.Model(&model.Log{}).
-		Where("id = ?", logID).
-		Updates(map[string]interface{}{
-			"request_data":  completeData,
-			"request_body":  savedBody,
-			"response_body": responseBody,
-		}).Error; err != nil {
-		logger.LogError(ctx, "failed to save log detail body: "+err.Error())
+	// 写入 log_details 表（替代原来更新 logs 表的方式）
+	detail := &model.LogDetail{
+		LogId:        int64(logID),
+		RequestData:  completeData,
+		RequestBody:  savedBody,
+		ResponseBody: responseBody,
+	}
+	if err := model.CreateLogDetail(detail); err != nil {
+		logger.LogError(ctx, "failed to save log detail: "+err.Error())
 	}
 }
 
