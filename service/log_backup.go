@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/QuantumNous/new-api/logger"
@@ -9,12 +10,19 @@ import (
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 )
 
+var logBackupRunning atomic.Bool
+
 // RunLogBackup 运行日志备份任务
 // 将 logs 表中超过保留期的数据迁移到 logs_backup 和 log_details_backup 表
-func RunLogBackup() {
+func RunLogBackup() (int, error) {
+	if !logBackupRunning.CompareAndSwap(false, true) {
+		return 0, nil // 已有任务在执行，跳过
+	}
+	defer logBackupRunning.Store(false)
+
 	setting := operation_setting.GetLogBackupSetting()
 	if !setting.Enabled {
-		return
+		return 0, nil
 	}
 
 	logger.LogInfo(nil, "starting log backup task")
@@ -39,7 +47,7 @@ func RunLogBackup() {
 			Find(&logs).Error
 		if err != nil {
 			logger.LogError(nil, "failed to query logs for backup: "+err.Error())
-			return
+			return totalBackedUp, err
 		}
 
 		if len(logs) == 0 {
@@ -56,7 +64,7 @@ func RunLogBackup() {
 		var details []model.LogDetail
 		if err := model.LOG_DB.Where("log_id IN ?", logIds).Find(&details).Error; err != nil {
 			logger.LogError(nil, "failed to query log_details for backup: "+err.Error())
-			return
+			return totalBackedUp, err
 		}
 		detailMap := make(map[int64]*model.LogDetail, len(details))
 		for i := range details {
@@ -101,7 +109,7 @@ func RunLogBackup() {
 		if err := tx.Create(&backupLogs).Error; err != nil {
 			tx.Rollback()
 			logger.LogError(nil, "failed to create log backups: "+err.Error())
-			return
+			return totalBackedUp, err
 		}
 
 		// 备份 log_details
@@ -119,7 +127,7 @@ func RunLogBackup() {
 			if err := tx.Create(&backupDetails).Error; err != nil {
 				tx.Rollback()
 				logger.LogError(nil, "failed to create log_detail backups: "+err.Error())
-				return
+				return totalBackedUp, err
 			}
 		}
 
@@ -127,17 +135,17 @@ func RunLogBackup() {
 		if err := tx.Where("log_id IN ?", logIds).Delete(&model.LogDetail{}).Error; err != nil {
 			tx.Rollback()
 			logger.LogError(nil, "failed to delete log_details: "+err.Error())
-			return
+			return totalBackedUp, err
 		}
 		if err := tx.Where("id IN ?", logIds).Delete(&model.Log{}).Error; err != nil {
 			tx.Rollback()
 			logger.LogError(nil, "failed to delete logs: "+err.Error())
-			return
+			return totalBackedUp, err
 		}
 
 		if err := tx.Commit().Error; err != nil {
 			logger.LogError(nil, "failed to commit backup transaction: "+err.Error())
-			return
+			return totalBackedUp, err
 		}
 
 		totalBackedUp += len(logs)
@@ -145,4 +153,5 @@ func RunLogBackup() {
 	}
 
 	logger.LogInfo(nil, fmt.Sprintf("log backup task completed, total backed up: %d", totalBackedUp))
+	return totalBackedUp, nil
 }

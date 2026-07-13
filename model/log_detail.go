@@ -1,5 +1,11 @@
 package model
 
+import (
+	"errors"
+
+	"gorm.io/gorm"
+)
+
 // LogDetail 日志详情，存储大字段（request_data, request_body, response_body）
 // 与 logs 表通过 log_id (logs.id) 关联
 type LogDetail struct {
@@ -10,10 +16,14 @@ type LogDetail struct {
 }
 
 // GetLogDetailByLogId 根据 log_id 查询日志详情
+// 当 log_details 表中无记录时（旧日志），返回 nil, nil
 func GetLogDetailByLogId(logId int64) (*LogDetail, error) {
 	var detail LogDetail
 	err := LOG_DB.Where("log_id = ?", logId).First(&detail).Error
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	return &detail, nil

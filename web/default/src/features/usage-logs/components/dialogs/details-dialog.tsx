@@ -1253,6 +1253,16 @@ function RequestTab({ log }: { log: UsageLog }) {
     }
   }, [log.request_body])
 
+  const hasData = (headers && Object.keys(headers).length > 0) || bodyDisplay
+
+  if (!hasData) {
+    return (
+      <div className='flex items-center justify-center py-8 text-sm text-muted-foreground'>
+        {t('Detail not available')}
+      </div>
+    )
+  }
+
   return (
     <div className='space-y-6'>
       {headers && Object.keys(headers).length > 0 && (
@@ -1285,6 +1295,16 @@ function ResponseTab({ log }: { log: UsageLog }) {
     }
   }, [log.request_data])
   const statusCode = requestData.status_code
+
+  const hasData = statusCode != null || requestData.response_headers || log.response_body
+
+  if (!hasData) {
+    return (
+      <div className='flex items-center justify-center py-8 text-sm text-muted-foreground'>
+        {t('Detail not available')}
+      </div>
+    )
+  }
 
   return (
     <div className='space-y-6'>

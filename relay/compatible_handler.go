@@ -16,6 +16,7 @@ import (
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/model_setting"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/QuantumNous/new-api/types"
 	"github.com/samber/lo"
@@ -167,8 +168,12 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 		}
 
 		// 捕获请求体（日志详情存储）
-		info.CapturedData = &relaycommon.CapturedRelayData{}
-		info.CapturedData.RequestBody = string(jsonData)
+		if operation_setting.GetLogDetailSetting().Enabled {
+			if info.CapturedData == nil {
+				info.CapturedData = &relaycommon.CapturedRelayData{}
+			}
+			info.CapturedData.RequestBody = string(jsonData)
+		}
 
 		// apply param override
 		if len(info.ParamOverride) > 0 {
