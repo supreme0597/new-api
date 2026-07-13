@@ -57,9 +57,9 @@ type Log struct {
 	UpstreamRequestId string `json:"upstream_request_id,omitempty" gorm:"type:varchar(128);index:idx_logs_upstream_request_id;default:''"`
 	SessionId         string `json:"session_id,omitempty" gorm:"type:varchar(128);index:idx_logs_session_id;default:''"`
 	Other             string `json:"other"`
-	RequestData       string `json:"request_data" gorm:"type:longtext"`  // 完整请求记录 JSON（元数据+请求头+请求体+响应头+响应体）
-	RequestBody       string `json:"request_body" gorm:"type:longtext"`  // 请求体原文
-	ResponseBody      string `json:"response_body" gorm:"type:longtext"` // 响应体原文
+	RequestData       string `json:"request_data" gorm:"-"`  // 完整请求记录 JSON（元数据+请求头+请求体+响应头+响应体），从 log_details 表读取
+	RequestBody       string `json:"request_body" gorm:"-"`  // 请求体原文，从 log_details 表读取
+	ResponseBody      string `json:"response_body" gorm:"-"` // 响应体原文，从 log_details 表读取
 }
 
 // GetLogGroupCol 返回日志表 group 列的数据库特定引用

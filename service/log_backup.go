@@ -1,13 +1,57 @@
 package service
 
 import (
+	"context"
 	"fmt"
+	"sync"
+	"sync/atomic"
 	"time"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
+
+	"github.com/bytedance/gopkg/util/gopool"
 )
+
+const (
+	logBackupTickInterval = 1 * time.Hour
+)
+
+var (
+	logBackupOnce    sync.Once
+	logBackupRunning atomic.Bool
+)
+
+// StartLogBackupTask 启动日志备份定时任务
+func StartLogBackupTask() {
+	logBackupOnce.Do(func() {
+		if !common.IsMasterNode {
+			return
+		}
+		gopool.Go(func() {
+			logger.LogInfo(context.Background(), fmt.Sprintf("log backup task started: tick=%s", logBackupTickInterval))
+			ticker := time.NewTicker(logBackupTickInterval)
+			defer ticker.Stop()
+
+			// 启动时先执行一次
+			runLogBackupOnce()
+			for range ticker.C {
+				runLogBackupOnce()
+			}
+		})
+	})
+}
+
+func runLogBackupOnce() {
+	if !logBackupRunning.CompareAndSwap(false, true) {
+		return
+	}
+	defer logBackupRunning.Store(false)
+
+	RunLogBackup()
+}
 
 // RunLogBackup 运行日志备份任务
 // 将 logs 表中超过保留期的数据迁移到 logs_backup 和 log_details_backup 表
