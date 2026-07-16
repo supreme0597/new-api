@@ -169,3 +169,20 @@ export type ChannelFlowTrend = {
   points: FlowTrendPoint[]
   totals: FlowTrendTotals
 }
+
+export type LogDistributionUser = {
+  username: string
+  request_count: number
+  avg_ttft_ms: number
+  avg_tps: number
+  prompt_tokens: number
+  completion_tokens: number
+}
+
+export type LogDistributionResult = {
+  total_requests: number
+  active_users: number
+  avg_ttft_ms: number
+  avg_tps: number
+  users: LogDistributionUser[]
+}

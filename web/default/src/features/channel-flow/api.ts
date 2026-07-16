@@ -26,6 +26,7 @@ import type {
   ChannelFlowPoolPayload,
   ChannelFlowPoolStatus,
   ChannelFlowTrend,
+  LogDistributionResult,
   PageResponse,
 } from './types'
 
@@ -125,6 +126,25 @@ export async function deleteChannelFlowPoolBinding(
   const res = await api.delete(
     `/api/channel_flow/bindings/${bindingId}`,
     channelFlowActionConfig
+  )
+  return res.data
+}
+
+export type LogDistributionParams = {
+  start_timestamp?: number
+  end_timestamp?: number
+  model_name?: string
+  group?: string
+  limit?: number
+}
+
+export async function getChannelFlowPoolDistribution(
+  poolId: number,
+  params: LogDistributionParams = {}
+): Promise<ApiResponse<LogDistributionResult>> {
+  const res = await api.get(
+    `/api/channel_flow/pools/${poolId}/distribution`,
+    { params, disableDuplicate: true }
   )
   return res.data
 }

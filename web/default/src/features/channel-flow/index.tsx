@@ -363,6 +363,7 @@ export function ChannelFlowPools() {
                   statusRefreshMs={statusRefreshMs}
                   statusRefreshOptions={FLOW_STATUS_REFRESH_OPTIONS}
                   onStatusRefreshChange={setStatusRefreshMs}
+                  bindings={bindingsQuery.data?.data ?? []}
                 />
                 <PoolBindingsPanel
                   pool={selectedPool}

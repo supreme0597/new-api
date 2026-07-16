@@ -732,3 +732,124 @@ func DeleteOldLog(ctx context.Context, targetTimestamp int64, limit int) (int64,
 
 	return total, nil
 }
+
+// LogDistributionUser holds per-user aggregation for the request distribution endpoint.
+type LogDistributionUser struct {
+	Username         string  `json:"username"`
+	RequestCount     int64   `json:"request_count"`
+	AvgTTFTMs        float64 `json:"avg_ttft_ms"`
+	AvgTPS           float64 `json:"avg_tps"`
+	PromptTokens     int64   `json:"prompt_tokens"`
+	CompletionTokens int64   `json:"completion_tokens"`
+}
+
+// LogDistributionResult holds the complete distribution response.
+type LogDistributionResult struct {
+	TotalRequests int64                 `json:"total_requests"`
+	ActiveUsers   int64                 `json:"active_users"`
+	AvgTTFTMs     float64               `json:"avg_ttft_ms"`
+	AvgTPS        float64               `json:"avg_tps"`
+	Users         []LogDistributionUser `json:"users"`
+}
+
+// GetLogDistribution queries log data aggregated by user for a set of channel IDs.
+// It computes TTFT (model_start_time - request_time) and TPS (completion_tokens / seconds).
+func GetLogDistribution(channelIDs []int, startTimestamp, endTimestamp int64, modelName, group string, limit int) (*LogDistributionResult, error) {
+	if len(channelIDs) == 0 {
+		return &LogDistributionResult{}, nil
+	}
+	if limit <= 0 {
+		limit = 20
+	}
+
+	tx := DB.Table("logs").
+		Where("channel_id IN ?", channelIDs).
+		Where("type = ?", LogTypeConsume)
+
+	if startTimestamp > 0 {
+		tx = tx.Where("created_at >= ?", startTimestamp)
+	}
+	if endTimestamp > 0 {
+		tx = tx.Where("created_at <= ?", endTimestamp)
+	}
+	if modelName != "" {
+		tx = tx.Where("model_name = ?", modelName)
+	}
+	if group != "" {
+		tx = tx.Where(logGroupCol+" = ?", group)
+	}
+
+	// Only include records with valid timing data for TTFT/TPS
+	tx = tx.Where("request_time > 0 AND model_start_time > 0 AND model_end_time > model_start_time")
+
+	var users []LogDistributionUser
+	result := tx.Select(`
+		username,
+		COUNT(*) as request_count,
+		AVG(CAST(model_start_time AS REAL) - CAST(request_time AS REAL)) as avg_ttft_ms,
+		CASE WHEN SUM(CAST(model_end_time AS REAL) - CAST(model_start_time AS REAL)) > 0
+			THEN SUM(CAST(completion_tokens AS REAL)) / (SUM(CAST(model_end_time AS REAL) - CAST(model_start_time AS REAL)) / 1000.0)
+			ELSE 0
+		END as avg_tps,
+		SUM(prompt_tokens) as prompt_tokens,
+		SUM(completion_tokens) as completion_tokens
+	`).
+		Group("username").
+		Order("request_count DESC").
+		Limit(limit).
+		Find(&users).Error
+	if result != nil {
+		return nil, result
+	}
+
+	// Get total requests and active users (without timing filter)
+	var totalRequests int64
+	var activeUsers int64
+	tx2 := DB.Table("logs").
+		Where("channel_id IN ?", channelIDs).
+		Where("type = ?", LogTypeConsume)
+	if startTimestamp > 0 {
+		tx2 = tx2.Where("created_at >= ?", startTimestamp)
+	}
+	if endTimestamp > 0 {
+		tx2 = tx2.Where("created_at <= ?", endTimestamp)
+	}
+	if modelName != "" {
+		tx2 = tx2.Where("model_name = ?", modelName)
+	}
+	if group != "" {
+		tx2 = tx2.Where(logGroupCol+" = ?", group)
+	}
+	if err := tx2.Count(&totalRequests).Error; err != nil {
+		return nil, err
+	}
+	if err := tx2.Select("COUNT(DISTINCT username)").Scan(&activeUsers).Error; err != nil {
+		return nil, err
+	}
+
+	// Compute overall averages
+	var avgTTFT float64
+	var avgTPS float64
+	if len(users) > 0 {
+		var totalTTFT float64
+		var totalTPS float64
+		var count int64
+		for _, u := range users {
+			totalTTFT += u.AvgTTFTMs * float64(u.RequestCount)
+			totalTPS += u.AvgTPS * float64(u.RequestCount)
+			count += u.RequestCount
+		}
+		if count > 0 {
+			avgTTFT = totalTTFT / float64(count)
+			avgTPS = totalTPS / float64(count)
+		}
+	}
+
+	return &LogDistributionResult{
+		TotalRequests: totalRequests,
+		ActiveUsers:   activeUsers,
+		AvgTTFTMs:     avgTTFT,
+		AvgTPS:        avgTPS,
+		Users:         users,
+	}, nil
+}

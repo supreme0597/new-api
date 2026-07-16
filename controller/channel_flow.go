@@ -302,6 +302,49 @@ func DeleteChannelFlowPoolBinding(c *gin.Context) {
 	common.ApiSuccess(c, nil)
 }
 
+func GetChannelFlowPoolDistribution(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	pool, err := model.GetChannelFlowPoolByID(id)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+
+	// Get channel IDs from pool bindings
+	var bindings []*model.ChannelFlowPoolBinding
+	if err := model.DB.Where("pool_id = ? AND enabled = ?", pool.Id, true).Find(&bindings).Error; err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	channelIDs := make([]int, 0, len(bindings))
+	for _, b := range bindings {
+		channelIDs = append(channelIDs, b.ChannelId)
+	}
+
+	// Parse filter params
+	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
+	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
+	modelName := c.Query("model_name")
+	group := c.Query("group")
+	limit := 20
+	if rawLimit := c.Query("limit"); rawLimit != "" {
+		if parsed, parseErr := strconv.Atoi(rawLimit); parseErr == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+
+	result, err := model.GetLogDistribution(channelIDs, startTimestamp, endTimestamp, modelName, group, limit)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, result)
+}
+
 func channelFlowPoolFromRequest(req channelFlowPoolRequest, existing *model.ChannelFlowPool) *model.ChannelFlowPool {
 	pool := &model.ChannelFlowPool{}
 	if existing != nil {
