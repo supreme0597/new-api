@@ -41,12 +41,15 @@ import {
 } from '@/components/ui/select'
 import type {
   ChannelFlowPool,
+  ChannelFlowPoolBinding,
   ChannelFlowPoolStatus,
   FlowTrendTotals,
   FlowTrendPoint,
 } from '../types'
+import { RequestDistributionTab } from './request-distribution-tab'
 
 type TrendChartMode = 'requests' | 'capacity'
+type PoolStatusTab = 'overview' | 'distribution'
 
 type PoolStatusPanelProps = {
   pool?: ChannelFlowPool | null
@@ -60,6 +63,7 @@ type PoolStatusPanelProps = {
   statusRefreshMs: number
   statusRefreshOptions: Array<{ label: string; ms: number }>
   onStatusRefreshChange: (ms: number) => void
+  bindings?: ChannelFlowPoolBinding[]
 }
 
 const trendChartInitialDimension = { width: 1, height: 300 }
@@ -76,6 +80,7 @@ const trendChartModes: Array<{ label: string; value: TrendChartMode }> = [
 export function PoolStatusPanel(props: PoolStatusPanelProps) {
   const { t } = useTranslation()
   const [chartMode, setChartMode] = useState<TrendChartMode>('requests')
+  const [activeTab, setActiveTab] = useState<PoolStatusTab>('overview')
 
   if (!props.pool) {
     return (
@@ -112,7 +117,36 @@ export function PoolStatusPanel(props: PoolStatusPanelProps) {
         : t('Memory')
 
   return (
-    <div className='grid items-stretch gap-3 xl:grid-cols-[minmax(280px,0.72fr)_minmax(520px,1.28fr)]'>
+    <div className='rounded-lg border'>
+      {/* Tab bar */}
+      <div className='bg-muted flex border-b'>
+        <button
+          type='button'
+          className={
+            activeTab === 'overview'
+              ? 'border-foreground text-foreground border-b-2 px-4 py-2.5 text-sm font-medium'
+              : 'text-muted-foreground hover:text-foreground border-b-2 border-transparent px-4 py-2.5 text-sm font-medium'
+          }
+          onClick={() => setActiveTab('overview')}
+        >
+          {t('Overview')}
+        </button>
+        <button
+          type='button'
+          className={
+            activeTab === 'distribution'
+              ? 'border-foreground text-foreground border-b-2 px-4 py-2.5 text-sm font-medium'
+              : 'text-muted-foreground hover:text-foreground border-b-2 border-transparent px-4 py-2.5 text-sm font-medium'
+          }
+          onClick={() => setActiveTab('distribution')}
+        >
+          {t('Request Distribution')}
+        </button>
+      </div>
+
+      {/* Tab content */}
+      {activeTab === 'overview' ? (
+        <div className='grid items-stretch gap-3 p-4 xl:grid-cols-[minmax(280px,0.72fr)_minmax(520px,1.28fr)]'>
       <div className='space-y-3 rounded-lg border p-4'>
         <div className='flex items-start justify-between gap-3'>
           <div className='min-w-0'>
@@ -411,7 +445,16 @@ export function PoolStatusPanel(props: PoolStatusPanelProps) {
             )}
           </ResponsiveContainer>
         </div>
-      </div>
+        </div>
+        </div>
+      ) : (
+        <div className='p-4'>
+          <RequestDistributionTab
+            pool={props.pool}
+            bindings={props.bindings ?? []}
+          />
+        </div>
+      )}
     </div>
   )
 }

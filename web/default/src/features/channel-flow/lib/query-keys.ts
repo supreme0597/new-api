@@ -28,4 +28,8 @@ export const channelFlowQueryKeys = {
     [...channelFlowQueryKeys.all, 'status', poolId] as const,
   trend: (poolId: number, minutes: number) =>
     [...channelFlowQueryKeys.all, 'trend', poolId, minutes] as const,
+  distribution: (
+    poolId: number,
+    params: Record<string, unknown>
+  ) => [...channelFlowQueryKeys.all, 'distribution', poolId, params] as const,
 }
