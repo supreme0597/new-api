@@ -1,7 +1,7 @@
 module github.com/QuantumNous/new-api
 
 // +heroku goVersion go1.18
-go 1.25.1
+go 1.26.4
 
 require (
 	github.com/Calcium-Ion/go-epay v0.0.4
@@ -63,6 +63,8 @@ require (
 
 require github.com/waffo-com/waffo-pancake-sdk-go v0.3.1
 
+require github.com/go-json-experiment/json v0.0.0-20260601182631-00ed12fed2a6 // indirect
+
 require (
 	github.com/Azure/go-ntlmssp v0.1.0 // indirect
 	github.com/DmitriyVTitov/size v1.5.0 // indirect
@@ -108,6 +110,7 @@ require (
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
+	github.com/kaptinlin/jsonrepair v0.4.8
 	github.com/klauspost/compress v1.18.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
