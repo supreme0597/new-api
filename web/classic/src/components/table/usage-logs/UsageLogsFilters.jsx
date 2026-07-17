@@ -65,6 +65,28 @@ const LogsFilters = ({
             />
           </div>
 
+          {/* 时间字段选择器 */}
+          <Form.Select
+            field='timeField'
+            className='w-full'
+            showClear
+            pure
+            size='small'
+          >
+            <Form.Select.Option value='model_end_time'>
+              {t('模型结束时间')}
+            </Form.Select.Option>
+            <Form.Select.Option value='model_start_time'>
+              {t('模型开始时间')}
+            </Form.Select.Option>
+            <Form.Select.Option value='request_time'>
+              {t('请求时间')}
+            </Form.Select.Option>
+            <Form.Select.Option value='created_at'>
+              {t('创建时间')}
+            </Form.Select.Option>
+          </Form.Select>
+
           {/* 其他搜索字段 */}
           <Form.Input
             field='token_name'
