@@ -79,7 +79,7 @@ export function CommonLogsFilterBar<TData>(
     return { startTime: start, endTime: end }
   })
   const [logType, setLogType] = useState<LogTypeValue>(LOG_TYPE_ALL_VALUE)
-  const [timeField, setTimeField] = useState<string>((searchParams as Record<string, unknown>).timeField as string || 'model_end_time')
+  const [timeField, setTimeField] = useState<string>((searchParams as Record<string, unknown>).timeField as string || 'created_at')
 
   useEffect(() => {
     const { start, end } = getDefaultTimeRange()
@@ -96,7 +96,7 @@ export function CommonLogsFilterBar<TData>(
       requestId: searchParams.requestId || undefined,
       upstreamRequestId: searchParams.upstreamRequestId || undefined,
       sessionId: searchParams.sessionId || undefined,
-      timeField: ((searchParams as Record<string, unknown>).timeField as string) || 'model_end_time',
+      timeField: ((searchParams as Record<string, unknown>).timeField as string) || 'created_at',
     })
 
     const typeArr = searchParams.type
@@ -149,7 +149,7 @@ export function CommonLogsFilterBar<TData>(
     const resetFilters: CommonLogFilters = { startTime: start, endTime: end }
     setFilters(resetFilters)
     setLogType(LOG_TYPE_ALL_VALUE)
-    setTimeField('model_end_time')
+    setTimeField('created_at')
 
     navigate({
       to: '/usage-logs/$section',
@@ -247,10 +247,10 @@ export function CommonLogsFilterBar<TData>(
             onChange={(e) => setTimeField(e.target.value)}
             className="h-8 rounded-md border border-input bg-background px-2 text-xs"
           >
+            <option value="created_at">{t('Created Time')}</option>
             <option value="model_end_time">{t('Model End Time')}</option>
             <option value="model_start_time">{t('Model Start Time')}</option>
             <option value="request_time">{t('Request Time')}</option>
-            <option value="created_at">{t('Created Time')}</option>
           </select>
         </div>
       </div>
