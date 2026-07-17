@@ -451,7 +451,6 @@ export function PoolStatusPanel(props: PoolStatusPanelProps) {
         <div className='p-4'>
           <RequestDistributionTab
             pool={props.pool}
-            bindings={props.bindings ?? []}
           />
         </div>
       )}

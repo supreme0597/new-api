@@ -749,6 +749,7 @@ type LogDistributionResult struct {
 	ActiveUsers   int64                 `json:"active_users"`
 	AvgTTFTMs     float64               `json:"avg_ttft_ms"`
 	AvgTPS        float64               `json:"avg_tps"`
+	Models        []string              `json:"models"`
 	Users         []LogDistributionUser `json:"users"`
 }
 
@@ -762,33 +763,47 @@ func GetLogDistribution(channelIDs []int, startTimestamp, endTimestamp int64, mo
 		limit = 20
 	}
 
-	tx := DB.Table("logs").
-		Where("channel_id IN ?", channelIDs).
-		Where("type = ?", LogTypeConsume)
+	// Build base filter (shared by all sub-queries)
+	baseFilter := func(tx *gorm.DB) *gorm.DB {
+		tx = tx.Where("channel_id IN ?", channelIDs).Where("type = ?", LogTypeConsume)
+		if startTimestamp > 0 {
+			tx = tx.Where("created_at >= ?", startTimestamp)
+		}
+		if endTimestamp > 0 {
+			tx = tx.Where("created_at <= ?", endTimestamp)
+		}
+		if modelName != "" {
+			tx = tx.Where("model_name = ?", modelName)
+		}
+		if group != "" {
+			tx = tx.Where(logGroupCol+" = ?", group)
+		}
+		return tx
+	}
 
-	if startTimestamp > 0 {
-		tx = tx.Where("created_at >= ?", startTimestamp)
-	}
-	if endTimestamp > 0 {
-		tx = tx.Where("created_at <= ?", endTimestamp)
-	}
-	if modelName != "" {
-		tx = tx.Where("model_name = ?", modelName)
-	}
-	if group != "" {
-		tx = tx.Where(logGroupCol+" = ?", group)
+	// 1) Distinct models (no timing filter needed)
+	var models []string
+	modelsErr := baseFilter(DB.Table("logs").Select("DISTINCT model_name")).
+		Where("model_name != ''").
+		Pluck("model_name", &models).Error
+	if modelsErr != nil {
+		return nil, modelsErr
 	}
 
-	// Only include records with valid timing data for TTFT/TPS
-	tx = tx.Where("request_time > 0 AND model_start_time > 0 AND model_end_time > model_start_time")
-
+	// 2) Per-user aggregation: count ALL requests, compute TTFT/TPS only from records with timing data
+	tx := baseFilter(DB.Table("logs"))
 	var users []LogDistributionUser
 	result := tx.Select(`
 		username,
 		COUNT(*) as request_count,
-		AVG(model_start_time - request_time) as avg_ttft_ms,
-		CASE WHEN SUM(model_end_time - model_start_time) > 0
-			THEN SUM(completion_tokens) * 1000.0 / SUM(model_end_time - model_start_time)
+		CASE WHEN SUM(CASE WHEN request_time > 0 AND model_start_time > 0 AND model_end_time > model_start_time THEN 1 ELSE 0 END) > 0
+			THEN AVG(CASE WHEN request_time > 0 AND model_start_time > 0 AND model_end_time > model_start_time
+				THEN model_start_time - request_time ELSE NULL END)
+			ELSE 0
+		END as avg_ttft_ms,
+		CASE WHEN SUM(CASE WHEN model_end_time > model_start_time THEN model_end_time - model_start_time ELSE 0 END) > 0
+			THEN SUM(CASE WHEN model_end_time > model_start_time THEN completion_tokens ELSE 0 END) * 1000.0
+				/ SUM(CASE WHEN model_end_time > model_start_time THEN model_end_time - model_start_time ELSE 0 END)
 			ELSE 0
 		END as avg_tps,
 		SUM(prompt_tokens) as prompt_tokens,
@@ -802,24 +817,10 @@ func GetLogDistribution(channelIDs []int, startTimestamp, endTimestamp int64, mo
 		return nil, result
 	}
 
-	// Get total requests and active users (without timing filter)
+	// 3) Total requests and active users (no timing filter)
 	var totalRequests int64
 	var activeUsers int64
-	tx2 := DB.Table("logs").
-		Where("channel_id IN ?", channelIDs).
-		Where("type = ?", LogTypeConsume)
-	if startTimestamp > 0 {
-		tx2 = tx2.Where("created_at >= ?", startTimestamp)
-	}
-	if endTimestamp > 0 {
-		tx2 = tx2.Where("created_at <= ?", endTimestamp)
-	}
-	if modelName != "" {
-		tx2 = tx2.Where("model_name = ?", modelName)
-	}
-	if group != "" {
-		tx2 = tx2.Where(logGroupCol+" = ?", group)
-	}
+	tx2 := baseFilter(DB.Table("logs"))
 	if err := tx2.Count(&totalRequests).Error; err != nil {
 		return nil, err
 	}
@@ -827,7 +828,7 @@ func GetLogDistribution(channelIDs []int, startTimestamp, endTimestamp int64, mo
 		return nil, err
 	}
 
-	// Compute overall averages
+	// 4) Compute overall averages
 	var avgTTFT float64
 	var avgTPS float64
 	if len(users) > 0 {
@@ -850,6 +851,7 @@ func GetLogDistribution(channelIDs []int, startTimestamp, endTimestamp int64, mo
 		ActiveUsers:   activeUsers,
 		AvgTTFTMs:     avgTTFT,
 		AvgTPS:        avgTPS,
+		Models:        models,
 		Users:         users,
 	}, nil
 }

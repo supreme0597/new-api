@@ -25,7 +25,6 @@ import { getChannelFlowPoolDistribution } from '../api'
 import { channelFlowQueryKeys } from '../lib'
 import type {
   ChannelFlowPool,
-  ChannelFlowPoolBinding,
   LogDistributionUser,
 } from '../types'
 
@@ -46,7 +45,6 @@ const LIMIT_OPTIONS = [10, 20, 50, 100]
 
 type Props = {
   pool: ChannelFlowPool
-  bindings: ChannelFlowPoolBinding[]
 }
 
 function formatMs(ms: number): string {
@@ -78,7 +76,7 @@ function fromLocalDatetime(s: string): number {
   return new Date(s).getTime()
 }
 
-export function RequestDistributionTab({ pool, bindings }: Props) {
+export function RequestDistributionTab({ pool }: Props) {
   const { t } = useTranslation()
 
   // Filters
@@ -87,15 +85,6 @@ export function RequestDistributionTab({ pool, bindings }: Props) {
   const [selectedGroup, setSelectedGroup] = useState('')
   const [selectedModel, setSelectedModel] = useState('')
   const [limit, setLimit] = useState(20)
-
-  // Get unique models from bindings
-  const boundModels = useMemo(() => {
-    const models = new Set<string>()
-    for (const b of bindings) {
-      if (b.upstream_model) models.add(b.upstream_model)
-    }
-    return Array.from(models).sort()
-  }, [bindings])
 
   // Fetch distribution data
   const distributionParams = useMemo(
@@ -114,6 +103,12 @@ export function RequestDistributionTab({ pool, bindings }: Props) {
     queryFn: () => getChannelFlowPoolDistribution(pool.id, distributionParams),
     select: (res) => (res.success ? res.data : null),
   })
+
+  // Models from API response (logs table), not from bindings
+  const availableModels = useMemo(
+    () => (data?.models ?? []).sort(),
+    [data?.models]
+  )
 
   const totalRequests = data?.total_requests ?? 0
   const activeUsers = data?.active_users ?? 0
@@ -174,7 +169,7 @@ export function RequestDistributionTab({ pool, bindings }: Props) {
             onChange={(e) => setSelectedModel(e.target.value)}
           >
             <option value=''>{t('All')}</option>
-            {boundModels.map((m) => (
+            {availableModels.map((m) => (
               <option key={m} value={m}>
                 {m}
               </option>
