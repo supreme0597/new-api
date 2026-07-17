@@ -502,7 +502,7 @@ func CovertOpenAI2Gemini(c *gin.Context, textRequest dto.GeneralOpenAIRequest, i
 			for _, call := range message.ParseToolCalls() {
 				args := map[string]interface{}{}
 				if call.Function.Arguments != "" {
-					if err := common.SafeUnmarshalToolCallArgs(call.Function.Arguments, &args); err != nil {
+					if json.Unmarshal([]byte(call.Function.Arguments), &args) != nil {
 						return nil, fmt.Errorf("invalid arguments for function %s, args: %s", call.Function.Name, call.Function.Arguments)
 					}
 				}
