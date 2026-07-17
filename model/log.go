@@ -786,9 +786,9 @@ func GetLogDistribution(channelIDs []int, startTimestamp, endTimestamp int64, mo
 	result := tx.Select(`
 		username,
 		COUNT(*) as request_count,
-		AVG(CAST(model_start_time AS REAL) - CAST(request_time AS REAL)) as avg_ttft_ms,
-		CASE WHEN SUM(CAST(model_end_time AS REAL) - CAST(model_start_time AS REAL)) > 0
-			THEN SUM(CAST(completion_tokens AS REAL)) / (SUM(CAST(model_end_time AS REAL) - CAST(model_start_time AS REAL)) / 1000.0)
+		AVG(model_start_time - request_time) as avg_ttft_ms,
+		CASE WHEN SUM(model_end_time - model_start_time) > 0
+			THEN SUM(completion_tokens) * 1000.0 / SUM(model_end_time - model_start_time)
 			ELSE 0
 		END as avg_tps,
 		SUM(prompt_tokens) as prompt_tokens,
