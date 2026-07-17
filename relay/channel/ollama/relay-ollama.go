@@ -127,7 +127,7 @@ func openAIChatToOllamaChat(c *gin.Context, r *dto.GeneralOpenAIRequest) (*Ollam
 				for _, tc := range parsed {
 					var args interface{}
 					if tc.Function.Arguments != "" {
-						_ = common.SafeUnmarshalToolCallArgs(tc.Function.Arguments, &args)
+						_ = json.Unmarshal([]byte(tc.Function.Arguments), &args)
 					}
 					if args == nil {
 						args = map[string]any{}

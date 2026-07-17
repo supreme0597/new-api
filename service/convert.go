@@ -622,7 +622,7 @@ func ResponseOpenAI2Claude(openAIResponse *dto.OpenAITextResponse, info *relayco
 				claudeContent.Id = toolUse.ID
 				claudeContent.Name = toolUse.Function.Name
 				var mapParams map[string]interface{}
-				if err := common.SafeUnmarshalToolCallArgs(toolUse.Function.Arguments, &mapParams); err == nil {
+				if err := common.Unmarshal([]byte(toolUse.Function.Arguments), &mapParams); err == nil {
 					claudeContent.Input = mapParams
 				} else {
 					claudeContent.Input = toolUse.Function.Arguments
@@ -870,7 +870,7 @@ func ResponseOpenAI2Gemini(openAIResponse *dto.OpenAITextResponse, info *relayco
 				// 解析参数
 				var args map[string]interface{}
 				if toolCall.Function.Arguments != "" {
-					if err := common.SafeUnmarshalToolCallArgs(toolCall.Function.Arguments, &args); err != nil {
+					if err := json.Unmarshal([]byte(toolCall.Function.Arguments), &args); err != nil {
 						args = map[string]interface{}{"arguments": toolCall.Function.Arguments}
 					}
 				} else {
@@ -973,7 +973,7 @@ func StreamResponseOpenAI2Gemini(openAIResponse *dto.ChatCompletionsStreamRespon
 				// 解析参数
 				var args map[string]interface{}
 				if toolCall.Function.Arguments != "" {
-					if err := common.SafeUnmarshalToolCallArgs(toolCall.Function.Arguments, &args); err != nil {
+					if err := json.Unmarshal([]byte(toolCall.Function.Arguments), &args); err != nil {
 						args = map[string]interface{}{"arguments": toolCall.Function.Arguments}
 					}
 				} else {
