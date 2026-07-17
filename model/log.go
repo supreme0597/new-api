@@ -754,13 +754,22 @@ type LogDistributionResult struct {
 }
 
 // GetLogDistribution queries log data aggregated by user for a set of channel IDs.
-// It computes TTFT (model_start_time - request_time) and TPS (completion_tokens / seconds).
+// Timestamps in the logs table (created_at, request_time, model_start_time, model_end_time)
+// are all in seconds. The caller may pass millisecond timestamps; we normalize to seconds.
 func GetLogDistribution(channelIDs []int, startTimestamp, endTimestamp int64, modelName, group string, limit int) (*LogDistributionResult, error) {
 	if len(channelIDs) == 0 {
 		return &LogDistributionResult{}, nil
 	}
 	if limit <= 0 {
 		limit = 20
+	}
+
+	// Normalize millisecond timestamps to seconds for comparison with created_at
+	if startTimestamp > 1e12 {
+		startTimestamp /= 1000
+	}
+	if endTimestamp > 1e12 {
+		endTimestamp /= 1000
 	}
 
 	// Build base filter (shared by all sub-queries)
@@ -790,7 +799,8 @@ func GetLogDistribution(channelIDs []int, startTimestamp, endTimestamp int64, mo
 		return nil, modelsErr
 	}
 
-	// 2) Per-user aggregation: count ALL requests, compute TTFT/TPS only from records with timing data
+	// 2) Per-user aggregation: count ALL requests, compute TTFT/TPS only from records with timing data.
+	//    All time fields are in seconds: TTFT returns ms (*1000), TPS = tokens/seconds.
 	tx := baseFilter(DB.Table("logs"))
 	var users []LogDistributionUser
 	result := tx.Select(`
@@ -798,11 +808,11 @@ func GetLogDistribution(channelIDs []int, startTimestamp, endTimestamp int64, mo
 		COUNT(*) as request_count,
 		CASE WHEN SUM(CASE WHEN request_time > 0 AND model_start_time > 0 AND model_end_time > model_start_time THEN 1 ELSE 0 END) > 0
 			THEN AVG(CASE WHEN request_time > 0 AND model_start_time > 0 AND model_end_time > model_start_time
-				THEN model_start_time - request_time ELSE NULL END)
+				THEN (model_start_time - request_time) * 1000 ELSE NULL END)
 			ELSE 0
 		END as avg_ttft_ms,
 		CASE WHEN SUM(CASE WHEN model_end_time > model_start_time THEN model_end_time - model_start_time ELSE 0 END) > 0
-			THEN SUM(CASE WHEN model_end_time > model_start_time THEN completion_tokens ELSE 0 END) * 1000.0
+			THEN SUM(CASE WHEN model_end_time > model_start_time THEN completion_tokens ELSE 0 END) * 1.0
 				/ SUM(CASE WHEN model_end_time > model_start_time THEN model_end_time - model_start_time ELSE 0 END)
 			ELSE 0
 		END as avg_tps,
