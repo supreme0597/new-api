@@ -488,11 +488,11 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 	// 异步写入日志详情数据（请求体/响应体）
 	if relayInfo.CapturedData != nil && operation_setting.GetLogDetailSetting().Enabled && log != nil {
 		// 保存元数据供 saveLogDetailBody 使用
-		relayInfo.CapturedData.RequestData = buildRequestMetadata(ctx, relayInfo)
+		relayInfo.CapturedData.RequestData = BuildRequestMetadata(ctx, relayInfo)
 
 		copiedCtx := ctx.Copy()
 		gopool.Go(func() {
-			saveLogDetailBody(copiedCtx, relayInfo, log.Id)
+			SaveLogDetailBody(copiedCtx, relayInfo, log.Id)
 		})
 	}
 
@@ -501,8 +501,8 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 	})
 }
 
-// buildRequestMetadata 构建请求元数据 JSON（仅 metadata 部分，不含 headers/body）
-func buildRequestMetadata(ctx *gin.Context, relayInfo *relaycommon.RelayInfo) string {
+// BuildRequestMetadata 构建请求元数据 JSON（仅 metadata 部分，不含 headers/body）
+func BuildRequestMetadata(ctx *gin.Context, relayInfo *relaycommon.RelayInfo) string {
 	latencyMs := int64(0)
 	if !relayInfo.StartTime.IsZero() {
 		latencyMs = time.Since(relayInfo.StartTime).Milliseconds()
@@ -544,8 +544,8 @@ func truncateBody(body string, maxSize int) string {
 	return body
 }
 
-// saveLogDetailBody 异步保存日志详情数据（请求体/响应体）到 log_details 表
-func saveLogDetailBody(ctx *gin.Context, info *relaycommon.RelayInfo, logID int) {
+// SaveLogDetailBody 异步保存日志详情数据（请求体/响应体）到 log_details 表
+func SaveLogDetailBody(ctx *gin.Context, info *relaycommon.RelayInfo, logID int) {
 	if info.CapturedData == nil {
 		return
 	}
