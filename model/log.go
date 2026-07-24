@@ -752,6 +752,7 @@ type LogDistributionResult struct {
 	AvgTTFTMs     float64               `json:"avg_ttft_ms"`
 	AvgTPS        float64               `json:"avg_tps"`
 	Models        []string              `json:"models"`
+	Groups        []string              `json:"groups"`
 	Users         []LogDistributionUser `json:"users"`
 }
 
@@ -799,6 +800,15 @@ func GetLogDistribution(channelIDs []int, startTimestamp, endTimestamp int64, mo
 		Pluck("model_name", &models).Error
 	if modelsErr != nil {
 		return nil, modelsErr
+	}
+
+	// 1b) Distinct groups
+	var groups []string
+	groupsErr := baseFilter(DB.Table("logs").Select("DISTINCT "+logGroupCol)).
+		Where(logGroupCol+" != ''").
+		Pluck(logGroupCol, &groups).Error
+	if groupsErr != nil {
+		return nil, groupsErr
 	}
 
 	// 2) Per-user aggregation: count ALL requests, compute TTFT/TPS only from records with timing data.
@@ -864,6 +874,7 @@ func GetLogDistribution(channelIDs []int, startTimestamp, endTimestamp int64, mo
 		AvgTTFTMs:     avgTTFT,
 		AvgTPS:        avgTPS,
 		Models:        models,
+		Groups:        groups,
 		Users:         users,
 	}, nil
 }

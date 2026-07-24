@@ -110,6 +110,12 @@ export function RequestDistributionTab({ pool }: Props) {
     [data?.models]
   )
 
+  // Groups from API response (logs table)
+  const availableGroups = useMemo(
+    () => (data?.groups ?? []).sort(),
+    [data?.groups]
+  )
+
   const totalRequests = data?.total_requests ?? 0
   const activeUsers = data?.active_users ?? 0
   const avgTTFT = data?.avg_ttft_ms ?? 0
@@ -186,6 +192,11 @@ export function RequestDistributionTab({ pool }: Props) {
             onChange={(e) => setSelectedGroup(e.target.value)}
           >
             <option value=''>{t('All')}</option>
+            {availableGroups.map((g) => (
+              <option key={g} value={g}>
+                {g}
+              </option>
+            ))}
           </select>
         </div>
         <div className='flex flex-col gap-1'>

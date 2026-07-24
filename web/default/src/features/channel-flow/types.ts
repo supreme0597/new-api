@@ -185,5 +185,6 @@ export type LogDistributionResult = {
   avg_ttft_ms: number
   avg_tps: number
   models: string[]
+  groups: string[]
   users: LogDistributionUser[]
 }
