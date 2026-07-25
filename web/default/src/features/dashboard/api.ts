@@ -79,12 +79,12 @@ export async function exportUserQuotaData(params: {
   vendor?: string
   groups?: string
   models?: string
-}) {
-  const res = await api.get<{ success: boolean; data: ExportQuotaDataItem[] }>(
+}): Promise<ExportQuotaDataItem[]> {
+  const res = await api.get<{ success: boolean; data: ExportQuotaDataItem[] | null }>(
     '/api/data/users/export',
     { params }
   )
-  return res.data
+  return Array.isArray(res.data.data) ? res.data.data : []
 }
 
 // Get uptime monitoring status for all services

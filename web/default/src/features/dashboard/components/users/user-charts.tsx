@@ -25,8 +25,17 @@ import { getRollingDateRange, type TimeGranularity } from '@/lib/time'
 import { VCHART_OPTION } from '@/lib/vchart'
 import { useThemeCustomization } from '@/context/theme-customization-provider'
 import { useTheme } from '@/context/theme-provider'
+import { api } from '@/lib/api'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import {
   getUserQuotaDataByUsers,
   exportUserQuotaData,
@@ -175,6 +184,21 @@ export function UserCharts({
     staleTime: 60_000,
   })
 
+  // Fetch available model names for the dropdown filter
+  const { data: availableModels } = useQuery({
+    queryKey: ['dashboard', 'model-names'],
+    queryFn: async () => {
+      const res = await api.get<{ success: boolean; data: Record<string, string[]> }>('/api/models')
+      if (!res.data.success) return []
+      const allModels = new Set<string>()
+      for (const models of Object.values(res.data.data)) {
+        for (const m of models) allModels.add(m)
+      }
+      return Array.from(allModels).sort()
+    },
+    staleTime: 300_000,
+  })
+
   const chartData = useMemo(
     () =>
       processUserChartData(
@@ -280,15 +304,24 @@ export function UserCharts({
           </span>
         </button>
 
-        {/* Model filter input */}
+        {/* Model filter dropdown */}
         {onModelsChange !== undefined && (
-          <input
-            type='text'
+          <Select
             value={models ?? ''}
-            onChange={(e) => onModelsChange(e.target.value)}
-            placeholder={t('Model filter')}
-            className='h-7 w-32 shrink-0 rounded-md border bg-transparent px-2 text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring sm:w-40'
-          />
+            onValueChange={(value) => onModelsChange(value || '')}
+          >
+            <SelectTrigger className='h-7 w-40 shrink-0'>
+              <SelectValue placeholder={t('All Models')} />
+            </SelectTrigger>
+            <SelectContent align='end'>
+              <SelectGroup>
+                <SelectItem value=''>{t('All Models')}</SelectItem>
+                {(availableModels ?? []).map((m) => (
+                  <SelectItem key={m} value={m}>{m}</SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
         )}
 
         {/* Export button */}

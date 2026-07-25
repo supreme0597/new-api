@@ -107,7 +107,7 @@ export function Rankings() {
         models: selectedModels || undefined,
       })
 
-      if (!data || data.length === 0) {
+      if (!data || !Array.isArray(data) || data.length === 0) {
         toast.info(t('No data to export'))
         return
       }
