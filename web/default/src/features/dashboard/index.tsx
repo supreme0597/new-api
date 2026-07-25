@@ -19,12 +19,14 @@ For commercial licensing, please contact support@quantumnous.com
 import { useState, useCallback, useMemo, lazy, Suspense } from 'react'
 import { getRouteApi, useNavigate } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
 import { ROLE } from '@/lib/roles'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { SectionPageLayout } from '@/components/layout'
 import { FadeIn } from '@/components/page-transition'
+import { exportUserQuotaData } from './api'
 import { ModelsChartPreferences } from './components/models/models-chart-preferences'
 import { ModelsFilter } from './components/models/models-filter-dialog'
 import { OverviewDashboard } from './components/overview/overview-dashboard'
@@ -157,6 +159,7 @@ export function Dashboard() {
   const [modelFilters, setModelFilters] = useState<DashboardFilters>(() =>
     buildDefaultDashboardFilters(getSavedChartPreferences())
   )
+  const [userModels, setUserModels] = useState<string>('')
 
   const handleFilterChange = useCallback((filters: DashboardFilters) => {
     setModelFilters(filters)
@@ -173,6 +176,45 @@ export function Dashboard() {
     },
     []
   )
+
+  const handleUserExport = useCallback(async () => {
+    try {
+      const now = new Date()
+      const endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+      const startDate = new Date(endDate)
+      startDate.setDate(startDate.getDate() - 30)
+
+      const data = await exportUserQuotaData({
+        start_timestamp: Math.floor(startDate.getTime() / 1000),
+        end_timestamp: Math.floor(endDate.getTime() / 1000),
+        models: userModels || undefined,
+      })
+
+      if (!data || data.length === 0) {
+        toast.info(t('No data to export'))
+        return
+      }
+
+      const XLSX = await import('xlsx')
+      const rows = data.map((item) => ({
+        [t('Username')]: item.display_name || item.username,
+        [t('Group')]: item.group,
+        [t('Model')]: item.model_name,
+        [t('Token Usage')]: item.token_used,
+        [t('Request Count')]: item.count,
+      }))
+
+      const ws = XLSX.utils.json_to_sheet(rows)
+      const wb = XLSX.utils.book_new()
+      const formatDate = (d: Date) =>
+        `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+      const sheetName = `UserStats_${formatDate(startDate)}_to_${formatDate(endDate)}`
+      XLSX.utils.book_append_sheet(wb, ws, sheetName.slice(0, 31))
+      XLSX.writeFile(wb, `${sheetName}.xlsx`)
+    } catch (err) {
+      toast.error(t('Export failed') + (err instanceof Error ? `: ${err.message}` : ''))
+    }
+  }, [userModels, t])
 
   const handleChartPreferencesChange = useCallback(
     (preferences: DashboardChartPreferences) => {
@@ -294,7 +336,11 @@ export function Dashboard() {
           {activeSection === 'users' && (
             <FadeIn>
               <Suspense fallback={<ModelChartsFallback />}>
-                <LazyUserCharts />
+                <LazyUserCharts
+                  models={userModels || undefined}
+                  onModelsChange={setUserModels}
+                  onExport={handleUserExport}
+                />
               </Suspense>
             </FadeIn>
           )}

@@ -206,7 +206,7 @@ func GetQuotaDataGroupByUser(startTime int64, endTime int64, vendor string, grou
 		query = query.Where("users."+commonGroupCol+" IN ?", groups)
 	}
 
-	err = query.Group("quota_data.username, quota_data.created_at").Find(&quotaDatas).Error
+	err = query.Group("quota_data.username, quota_data.created_at, users.display_name").Find(&quotaDatas).Error
 	return quotaDatas, err
 }
 

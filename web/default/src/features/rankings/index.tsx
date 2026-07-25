@@ -20,6 +20,7 @@ import { useState, useCallback } from 'react'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
+import { toast } from 'sonner'
 import { Skeleton } from '@/components/ui/skeleton'
 import { PublicLayout } from '@/components/layout'
 import { PageTransition } from '@/components/page-transition'
@@ -52,6 +53,8 @@ import { useRankings } from './hooks/use-rankings'
 import type { RankingPeriod } from './types'
 
 const VALID_PERIODS: RankingPeriod[] = ['today', 'week', 'month', 'year', 'all']
+
+const HIDDEN_GROUPS = ['auto', 'vip', 'svip', 'RTOS测试', '中软测试']
 
 const PERIOD_TO_DAYS: Record<RankingPeriod, number> = {
   today: 1,
@@ -98,7 +101,10 @@ export function Rankings() {
         models: selectedModels || undefined,
       })
 
-      if (!data || data.length === 0) return
+      if (!data || data.length === 0) {
+        toast.info(t('No data to export'))
+        return
+      }
 
       const XLSX = await import('xlsx')
       const rows = data.map((item) => ({
@@ -119,8 +125,8 @@ export function Rankings() {
 
       const fileName = `${sheetName}.xlsx`
       XLSX.writeFile(wb, fileName)
-    } catch {
-      // export failed silently
+    } catch (err) {
+      toast.error(t('Export failed') + (err instanceof Error ? `: ${err.message}` : ''))
     }
   }, [period, selectedVendor, selectedGroups, selectedModels, t])
 
@@ -132,7 +138,7 @@ export function Rankings() {
     },
     staleTime: 120_000,
   })
-  const groups = groupsData ?? []
+  const groups = (groupsData ?? []).filter((g) => !HIDDEN_GROUPS.includes(g))
 
   const period: RankingPeriod = VALID_PERIODS.includes(
     search.period as RankingPeriod
