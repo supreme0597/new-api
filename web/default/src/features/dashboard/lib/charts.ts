@@ -813,29 +813,40 @@ export function processUserChartData(
 
   if (!data || data.length === 0) return emptyResult
 
-  const userMetricTotal = new Map<string, number>()
+  const userMetricTotal = new Map<string, { value: number; displayName: string }>()
   data.forEach((item) => {
     const username = item.username || 'unknown'
-    const prev = userMetricTotal.get(username) || 0
-    userMetricTotal.set(username, prev + getMetricValue(item))
+    const displayName = item.display_name || username
+    const prev = userMetricTotal.get(username)
+    if (prev) {
+      prev.value += getMetricValue(item)
+    } else {
+      userMetricTotal.set(username, { value: getMetricValue(item), displayName })
+    }
   })
 
   const sorted = Array.from(userMetricTotal.entries()).sort(
     sortDir === 'asc'
-      ? (a, b) => a[1] - b[1]
-      : (a, b) => b[1] - a[1]
+      ? (a, b) => a[1].value - b[1].value
+      : (a, b) => b[1].value - a[1].value
   )
   const topUsers = sorted.slice(0, limit).map(([u]) => u)
   const topUserSet = new Set(topUsers)
-  const totalMetric = sorted.slice(0, limit).reduce((s, [, q]) => s + q, 0)
+  const totalMetric = sorted.slice(0, limit).reduce((s, [, v]) => s + v.value, 0)
 
-  const rankValues = sorted.slice(0, limit).map(([username, value]) => ({
-    User: username,
-    rawQuota: value,
+  // Build username -> displayName map for chart labels
+  const displayNameMap = new Map<string, string>()
+  for (const [username, v] of userMetricTotal) {
+    displayNameMap.set(username, v.displayName)
+  }
+
+  const rankValues = sorted.slice(0, limit).map(([username, v]) => ({
+    User: displayNameMap.get(username) || username,
+    rawQuota: v.value,
     Usage:
       metric === 'quota'
-        ? Number((value / quotaPerUnit).toFixed(4))
-        : value,
+        ? Number((v.value / quotaPerUnit).toFixed(4))
+        : v.value,
   }))
 
   const userColorMap = topUsers.reduce<Record<string, string>>(
@@ -848,7 +859,7 @@ export function processUserChartData(
 
   // 过滤掉零用量用户，趋势图只显示有实际数据的用户
   const trendUserSet = new Set(
-    topUsers.filter((u) => (userMetricTotal.get(u) ?? 0) > 0)
+    topUsers.filter((u) => (userMetricTotal.get(u)?.value ?? 0) > 0)
   )
 
   const timeUserMap = new Map<string, Map<string, number>>()
@@ -883,7 +894,7 @@ export function processUserChartData(
       const q = timeUserMap.get(time)?.get(user) || 0
       trendValues.push({
         Time: time,
-        User: user,
+        User: displayNameMap.get(user) || user,
         rawQuota: q,
         Usage: Number((q / quotaPerUnit).toFixed(4)),
       })

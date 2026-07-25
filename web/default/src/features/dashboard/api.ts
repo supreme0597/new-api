@@ -52,11 +52,36 @@ export async function getUserQuotaDataByUsers(params: {
   end_timestamp: number
   vendor?: string
   group?: string
+  models?: string
   include_all?: boolean
   sort_direction?: 'asc' | 'desc'
 }) {
   const res = await api.get<{ success: boolean; data: QuotaDataItem[] }>(
     '/api/data/users',
+    { params }
+  )
+  return res.data
+}
+
+export interface ExportQuotaDataItem {
+  username: string
+  display_name: string
+  group: string
+  model_name: string
+  token_used: number
+  count: number
+}
+
+// Export user quota data for Excel download
+export async function exportUserQuotaData(params: {
+  start_timestamp: number
+  end_timestamp: number
+  vendor?: string
+  groups?: string
+  models?: string
+}) {
+  const res = await api.get<{ success: boolean; data: ExportQuotaDataItem[] }>(
+    '/api/data/users/export',
     { params }
   )
   return res.data

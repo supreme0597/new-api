@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
@@ -34,7 +34,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
 import { UserCharts } from '@/features/dashboard/components/users/user-charts'
+import { exportUserQuotaData } from '@/features/dashboard/api'
 import type { UserChartMetric } from '@/features/dashboard/lib'
 import {
   MarketShareSection,
@@ -62,7 +68,61 @@ export function Rankings() {
 
   const [userMetric, setUserMetric] = useState<UserChartMetric>('token_used')
   const [selectedVendor, setSelectedVendor] = useState<string | null>(null)
-  const [selectedGroup, setSelectedGroup] = useState<string | null>(null)
+  const [selectedGroups, setSelectedGroups] = useState<string[]>([])
+  const [selectedModels, setSelectedModels] = useState<string>('')
+
+  const toggleGroup = useCallback((group: string) => {
+    setSelectedGroups((prev) =>
+      prev.includes(group)
+        ? prev.filter((g) => g !== group)
+        : [...prev, group]
+    )
+  }, [])
+
+  const handleExport = useCallback(async () => {
+    try {
+      const periodDays = PERIOD_TO_DAYS[period]
+      const { start, end } = (() => {
+        const now = new Date()
+        const endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+        const startDate = new Date(endDate)
+        startDate.setDate(startDate.getDate() - periodDays)
+        return { start: startDate, end: endDate }
+      })()
+
+      const data = await exportUserQuotaData({
+        start_timestamp: Math.floor(start.getTime() / 1000),
+        end_timestamp: Math.floor(end.getTime() / 1000),
+        vendor: selectedVendor ?? undefined,
+        groups: selectedGroups.length > 0 ? selectedGroups.join(',') : undefined,
+        models: selectedModels || undefined,
+      })
+
+      if (!data || data.length === 0) return
+
+      const XLSX = await import('xlsx')
+      const rows = data.map((item) => ({
+        [t('Username')]: item.display_name || item.username,
+        [t('Group')]: item.group,
+        [t('Model')]: item.model_name,
+        [t('Token Usage')]: item.token_used,
+        [t('Request Count')]: item.count,
+      }))
+
+      const ws = XLSX.utils.json_to_sheet(rows)
+      const wb = XLSX.utils.book_new()
+
+      const formatDate = (d: Date) =>
+        `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+      const sheetName = `UserStats_${formatDate(start)}_to_${formatDate(end)}`
+      XLSX.utils.book_append_sheet(wb, ws, sheetName.slice(0, 31))
+
+      const fileName = `${sheetName}.xlsx`
+      XLSX.writeFile(wb, fileName)
+    } catch {
+      // export failed silently
+    }
+  }, [period, selectedVendor, selectedGroups, selectedModels, t])
 
   const { data: groupsData } = useQuery({
     queryKey: ['groups'],
@@ -177,30 +237,47 @@ export function Rankings() {
                       </button>
                     ))}
                   </div>
-                  {/* Group filter */}
-                  <Select
-                    value={selectedGroup ?? ''}
-                    onValueChange={(value) => setSelectedGroup(value || null)}
-                  >
-                    <SelectTrigger className='h-7 text-xs'>
-                      <SelectValue placeholder={t('All Groups')} />
-                    </SelectTrigger>
-                    <SelectContent align='end'>
-                      <SelectGroup>
-                        <SelectItem value=''>{t('All Groups')}</SelectItem>
+                  {/* Group filter - multi-select via Popover */}
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <button
+                        type='button'
+                        className='inline-flex h-7 items-center gap-1 rounded-md border px-2.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors shrink-0'
+                      >
+                        {selectedGroups.length > 0
+                          ? t('{{count}} groups', { count: selectedGroups.length })
+                          : t('All Groups')}
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent align='end' className='w-48 p-1'>
+                      <div className='max-h-60 overflow-y-auto'>
                         {groups.map((g) => (
-                          <SelectItem key={g} value={g}>{g}</SelectItem>
+                          <label
+                            key={g}
+                            className='flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent'
+                          >
+                            <input
+                              type='checkbox'
+                              checked={selectedGroups.includes(g)}
+                              onChange={() => toggleGroup(g)}
+                              className='size-3.5 rounded border-muted-foreground/40 accent-primary'
+                            />
+                            <span>{g}</span>
+                          </label>
                         ))}
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
                 </div>
                 <UserCharts
                   metric={userMetric}
                   defaultDays={PERIOD_TO_DAYS[period]}
                   hideTimeRangePresets
                   vendor={selectedVendor ?? undefined}
-                  group={selectedGroup ?? undefined}
+                  group={selectedGroups.length > 0 ? selectedGroups.join(',') : undefined}
+                  models={selectedModels || undefined}
+                  onModelsChange={setSelectedModels}
+                  onExport={handleExport}
                 />
               </div>
             </>

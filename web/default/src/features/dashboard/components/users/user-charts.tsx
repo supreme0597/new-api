@@ -19,7 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { useEffect, useMemo, useState, useRef, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { VChart } from '@visactor/react-vchart'
-import { Users, Loader2, ArrowUpDown } from 'lucide-react'
+import { Users, Loader2, ArrowUpDown, Download } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { getRollingDateRange, type TimeGranularity } from '@/lib/time'
 import { VCHART_OPTION } from '@/lib/vchart'
@@ -27,7 +27,11 @@ import { useThemeCustomization } from '@/context/theme-customization-provider'
 import { useTheme } from '@/context/theme-provider'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { getUserQuotaDataByUsers } from '@/features/dashboard/api'
+import {
+  getUserQuotaDataByUsers,
+  exportUserQuotaData,
+  type ExportQuotaDataItem,
+} from '@/features/dashboard/api'
 import {
   TIME_GRANULARITY_OPTIONS,
   TIME_RANGE_PRESETS,
@@ -69,13 +73,19 @@ export function UserCharts({
   defaultDays,
   hideTimeRangePresets = false,
   vendor,
-  group
+  group,
+  models,
+  onModelsChange,
+  onExport,
 }: {
   metric?: UserChartMetric
   defaultDays?: number
   hideTimeRangePresets?: boolean
   vendor?: string
   group?: string
+  models?: string
+  onModelsChange?: (models: string) => void
+  onExport?: () => void
 }) {
   const { t } = useTranslation()
   const { resolvedTheme } = useTheme()
@@ -150,13 +160,14 @@ export function UserCharts({
   }, [resolvedTheme])
 
   const { data: userData, isLoading } = useQuery({
-    queryKey: ['dashboard', 'user-quota', timeRange, vendor, group, sortDirection],
+    queryKey: ['dashboard', 'user-quota', timeRange, vendor, group, models, sortDirection],
     queryFn: () =>
       getUserQuotaDataByUsers({
         start_timestamp: timeRange.start_timestamp,
         end_timestamp: timeRange.end_timestamp,
         vendor,
         group,
+        models,
         include_all: true,
         sort_direction: sortDirection,
       }),
@@ -268,6 +279,30 @@ export function UserCharts({
             {sortDirection === 'desc' ? t('Desc') : t('Asc')}
           </span>
         </button>
+
+        {/* Model filter input */}
+        {onModelsChange !== undefined && (
+          <input
+            type='text'
+            value={models ?? ''}
+            onChange={(e) => onModelsChange(e.target.value)}
+            placeholder={t('Model filter')}
+            className='h-7 w-32 shrink-0 rounded-md border bg-transparent px-2 text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring sm:w-40'
+          />
+        )}
+
+        {/* Export button */}
+        {onExport !== undefined && (
+          <button
+            type='button'
+            onClick={onExport}
+            className='inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors shrink-0'
+            title={t('Export Excel')}
+          >
+            <Download className='size-3.5' />
+            <span className='hidden sm:inline'>{t('Export')}</span>
+          </button>
+        )}
 
         {isLoading && (
           <Loader2 className='text-muted-foreground size-4 animate-spin' />
