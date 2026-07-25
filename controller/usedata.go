@@ -31,9 +31,10 @@ func GetQuotaDatesByUser(c *gin.Context) {
 	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
 	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
 	vendor := c.Query("vendor")                    // 按厂商过滤
-	group := c.Query("group")                      // 按用户分组过滤
+	group := c.Query("group")                      // 按用户分组过滤（逗号分隔多值）
+	modelName := c.Query("models")                 // 按模型过滤（逗号分隔多值）
 	includeAll := c.Query("include_all") == "true" // 是否包含未使用过的用户
-	dates, err := model.GetQuotaDataGroupByUser(startTimestamp, endTimestamp, vendor, group, includeAll)
+	dates, err := model.GetQuotaDataGroupByUser(startTimestamp, endTimestamp, vendor, group, modelName, includeAll)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -42,6 +43,25 @@ func GetQuotaDatesByUser(c *gin.Context) {
 		"success": true,
 		"message": "",
 		"data":    dates,
+	})
+}
+
+func ExportUserQuotaData(c *gin.Context) {
+	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
+	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
+	vendor := c.Query("vendor")      // 按厂商过滤
+	groups := c.Query("groups")      // 按用户分组过滤（逗号分隔多值）
+	models := c.Query("models")      // 按模型过滤（逗号分隔多值）
+
+	data, err := model.ExportQuotaDataGroupByUser(startTimestamp, endTimestamp, vendor, groups, models)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+		"data":    data,
 	})
 }
 
