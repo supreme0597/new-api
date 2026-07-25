@@ -74,6 +74,12 @@ export function Rankings() {
   const [selectedGroups, setSelectedGroups] = useState<string[]>([])
   const [selectedModels, setSelectedModels] = useState<string>('')
 
+  const period: RankingPeriod = VALID_PERIODS.includes(
+    search.period as RankingPeriod
+  )
+    ? (search.period as RankingPeriod)
+    : 'week'
+
   const toggleGroup = useCallback((group: string) => {
     setSelectedGroups((prev) =>
       prev.includes(group)
@@ -139,12 +145,6 @@ export function Rankings() {
     staleTime: 120_000,
   })
   const groups = (groupsData ?? []).filter((g) => !HIDDEN_GROUPS.includes(g))
-
-  const period: RankingPeriod = VALID_PERIODS.includes(
-    search.period as RankingPeriod
-  )
-    ? (search.period as RankingPeriod)
-    : 'week'
 
   const rankingsQuery = useRankings(period)
   const snapshot = rankingsQuery.data?.data
