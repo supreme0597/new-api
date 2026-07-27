@@ -19,14 +19,21 @@ For commercial licensing, please contact support@quantumnous.com
 import { useState, useCallback, useMemo, lazy, Suspense } from 'react'
 import { getRouteApi, useNavigate } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
+import { useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import * as XLSX from 'xlsx'
 import { useAuthStore } from '@/stores/auth-store'
 import { ROLE } from '@/lib/roles'
+import { api } from '@/lib/api'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { SectionPageLayout } from '@/components/layout'
 import { FadeIn } from '@/components/page-transition'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
 import { exportUserQuotaData } from './api'
 import { ModelsChartPreferences } from './components/models/models-chart-preferences'
 import { ModelsFilter } from './components/models/models-filter-dialog'
@@ -49,6 +56,8 @@ import {
 } from './types'
 
 const route = getRouteApi('/_authenticated/dashboard/$section')
+
+const HIDDEN_GROUPS = ['auto', 'vip', 'svip', 'RTOS测试', '中软测试']
 
 const LazyLogStatCards = lazy(() =>
   import('./components/models/log-stat-cards').then((m) => ({
@@ -161,6 +170,25 @@ export function Dashboard() {
     buildDefaultDashboardFilters(getSavedChartPreferences())
   )
   const [userModels, setUserModels] = useState<string>('')
+  const [userGroups, setUserGroups] = useState<string[]>([])
+
+  const toggleGroup = useCallback((group: string) => {
+    setUserGroups((prev) =>
+      prev.includes(group)
+        ? prev.filter((g) => g !== group)
+        : [...prev, group]
+    )
+  }, [])
+
+  const { data: groupsData } = useQuery({
+    queryKey: ['groups'],
+    queryFn: async () => {
+      const res = await api.get<{ success: boolean; data: string[] }>('/api/group/')
+      return res.data.data ?? []
+    },
+    staleTime: 120_000,
+  })
+  const groups = (groupsData ?? []).filter((g) => !HIDDEN_GROUPS.includes(g))
 
   const handleFilterChange = useCallback((filters: DashboardFilters) => {
     setModelFilters(filters)
@@ -335,8 +363,41 @@ export function Dashboard() {
           )}
           {activeSection === 'users' && (
             <FadeIn>
+              <div className='mb-3 flex items-center gap-2'>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      type='button'
+                      className='inline-flex h-7 items-center gap-1 rounded-md border px-2.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors shrink-0'
+                    >
+                      {userGroups.length > 0
+                        ? t('{{count}} groups', { count: userGroups.length })
+                        : t('All Groups')}
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent align='start' className='w-48 p-1'>
+                    <div className='max-h-60 overflow-y-auto'>
+                      {groups.map((g) => (
+                        <label
+                          key={g}
+                          className='flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent'
+                        >
+                          <input
+                            type='checkbox'
+                            checked={userGroups.includes(g)}
+                            onChange={() => toggleGroup(g)}
+                            className='size-3.5 rounded border-muted-foreground/40 accent-primary'
+                          />
+                          <span>{g}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </div>
               <Suspense fallback={<ModelChartsFallback />}>
                 <LazyUserCharts
+                  group={userGroups.length > 0 ? userGroups.join(',') : undefined}
                   models={userModels || undefined}
                   onModelsChange={setUserModels}
                   onExport={handleUserExport}

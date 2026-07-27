@@ -270,7 +270,7 @@ func ExportQuotaDataGroupByUser(startTime int64, endTime int64, vendor string, g
 	}
 
 	err := query.Group("users.username, users.display_name, users."+commonGroupCol+", quota_data.model_name").
-		Order("users.username, quota_data.model_name").
+		Order("sum(quota_data.token_used) DESC, users.username, quota_data.model_name").
 		Find(&results).Error
 
 	return results, err
