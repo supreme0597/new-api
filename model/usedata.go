@@ -20,7 +20,7 @@ type QuotaData struct {
 	TokenUsed   int    `json:"token_used" gorm:"default:0"`
 	Count       int    `json:"count" gorm:"default:0"`
 	Quota       int    `json:"quota" gorm:"default:0"`
-	DisplayName string `json:"display_name" gorm:"-"`
+	DisplayName string `json:"display_name" gorm:"column:display_name"`
 }
 
 func UpdateQuotaData() {

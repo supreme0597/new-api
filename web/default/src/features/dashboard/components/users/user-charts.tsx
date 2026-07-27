@@ -188,13 +188,22 @@ export function UserCharts({
   const { data: availableModels } = useQuery({
     queryKey: ['dashboard', 'model-names'],
     queryFn: async () => {
-      const res = await api.get<{ success: boolean; data: Record<string, string[]> }>('/api/models')
-      if (!res.data.success) return []
-      const allModels = new Set<string>()
-      for (const models of Object.values(res.data.data)) {
-        for (const m of models) allModels.add(m)
+      try {
+        const res = await api.get<{ success: boolean; data: Record<string, string[]> }>('/api/models', {
+          skipBusinessError: true,
+          skipErrorHandler: true,
+        })
+        if (!res.data?.success || !res.data?.data) return []
+        const allModels = new Set<string>()
+        for (const models of Object.values(res.data.data)) {
+          if (Array.isArray(models)) {
+            for (const m of models) allModels.add(m)
+          }
+        }
+        return Array.from(allModels).sort()
+      } catch {
+        return []
       }
-      return Array.from(allModels).sort()
     },
     staleTime: 300_000,
   })
