@@ -20,6 +20,7 @@ import { useState, useCallback, useMemo, lazy, Suspense } from 'react'
 import { getRouteApi, useNavigate } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
+import * as XLSX from 'xlsx'
 import { useAuthStore } from '@/stores/auth-store'
 import { ROLE } from '@/lib/roles'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -195,7 +196,6 @@ export function Dashboard() {
         return
       }
 
-      const XLSX = await import('xlsx')
       const rows = data.map((item) => ({
         [t('Username')]: item.display_name || item.username,
         [t('Group')]: item.group,

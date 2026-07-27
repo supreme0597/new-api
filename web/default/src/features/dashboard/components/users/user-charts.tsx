@@ -25,7 +25,6 @@ import { getRollingDateRange, type TimeGranularity } from '@/lib/time'
 import { VCHART_OPTION } from '@/lib/vchart'
 import { useThemeCustomization } from '@/context/theme-customization-provider'
 import { useTheme } from '@/context/theme-provider'
-import { api } from '@/lib/api'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
@@ -184,29 +183,15 @@ export function UserCharts({
     staleTime: 60_000,
   })
 
-  // Fetch available model names for the dropdown filter
-  const { data: availableModels } = useQuery({
-    queryKey: ['dashboard', 'model-names'],
-    queryFn: async () => {
-      try {
-        const res = await api.get<{ success: boolean; data: Record<string, string[]> }>('/api/models', {
-          skipBusinessError: true,
-          skipErrorHandler: true,
-        })
-        if (!res.data?.success || !res.data?.data) return []
-        const allModels = new Set<string>()
-        for (const models of Object.values(res.data.data)) {
-          if (Array.isArray(models)) {
-            for (const m of models) allModels.add(m)
-          }
-        }
-        return Array.from(allModels).sort()
-      } catch {
-        return []
-      }
-    },
-    staleTime: 300_000,
-  })
+  // Extract unique model names from the fetched user data for the dropdown
+  const availableModels = useMemo(() => {
+    if (!userData || userData.length === 0) return []
+    const modelSet = new Set<string>()
+    for (const item of userData) {
+      if (item.model_name) modelSet.add(item.model_name)
+    }
+    return Array.from(modelSet).sort()
+  }, [userData])
 
   const chartData = useMemo(
     () =>

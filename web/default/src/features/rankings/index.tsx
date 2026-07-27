@@ -21,6 +21,7 @@ import { useNavigate, useSearch } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
+import * as XLSX from 'xlsx'
 import { Skeleton } from '@/components/ui/skeleton'
 import { PublicLayout } from '@/components/layout'
 import { PageTransition } from '@/components/page-transition'
@@ -112,7 +113,6 @@ export function Rankings() {
         return
       }
 
-      const XLSX = await import('xlsx')
       const rows = data.map((item) => ({
         [t('Username')]: item.display_name || item.username,
         [t('Group')]: item.group,
