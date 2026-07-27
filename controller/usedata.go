@@ -89,3 +89,12 @@ func GetUserQuotaDates(c *gin.Context) {
 	})
 	return
 }
+
+func GetEnabledPublicModels(c *gin.Context) {
+	models := model.GetEnabledPublicModels()
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+		"data":    models,
+	})
+}

@@ -97,6 +97,20 @@ func GetEnabledModels() []string {
 	return models
 }
 
+// GetEnabledPublicModels returns distinct model names from enabled abilities
+// in public channels (owner_user_id IS NULL) that are also enabled (status=1)
+func GetEnabledPublicModels() []string {
+	var models []string
+	DB.Table("abilities").
+		Joins("INNER JOIN channels ON abilities.channel_id = channels.id").
+		Where("abilities.enabled = ?", true).
+		Where("channels.status = ?", 1).
+		Where("channels.owner_user_id IS NULL").
+		Distinct("abilities.model").
+		Pluck("abilities.model", &models)
+	return models
+}
+
 func getUserGroup(userId int) (string, error) {
 	if userId <= 0 {
 		return "", errors.New("invalid userId")
