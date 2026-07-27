@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useEffect, useMemo, useState, useRef, useCallback } from 'react'
+import { useEffect, useMemo, useState, useRef, useCallback, Fragment } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { VChart } from '@visactor/react-vchart'
 import { Users, Loader2, ArrowUpDown, Download } from 'lucide-react'
@@ -249,26 +249,6 @@ export function UserCharts({
             </Tabs>
           )}
         <Tabs
-          value={timeGranularity}
-          onValueChange={(value) =>
-            handleGranularityChange(value as TimeGranularity)
-          }
-          className='shrink-0'
-        >
-          <TabsList>
-            {TIME_GRANULARITY_OPTIONS.map((opt) => (
-              <TabsTrigger
-                key={opt.value}
-                value={opt.value}
-                className='px-2.5 text-xs'
-              >
-                {t(opt.label)}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
-
-        <Tabs
           value={String(topUserLimit)}
           onValueChange={(value) => setTopUserLimit(Number(value))}
           className='shrink-0'
@@ -350,10 +330,30 @@ export function UserCharts({
           const spec = chartData[chart.specKey]
 
           return (
-            <div
-              key={chart.value}
-              className='overflow-hidden rounded-lg border'
-            >
+            <Fragment key={chart.value}>
+              {chart.value === 'trend' && (
+                <Tabs
+                  value={timeGranularity}
+                  onValueChange={(value) =>
+                    handleGranularityChange(value as TimeGranularity)
+                  }
+                >
+                  <TabsList>
+                    {TIME_GRANULARITY_OPTIONS.map((opt) => (
+                      <TabsTrigger
+                        key={opt.value}
+                        value={opt.value}
+                        className='px-2.5 text-xs'
+                      >
+                        {t(opt.label)}
+                      </TabsTrigger>
+                    ))}
+                  </TabsList>
+                </Tabs>
+              )}
+              <div
+                className='overflow-hidden rounded-lg border'
+              >
               <div className='flex w-full items-center gap-2 border-b px-3 py-2 sm:px-5 sm:py-3'>
                 <Users className='text-muted-foreground/60 size-4' />
                 <div className='text-sm font-semibold'>{t(chart.labelKey)}</div>
@@ -377,7 +377,8 @@ export function UserCharts({
                   )
                 )}
               </div>
-            </div>
+              </div>
+            </Fragment>
           )
         })}
       </div>
