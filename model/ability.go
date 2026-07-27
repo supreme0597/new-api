@@ -98,14 +98,14 @@ func GetEnabledModels() []string {
 }
 
 // GetEnabledPublicModels returns distinct model names from enabled abilities
-// in public channels (owner_user_id IS NULL) that are also enabled (status=1)
+// in public channels (owner_user_id IS NULL)
 func GetEnabledPublicModels() []string {
 	var models []string
 	DB.Table("abilities").
-		Joins("INNER JOIN channels ON abilities.channel_id = channels.id").
+		Joins("LEFT JOIN channels ON abilities.channel_id = channels.id").
 		Where("abilities.enabled = ?", true).
-		Where("channels.status = ?", 1).
 		Where("channels.owner_user_id IS NULL").
+		Where("channels.status != 0").
 		Distinct("abilities.model").
 		Pluck("abilities.model", &models)
 	return models
