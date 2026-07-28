@@ -74,21 +74,6 @@ function isNewAnnouncement(
   )
 }
 
-function stripMarkdown(md: string): string {
-  return md
-    .replace(/#{1,6}\s*/g, '')
-    .replace(/\*\*(.*?)\*\*/g, '$1')
-    .replace(/\*(.*?)\*/g, '$1')
-    .replace(/`{1,3}[^`]*`{1,3}/g, '')
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-    .replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1')
-    .replace(/^\s*[-*+]\s+/gm, '')
-    .replace(/^\s*\d+\.\s+/gm, '')
-    .replace(/^\s*>\s*/gm, '')
-    .replace(/---+/g, '')
-    .trim()
-}
-
 const ANNOUNCEMENT_TICKER_STYLES: Record<string, string> = {
   default: 'bg-muted/80 text-foreground border-border',
   ongoing:
@@ -106,6 +91,14 @@ function getTickerStyle(type?: string): string {
     ANNOUNCEMENT_TICKER_STYLES[type || 'default'] ||
     ANNOUNCEMENT_TICKER_STYLES.default
   )
+}
+
+function renderRichText(content: string, extra?: string): string {
+  let html = content || ''
+  if (extra) {
+    html += ` <span class="text-muted-foreground text-xs">— ${extra}</span>`
+  }
+  return html
 }
 
 export function AnnouncementBanner() {
@@ -148,11 +141,10 @@ export function AnnouncementBanner() {
 
   if (!visible || !currentAnnouncement) return null
 
-  const text = stripMarkdown(currentAnnouncement.content || '')
-  const extra = currentAnnouncement.extra
-    ? ` — ${stripMarkdown(currentAnnouncement.extra)}`
-    : ''
-  const fullText = text + extra
+  const richHtml = renderRichText(
+    currentAnnouncement.content || '',
+    currentAnnouncement.extra
+  )
 
   return (
     <>
@@ -167,18 +159,45 @@ export function AnnouncementBanner() {
         .ticker-animate:hover {
           animation-play-state: paused;
         }
+        .ticker-content h1,
+        .ticker-content h2,
+        .ticker-content h3,
+        .ticker-content h4,
+        .ticker-content h5,
+        .ticker-content h6 {
+          display: inline;
+          font-size: inherit;
+          font-weight: inherit;
+          margin: 0;
+          padding: 0;
+        }
+        .ticker-content p {
+          display: inline;
+          margin: 0;
+        }
+        .ticker-content a {
+          text-decoration: underline;
+        }
+        .ticker-content strong {
+          font-weight: 700;
+        }
+        .ticker-content em {
+          font-style: italic;
+        }
       `}</style>
       <div className={cn('border-b', getTickerStyle(currentAnnouncement.type))}>
         <div className='mx-auto flex h-9 max-w-7xl items-center gap-2 px-3'>
           <Megaphone className='size-4 shrink-0 opacity-70' />
           <div className='relative min-w-0 flex-1 overflow-hidden'>
             <div className='ticker-animate flex w-max gap-16'>
-              <span className='whitespace-nowrap text-sm font-medium'>
-                {fullText}
-              </span>
-              <span className='whitespace-nowrap text-sm font-medium'>
-                {fullText}
-              </span>
+              <span
+                className='ticker-content whitespace-nowrap text-sm font-medium [&_img]:hidden'
+                dangerouslySetInnerHTML={{ __html: richHtml }}
+              />
+              <span
+                className='ticker-content whitespace-nowrap text-sm font-medium [&_img]:hidden'
+                dangerouslySetInnerHTML={{ __html: richHtml }}
+              />
             </div>
           </div>
           <button
