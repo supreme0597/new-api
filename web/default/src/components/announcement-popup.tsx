@@ -16,10 +16,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useEffect, useState } from 'react'
-import { X } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Megaphone, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { Markdown } from '@/components/ui/markdown'
 import { useAnnouncements } from '@/features/dashboard/hooks/use-status-data'
 import { useAuthStore } from '@/stores/auth-store'
 import { cn } from '@/lib/utils'
@@ -75,19 +74,39 @@ function isNewAnnouncement(
   )
 }
 
-const ANNOUNCEMENT_TYPE_STYLES: Record<string, string> = {
-  default: 'bg-muted border-border',
-  ongoing: 'bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800',
-  success:
-    'bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-800',
-  warning:
-    'bg-orange-50 dark:bg-orange-950 border-orange-200 dark:border-orange-800',
-  error:
-    'bg-red-50 dark:bg-red-950 border-red-200 dark:border-red-800',
+function stripMarkdown(md: string): string {
+  return md
+    .replace(/#{1,6}\s*/g, '')
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/\*(.*?)\*/g, '$1')
+    .replace(/`{1,3}[^`]*`{1,3}/g, '')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1')
+    .replace(/^\s*[-*+]\s+/gm, '')
+    .replace(/^\s*\d+\.\s+/gm, '')
+    .replace(/^\s*>\s*/gm, '')
+    .replace(/---+/g, '')
+    .trim()
 }
 
-function getBannerStyle(type?: string): string {
-  return ANNOUNCEMENT_TYPE_STYLES[type || 'default'] || ANNOUNCEMENT_TYPE_STYLES.default
+const ANNOUNCEMENT_Ticker_STYLES: Record<string, string> = {
+  default:
+    'bg-muted/80 text-foreground border-border',
+  ongoing:
+    'bg-blue-50 dark:bg-blue-950 text-blue-900 dark:text-blue-100 border-blue-200 dark:border-blue-800',
+  success:
+    'bg-green-50 dark:bg-green-950 text-green-900 dark:text-green-100 border-green-200 dark:border-green-800',
+  warning:
+    'bg-orange-50 dark:bg-orange-950 text-orange-900 dark:text-orange-100 border-orange-200 dark:border-orange-800',
+  error:
+    'bg-red-50 dark:bg-red-950 text-red-900 dark:text-red-100 border-red-200 dark:border-red-800',
+}
+
+function getTickerStyle(type?: string): string {
+  return (
+    ANNOUNCEMENT_Ticker_STYLES[type || 'default'] ||
+    ANNOUNCEMENT_Ticker_STYLES.default
+  )
 }
 
 export function AnnouncementBanner() {
@@ -102,6 +121,8 @@ export function AnnouncementBanner() {
     id?: number
     type?: string
   } | null>(null)
+  const tickerRef = useRef<HTMLDivElement>(null)
+  const contentRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (loading || announcements.length === 0) return
@@ -114,6 +135,35 @@ export function AnnouncementBanner() {
       setVisible(true)
     }
   }, [announcements, loading, user?.id])
+
+  useEffect(() => {
+    if (!visible || !tickerRef.current || !contentRef.current) return
+
+    const ticker = tickerRef.current
+    const content = contentRef.current
+    const contentWidth = content.scrollWidth
+    const containerWidth = ticker.offsetWidth
+
+    // Only animate if content overflows
+    if (contentWidth <= containerWidth) return
+
+    let animationId: number
+    let position = containerWidth
+
+    const speed = 1.2 // px per frame (~72px/s at 60fps)
+
+    function animate() {
+      position -= speed
+      if (position < -contentWidth) {
+        position = containerWidth
+      }
+      content.style.transform = `translateX(${position}px)`
+      animationId = requestAnimationFrame(animate)
+    }
+
+    animationId = requestAnimationFrame(animate)
+    return () => cancelAnimationFrame(animationId)
+  }, [visible, currentAnnouncement])
 
   const handleClose = () => {
     if (currentAnnouncement) {
@@ -130,29 +180,35 @@ export function AnnouncementBanner() {
 
   if (!visible || !currentAnnouncement) return null
 
+  const text = stripMarkdown(currentAnnouncement.content || '')
+  const extra = currentAnnouncement.extra
+    ? ` — ${stripMarkdown(currentAnnouncement.extra)}`
+    : ''
+  const fullText = text + extra
+
   return (
     <div
       className={cn(
-        'fixed inset-x-0 top-0 z-50 border-b px-4 py-2.5',
-        getBannerStyle(currentAnnouncement.type)
+        'border-b',
+        getTickerStyle(currentAnnouncement.type)
       )}
     >
-      <div className='mx-auto flex max-w-7xl items-start gap-3'>
-        <div className='min-w-0 flex-1'>
-          {currentAnnouncement.content && (
-            <Markdown className='text-sm leading-relaxed'>
-              {currentAnnouncement.content}
-            </Markdown>
-          )}
-          {currentAnnouncement.extra && (
-            <Markdown className='text-muted-foreground mt-1 text-xs'>
-              {currentAnnouncement.extra}
-            </Markdown>
-          )}
+      <div className='mx-auto flex h-9 max-w-7xl items-center gap-2 px-3'>
+        <Megaphone className='size-4 shrink-0 opacity-70' />
+        <div
+          ref={tickerRef}
+          className='relative min-w-0 flex-1 overflow-hidden'
+        >
+          <div
+            ref={contentRef}
+            className='whitespace-nowrap text-sm font-medium'
+          >
+            {fullText}
+          </div>
         </div>
         <button
           onClick={handleClose}
-          className='text-muted-foreground hover:text-foreground mt-0.5 shrink-0 rounded-md p-1 transition-colors'
+          className='shrink-0 rounded-md p-1 opacity-60 transition-opacity hover:opacity-100'
           aria-label={t('Close')}
         >
           <X className='size-4' />
