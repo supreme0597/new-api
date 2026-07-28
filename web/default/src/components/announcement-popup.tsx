@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Megaphone, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useAnnouncements } from '@/features/dashboard/hooks/use-status-data'
@@ -89,9 +89,8 @@ function stripMarkdown(md: string): string {
     .trim()
 }
 
-const ANNOUNCEMENT_Ticker_STYLES: Record<string, string> = {
-  default:
-    'bg-muted/80 text-foreground border-border',
+const ANNOUNCEMENT_TICKER_STYLES: Record<string, string> = {
+  default: 'bg-muted/80 text-foreground border-border',
   ongoing:
     'bg-blue-50 dark:bg-blue-950 text-blue-900 dark:text-blue-100 border-blue-200 dark:border-blue-800',
   success:
@@ -104,8 +103,8 @@ const ANNOUNCEMENT_Ticker_STYLES: Record<string, string> = {
 
 function getTickerStyle(type?: string): string {
   return (
-    ANNOUNCEMENT_Ticker_STYLES[type || 'default'] ||
-    ANNOUNCEMENT_Ticker_STYLES.default
+    ANNOUNCEMENT_TICKER_STYLES[type || 'default'] ||
+    ANNOUNCEMENT_TICKER_STYLES.default
   )
 }
 
@@ -121,8 +120,6 @@ export function AnnouncementBanner() {
     id?: number
     type?: string
   } | null>(null)
-  const tickerRef = useRef<HTMLDivElement>(null)
-  const contentRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (loading || announcements.length === 0) return
@@ -135,35 +132,6 @@ export function AnnouncementBanner() {
       setVisible(true)
     }
   }, [announcements, loading, user?.id])
-
-  useEffect(() => {
-    if (!visible || !tickerRef.current || !contentRef.current) return
-
-    const ticker = tickerRef.current
-    const content = contentRef.current
-    const contentWidth = content.scrollWidth
-    const containerWidth = ticker.offsetWidth
-
-    // Only animate if content overflows
-    if (contentWidth <= containerWidth) return
-
-    let animationId: number
-    let position = containerWidth
-
-    const speed = 1.2 // px per frame (~72px/s at 60fps)
-
-    function animate() {
-      position -= speed
-      if (position < -contentWidth) {
-        position = containerWidth
-      }
-      content.style.transform = `translateX(${position}px)`
-      animationId = requestAnimationFrame(animate)
-    }
-
-    animationId = requestAnimationFrame(animate)
-    return () => cancelAnimationFrame(animationId)
-  }, [visible, currentAnnouncement])
 
   const handleClose = () => {
     if (currentAnnouncement) {
@@ -187,33 +155,41 @@ export function AnnouncementBanner() {
   const fullText = text + extra
 
   return (
-    <div
-      className={cn(
-        'border-b',
-        getTickerStyle(currentAnnouncement.type)
-      )}
-    >
-      <div className='mx-auto flex h-9 max-w-7xl items-center gap-2 px-3'>
-        <Megaphone className='size-4 shrink-0 opacity-70' />
-        <div
-          ref={tickerRef}
-          className='relative min-w-0 flex-1 overflow-hidden'
-        >
-          <div
-            ref={contentRef}
-            className='whitespace-nowrap text-sm font-medium'
-          >
-            {fullText}
+    <>
+      <style>{`
+        @keyframes ticker-scroll {
+          0% { transform: translateX(0); }
+          100% { transform: translateX(-50%); }
+        }
+        .ticker-animate {
+          animation: ticker-scroll 20s linear infinite;
+        }
+        .ticker-animate:hover {
+          animation-play-state: paused;
+        }
+      `}</style>
+      <div className={cn('border-b', getTickerStyle(currentAnnouncement.type))}>
+        <div className='mx-auto flex h-9 max-w-7xl items-center gap-2 px-3'>
+          <Megaphone className='size-4 shrink-0 opacity-70' />
+          <div className='relative min-w-0 flex-1 overflow-hidden'>
+            <div className='ticker-animate flex w-max gap-16'>
+              <span className='whitespace-nowrap text-sm font-medium'>
+                {fullText}
+              </span>
+              <span className='whitespace-nowrap text-sm font-medium'>
+                {fullText}
+              </span>
+            </div>
           </div>
+          <button
+            onClick={handleClose}
+            className='shrink-0 rounded-md p-1 opacity-60 transition-opacity hover:opacity-100'
+            aria-label={t('Close')}
+          >
+            <X className='size-4' />
+          </button>
         </div>
-        <button
-          onClick={handleClose}
-          className='shrink-0 rounded-md p-1 opacity-60 transition-opacity hover:opacity-100'
-          aria-label={t('Close')}
-        >
-          <X className='size-4' />
-        </button>
       </div>
-    </div>
+    </>
   )
 }
