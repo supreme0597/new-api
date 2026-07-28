@@ -23,18 +23,24 @@ import { Markdown } from '@/components/ui/markdown'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Dialog } from '@/components/dialog'
 import { useAnnouncements } from '@/features/dashboard/hooks/use-status-data'
+import { useAuthStore } from '@/stores/auth-store'
 
-const STORAGE_KEY = 'announcement_last_closed'
+const STORAGE_KEY_PREFIX = 'announcement_last_closed'
 
 interface ClosedAnnouncement {
   id?: number
   publishDate?: string
 }
 
-function getClosedAnnouncement(): ClosedAnnouncement | null {
+function getStorageKey(userId?: number): string {
+  return userId ? `${STORAGE_KEY_PREFIX}_${userId}` : STORAGE_KEY_PREFIX
+}
+
+function getClosedAnnouncement(userId?: number): ClosedAnnouncement | null {
   try {
     if (typeof window !== 'undefined') {
-      const saved = window.localStorage.getItem(STORAGE_KEY)
+      const key = getStorageKey(userId)
+      const saved = window.localStorage.getItem(key)
       return saved ? (JSON.parse(saved) as ClosedAnnouncement) : null
     }
   } catch {
@@ -43,10 +49,11 @@ function getClosedAnnouncement(): ClosedAnnouncement | null {
   return null
 }
 
-function saveClosedAnnouncement(announcement: ClosedAnnouncement) {
+function saveClosedAnnouncement(announcement: ClosedAnnouncement, userId?: number) {
   try {
     if (typeof window !== 'undefined') {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(announcement))
+      const key = getStorageKey(userId)
+      window.localStorage.setItem(key, JSON.stringify(announcement))
     }
   } catch {
     /* empty */
@@ -66,6 +73,7 @@ function isNewAnnouncement(
 export function AnnouncementPopup() {
   const { t } = useTranslation()
   const { items: announcements, loading } = useAnnouncements()
+  const { user } = useAuthStore((state) => state.auth)
   const [isOpen, setIsOpen] = useState(false)
   const [currentAnnouncement, setCurrentAnnouncement] = useState<{
     content?: string
@@ -78,20 +86,20 @@ export function AnnouncementPopup() {
     if (loading || announcements.length === 0) return
 
     const latestAnnouncement = announcements[0]
-    const closedAnnouncement = getClosedAnnouncement()
+    const closedAnnouncement = getClosedAnnouncement(user?.id)
 
     if (isNewAnnouncement(closedAnnouncement, latestAnnouncement)) {
       setCurrentAnnouncement(latestAnnouncement)
       setIsOpen(true)
     }
-  }, [announcements, loading])
+  }, [announcements, loading, user?.id])
 
   const handleClose = () => {
     if (currentAnnouncement) {
       saveClosedAnnouncement({
         id: currentAnnouncement.id,
         publishDate: currentAnnouncement.publishDate,
-      })
+      }, user?.id)
     }
     setIsOpen(false)
   }
