@@ -185,7 +185,7 @@ export function AnnouncementBanner() {
           font-style: italic;
         }
       `}      </style>
-      <div className={cn('fixed inset-x-0 top-0 z-[60] border-b', getTickerStyle(currentAnnouncement.type))}>
+      <div className={cn('fixed inset-x-0 top-16 z-[60] border-b', getTickerStyle(currentAnnouncement.type))}>
         <div className='mx-auto flex h-9 max-w-7xl items-center gap-2 px-3'>
           <Megaphone className='size-4 shrink-0 opacity-70' />
           <div className='relative min-w-0 flex-1 overflow-hidden'>
@@ -209,8 +209,8 @@ export function AnnouncementBanner() {
           </button>
         </div>
       </div>
-      {/* Spacer to prevent content from being hidden behind fixed banner */}
-      <div className='h-9' aria-hidden='true' />
+      {/* Spacer: nav bar (max 64px) + banner (36px) = 100px */}
+      <div className='h-[100px]' aria-hidden='true' />
     </>
   )
 }
