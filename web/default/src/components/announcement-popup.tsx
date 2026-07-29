@@ -17,11 +17,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useEffect, useState } from 'react'
-import { Megaphone, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useAnnouncements } from '@/features/dashboard/hooks/use-status-data'
 import { useAuthStore } from '@/stores/auth-store'
-import { cn } from '@/lib/utils'
+import { Dialog } from '@/components/dialog'
 
 const STORAGE_KEY_PREFIX = 'announcement_last_closed'
 
@@ -74,29 +73,10 @@ function isNewAnnouncement(
   )
 }
 
-const ANNOUNCEMENT_TICKER_STYLES: Record<string, string> = {
-  default: 'bg-muted/80 text-foreground border-border',
-  ongoing:
-    'bg-blue-50 dark:bg-blue-950 text-blue-900 dark:text-blue-100 border-blue-200 dark:border-blue-800',
-  success:
-    'bg-green-50 dark:bg-green-950 text-green-900 dark:text-green-100 border-green-200 dark:border-green-800',
-  warning:
-    'bg-orange-50 dark:bg-orange-950 text-orange-900 dark:text-orange-100 border-orange-200 dark:border-orange-800',
-  error:
-    'bg-red-50 dark:bg-red-950 text-red-900 dark:text-red-100 border-red-200 dark:border-red-800',
-}
-
-function getTickerStyle(type?: string): string {
-  return (
-    ANNOUNCEMENT_TICKER_STYLES[type || 'default'] ||
-    ANNOUNCEMENT_TICKER_STYLES.default
-  )
-}
-
 function renderRichText(content: string, extra?: string): string {
   let html = content || ''
   if (extra) {
-    html += ` <span class="text-muted-foreground text-xs">— ${extra}</span>`
+    html += `<p class="text-muted-foreground text-xs mt-2">— ${extra}</p>`
   }
   return html
 }
@@ -139,7 +119,7 @@ export function AnnouncementBanner() {
     setVisible(false)
   }
 
-  if (!visible || !currentAnnouncement) return null
+  if (!currentAnnouncement) return null
 
   const richHtml = renderRichText(
     currentAnnouncement.content || '',
@@ -147,68 +127,29 @@ export function AnnouncementBanner() {
   )
 
   return (
-    <>
-      <style>{`
-        @keyframes ticker-scroll {
-          0% { transform: translateX(0); }
-          100% { transform: translateX(-50%); }
-        }
-        .ticker-animate {
-          animation: ticker-scroll 20s linear infinite;
-        }
-        .ticker-animate:hover {
-          animation-play-state: paused;
-        }
-        .ticker-content h1,
-        .ticker-content h2,
-        .ticker-content h3,
-        .ticker-content h4,
-        .ticker-content h5,
-        .ticker-content h6 {
-          display: inline;
-          font-size: inherit;
-          font-weight: inherit;
-          margin: 0;
-          padding: 0;
-        }
-        .ticker-content p {
-          display: inline;
-          margin: 0;
-        }
-        .ticker-content a {
-          text-decoration: underline;
-        }
-        .ticker-content strong {
-          font-weight: 700;
-        }
-        .ticker-content em {
-          font-style: italic;
-        }
-      `}      </style>
-      <div className={cn('sticky top-16 z-[51] border-b', getTickerStyle(currentAnnouncement.type))}>
-        <div className='mx-auto flex h-9 max-w-7xl items-center gap-2 px-3'>
-          <Megaphone className='size-4 shrink-0 opacity-70' />
-          <div className='relative min-w-0 flex-1 overflow-hidden'>
-            <div className='ticker-animate flex w-max gap-16'>
-              <span
-                className='ticker-content whitespace-nowrap text-sm font-medium [&_img]:hidden'
-                dangerouslySetInnerHTML={{ __html: richHtml }}
-              />
-              <span
-                className='ticker-content whitespace-nowrap text-sm font-medium [&_img]:hidden'
-                dangerouslySetInnerHTML={{ __html: richHtml }}
-              />
-            </div>
-          </div>
-          <button
-            onClick={handleClose}
-            className='shrink-0 rounded-md p-1 opacity-60 transition-opacity hover:opacity-100'
-            aria-label={t('Close')}
-          >
-            <X className='size-4' />
-          </button>
-        </div>
+    <Dialog
+      open={visible}
+      onOpenChange={(open) => {
+        if (!open) handleClose()
+      }}
+      title={t('Announcement')}
+      contentClassName='sm:max-w-lg !top-[15vh]'
+      contentHeight='auto'
+      bodyClassName='space-y-4'
+      showCloseButton={false}
+    >
+      <div
+        className='announcement-content prose prose-sm dark:prose-invert max-w-none [&_h1]:text-lg [&_h2]:text-base [&_h3]:text-sm [&_p]:my-1 [&_a]:text-primary [&_a]:underline'
+        dangerouslySetInnerHTML={{ __html: richHtml }}
+      />
+      <div className='flex justify-end pt-2'>
+        <button
+          onClick={handleClose}
+          className='bg-primary text-primary-foreground hover:bg-primary/90 rounded-md px-4 py-2 text-sm font-medium transition-colors'
+        >
+          {t('Close')}
+        </button>
       </div>
-    </>
+    </Dialog>
   )
 }
