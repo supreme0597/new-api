@@ -21,6 +21,7 @@ import { Link, useNavigate, useRouterState } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '@/stores/auth-store'
 import { cn } from '@/lib/utils'
+import { AnnouncementBanner } from '@/components/announcement-popup'
 import { useNotifications } from '@/hooks/use-notifications'
 import { useSystemConfig } from '@/hooks/use-system-config'
 import { useTopNavLinks } from '@/hooks/use-top-nav-links'
@@ -334,6 +335,8 @@ export function PublicHeader(props: PublicHeaderProps) {
           </nav>
         </div>
       </header>
+
+      <AnnouncementBanner />
 
       {/* Mobile full-screen overlay */}
       <div
